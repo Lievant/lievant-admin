@@ -2,7 +2,10 @@
 
 @theme {
   --color-terracota: #c2714f;
+  --color-terracota-dark: #a85d3d;
   --color-navy: #0f1623;
+  --color-navy-light: #1c2735;
+  --color-surface: #f7f5f3;
 }
 
 body {
