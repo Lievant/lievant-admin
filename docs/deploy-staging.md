@@ -11,8 +11,11 @@ infraestructura base (VPC, RDS, S3, DynamoDB) provisionada con Terraform.
 - Acceso a la cuenta AWS con permisos para Amplify, ECS, ECR, ACM, Route53,
   Secrets Manager, RDS, VPC, S3, DynamoDB.
 - Terraform >= 1.7 y AWS CLI configurados localmente (`aws configure`).
-- Un Personal Access Token de GitHub con permisos `repo` para que Amplify
-  pueda clonar el repositorio (`github_access_token`).
+- Un Personal Access Token (classic) de GitHub para que Amplify pueda clonar
+  el repositorio y registrar el webhook de auto-build (`github_access_token`):
+  - Generarlo en https://github.com/settings/tokens/new
+  - Scopes: `repo` + `admin:repo_hook`
+  - Nombre sugerido: `lievant-amplify-staging`
 - Rama `staging` creada en el repositorio de GitHub.
 - Zona Route53 pública para `lievant.com` ya existente (usada para validar el
   certificado ACM de `api.staging.system.lievant.com`).
