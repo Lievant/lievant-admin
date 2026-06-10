@@ -30,17 +30,6 @@ variable "db_password" {
   sensitive = true
 }
 
-variable "github_repository" {
-  description = "URL del repositorio GitHub conectado a la app de Amplify (p. ej. https://github.com/org/lievant-admin)"
-  type        = string
-}
-
-variable "github_access_token" {
-  description = "Personal access token de GitHub usado por Amplify para clonar y construir el repo"
-  type        = string
-  sensitive   = true
-}
-
 variable "dev_cognito_user_pool_id" {
   description = "User Pool ID del ambiente dev (output cognito_pool_id), reutilizado por staging"
   type        = string
@@ -52,6 +41,12 @@ locals {
   api_domain        = "api.staging.system.lievant.com"
   cognito_domain    = "lievant-admin-dev.auth.us-east-1.amazoncognito.com"
   cognito_client_id = "1etqs6deci8s26elvntfbpbult"
+
+  # El listener HTTPS del ALB solo puede crearse una vez que ACM emite el
+  # certificado (validación DNS manual en GoDaddy, ver aws_acm_certificate.api).
+  # Mientras esté en PENDING_VALIDATION, module.ecs solo crea el listener HTTP
+  # con redirect a HTTPS como placeholder.
+  api_certificate_issued = aws_acm_certificate.api.status == "ISSUED"
 }
 
 module "vpc" {
@@ -146,10 +141,11 @@ module "ecs" {
   vpc_id            = module.vpc.vpc_id
   public_subnet_ids = module.vpc.public_subnet_ids
 
-  ecr_repository_url = module.ecr.repository_url
-  enable_https       = true
-  certificate_arn    = aws_acm_certificate.api.arn
-  health_check_path  = "/api/v1"
+  ecr_repository_url     = module.ecr.repository_url
+  enable_https           = true
+  https_listener_enabled = local.api_certificate_issued
+  certificate_arn        = aws_acm_certificate.api.arn
+  health_check_path      = "/api/v1"
 
   environment_variables = {
     NODE_ENV             = "production"
@@ -171,11 +167,13 @@ module "ecs" {
 # --- AWS Amplify: Frontend Next.js (apps/web) ---
 
 resource "aws_amplify_app" "web" {
-  name         = "${local.name_prefix}-web"
-  repository   = var.github_repository
-  access_token = var.github_access_token
-  platform     = "WEB_COMPUTE"
+  name     = "${local.name_prefix}-web"
+  platform = "WEB_COMPUTE"
 
+  # Sin repository/access_token: los tokens clásicos de GitHub (PAT) no son
+  # compatibles con la integración de Amplify (requiere un token de
+  # instalación de GitHub App). El repo se conecta manualmente desde la
+  # consola de Amplify (Hosting > Connect branch) tras el apply.
   build_spec = file("${path.module}/../../../../amplify.yml")
 
   environment_variables = {

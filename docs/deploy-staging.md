@@ -11,12 +11,10 @@ infraestructura base (VPC, RDS, S3, DynamoDB) provisionada con Terraform.
 - Acceso a la cuenta AWS con permisos para Amplify, ECS, ECR, ACM,
   Secrets Manager, RDS, VPC, S3, DynamoDB.
 - Terraform >= 1.7 y AWS CLI configurados localmente (`aws configure`).
-- Un Personal Access Token (classic) de GitHub para que Amplify pueda clonar
-  el repositorio y registrar el webhook de auto-build (`github_access_token`):
-  - Generarlo en https://github.com/settings/tokens/new
-  - Scopes: `repo` + `admin:repo_hook`
-  - Nombre sugerido: `lievant-amplify-staging`
-- Rama `staging` creada en el repositorio de GitHub.
+- Rama `staging` creada en el repositorio de GitHub. La conexión del
+  repositorio a Amplify se hace manualmente desde la consola (ver paso 6) —
+  Amplify requiere un token de instalación de GitHub App (OAuth), que solo se
+  puede generar desde el flujo de la consola, no con un PAT clásico.
 - Acceso al panel de DNS de GoDaddy para `lievant.com`. **El dominio está
   delegado en GoDaddy, no en Route53**, por lo que la validación del
   certificado ACM y los registros de Amplify/ALB se crean manualmente ahí
@@ -31,12 +29,10 @@ En `infrastructure/terraform/environments/staging/`, crea un archivo
 
 ```hcl
 db_password              = "<password-seguro-de-rds>"
-github_repository        = "https://github.com/<org>/lievant-admin"
-github_access_token      = "<personal-access-token-de-github>"
 dev_cognito_user_pool_id = "<output cognito_pool_id de dev>"
 ```
 
-> No commitear `terraform.tfvars` ni tokens. Para CI/CD usa variables de
+> No commitear `terraform.tfvars` ni secretos. Para CI/CD usa variables de
 > entorno `TF_VAR_*` o un secret store.
 
 ## 2. Provisionar infraestructura base (VPC, RDS, S3, DynamoDB, ECR, ACM)
@@ -75,8 +71,13 @@ aws acm describe-certificate --certificate-arn <arn> --query Certificate.Status
 ```
 
 Esto puede tardar varios minutos hasta horas (propagación DNS de GoDaddy).
-**No continúes al paso 4 hasta que el certificado esté `ISSUED`** — el
-listener HTTPS del ALB falla si el certificado aún no fue emitido.
+
+No es necesario esperar para continuar: mientras el certificado esté
+`PENDING_VALIDATION`, `module.ecs` crea el ALB solo con el listener HTTP (80)
+con redirect 301 a HTTPS como placeholder (el listener HTTPS no se crea
+todavía, ver paso 4). Cuando el certificado pase a `ISSUED`, vuelve a correr
+`terraform apply -target=module.ecs` para que se cree el listener HTTPS (443)
+con el certificado ya emitido.
 
 ## 3. Build y push de la imagen Docker del backend
 
@@ -102,10 +103,17 @@ terraform apply -target=aws_secretsmanager_secret.database_url \
   -target=module.ecs
 ```
 
-Esto crea el cluster ECS, el ALB (escuchando en HTTP→HTTPS con el
-certificado de `api.staging.system.lievant.com`), el Target Group, la Task
-Definition (con `DATABASE_URL` y `JWT_SECRET` inyectados desde Secrets
-Manager) y el Service con `desired_count = 1`.
+Esto crea el cluster ECS, el ALB, el Target Group, la Task Definition (con
+`DATABASE_URL` y `JWT_SECRET` inyectados desde Secrets Manager) y el Service
+con `desired_count = 1`.
+
+El listener HTTPS (443) del ALB es **condicional**: solo se crea cuando
+`aws_acm_certificate.api` está en estado `ISSUED` (ver paso 2b). Mientras el
+certificado esté `PENDING_VALIDATION`, el ALB queda únicamente con el
+listener HTTP (80), que redirige (301) a HTTPS como placeholder. Una vez que
+el certificado se valide en GoDaddy y pase a `ISSUED`, vuelve a correr
+`terraform apply -target=module.ecs` para que se cree el listener HTTPS con
+el certificado ya emitido.
 
 Verifica que las tasks pasen el health check (`/api/v1`) en el Target Group
 antes de continuar.
@@ -139,8 +147,8 @@ terraform apply -target=aws_amplify_app.web -target=aws_amplify_branch.staging \
   -target=aws_amplify_domain_association.web
 ```
 
-Esto crea la app de Amplify conectada a la rama `staging` del repo, con
-`amplify.yml` (en la raíz del repo) como build spec y las siguientes
+Esto crea la app de Amplify (sin repositorio conectado) y la rama `staging`,
+con `amplify.yml` (en la raíz del repo) como build spec y las siguientes
 variables de entorno (configuradas vía `aws_amplify_app.environment_variables`):
 
 | Variable | Valor |
@@ -149,6 +157,20 @@ variables de entorno (configuradas vía `aws_amplify_app.environment_variables`)
 | `NEXT_PUBLIC_COGNITO_DOMAIN` | `lievant-admin-dev.auth.us-east-1.amazoncognito.com` |
 | `NEXT_PUBLIC_COGNITO_CLIENT_ID` | `1etqs6deci8s26elvntfbpbult` |
 | `NODE_ENV` | `production` |
+
+### Conectar el repositorio manualmente
+
+`aws_amplify_app.web` se crea **sin** `repository`/`access_token`: los PAT
+clásicos de GitHub no son compatibles con la integración de Amplify, que
+requiere un token de instalación de GitHub App (OAuth). Conecta el repo a
+mano desde la consola:
+
+1. Consola de AWS > Amplify > la app `lievant-admin-staging-web`.
+2. **Hosting > Connect branch** (o "Connect repository" si es la primera vez).
+3. Elige GitHub, autoriza la GitHub App de Amplify (OAuth) si se solicita, y
+   selecciona el repositorio y la rama `staging` (ya creada por Terraform).
+4. Amplify registra el webhook de auto-build automáticamente como parte de
+   este flujo.
 
 La asociación de dominio (`aws_amplify_domain_association.web`) deja
 `staging.system.lievant.com` apuntando a la rama `staging`. Amplify provisiona
