@@ -88,11 +88,14 @@ module "ecr" {
 }
 
 # --- Certificado ACM para el ALB de la API (api.staging.system.lievant.com) ---
-
-data "aws_route53_zone" "lievant" {
-  name         = "lievant.com."
-  private_zone = false
-}
+#
+# El dominio lievant.com está delegado en GoDaddy, no en Route53, por lo que
+# la validación DNS del certificado es manual: terraform crea el certificado
+# en estado PENDING_VALIDATION y expone los registros CNAME requeridos en el
+# output `dns_records_to_create`. Esos registros deben crearse a mano en
+# GoDaddy; una vez que ACM valida el certificado (queda en estado ISSUED),
+# se puede aplicar module.ecs (el listener HTTPS requiere un certificado ya
+# emitido).
 
 resource "aws_acm_certificate" "api" {
   domain_name               = local.api_domain
@@ -106,27 +109,6 @@ resource "aws_acm_certificate" "api" {
   tags = {
     Name = "${local.name_prefix}-api-cert"
   }
-}
-
-resource "aws_route53_record" "api_cert_validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.api.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
-
-  zone_id = data.aws_route53_zone.lievant.zone_id
-  name    = each.value.name
-  type    = each.value.type
-  ttl     = 60
-  records = [each.value.record]
-}
-
-resource "aws_acm_certificate_validation" "api" {
-  certificate_arn         = aws_acm_certificate.api.arn
-  validation_record_fqdns = [for record in aws_route53_record.api_cert_validation : record.fqdn]
 }
 
 # --- Secrets Manager: credenciales de la API en ECS ---
@@ -165,7 +147,7 @@ module "ecs" {
   public_subnet_ids = module.vpc.public_subnet_ids
 
   ecr_repository_url = module.ecr.repository_url
-  certificate_arn    = aws_acm_certificate_validation.api.certificate_arn
+  certificate_arn    = aws_acm_certificate.api.arn
   health_check_path  = "/api/v1"
 
   environment_variables = {
@@ -250,4 +232,29 @@ output "datalake_bucket" {
 
 output "audit_table" {
   value = module.dynamodb.audit_table_name
+}
+
+# Registros DNS que deben crearse manualmente en GoDaddy (lievant.com no está
+# delegado a Route53). Ejecutar `terraform output -json dns_records_to_create`
+# para obtener los valores tras el apply.
+output "dns_records_to_create" {
+  description = "Registros DNS a crear en GoDaddy para staging.system.lievant.com / api.staging.system.lievant.com"
+  value = {
+    acm_certificate_validation = [
+      for dvo in aws_acm_certificate.api.domain_validation_options : {
+        name  = dvo.resource_record_name
+        type  = dvo.resource_record_type
+        value = dvo.resource_record_value
+      }
+    ]
+    api_alb = {
+      name  = local.api_domain
+      type  = "CNAME"
+      value = module.ecs.alb_dns_name
+    }
+    amplify_certificate_verification = aws_amplify_domain_association.web.certificate_verification_dns_record
+    amplify_subdomains = [
+      for sd in aws_amplify_domain_association.web.sub_domain : sd.dns_record
+    ]
+  }
 }

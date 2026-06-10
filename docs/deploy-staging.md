@@ -8,7 +8,7 @@ infraestructura base (VPC, RDS, S3, DynamoDB) provisionada con Terraform.
 
 ## 0. Prerrequisitos
 
-- Acceso a la cuenta AWS con permisos para Amplify, ECS, ECR, ACM, Route53,
+- Acceso a la cuenta AWS con permisos para Amplify, ECS, ECR, ACM,
   Secrets Manager, RDS, VPC, S3, DynamoDB.
 - Terraform >= 1.7 y AWS CLI configurados localmente (`aws configure`).
 - Un Personal Access Token (classic) de GitHub para que Amplify pueda clonar
@@ -17,8 +17,10 @@ infraestructura base (VPC, RDS, S3, DynamoDB) provisionada con Terraform.
   - Scopes: `repo` + `admin:repo_hook`
   - Nombre sugerido: `lievant-amplify-staging`
 - Rama `staging` creada en el repositorio de GitHub.
-- Zona Route53 pública para `lievant.com` ya existente (usada para validar el
-  certificado ACM de `api.staging.system.lievant.com`).
+- Acceso al panel de DNS de GoDaddy para `lievant.com`. **El dominio está
+  delegado en GoDaddy, no en Route53**, por lo que la validación del
+  certificado ACM y los registros de Amplify/ALB se crean manualmente ahí
+  (ver paso 2b).
 - El User Pool ID de Cognito de `dev` (output `cognito_pool_id` del ambiente
   `dev`), ya que `staging` reutiliza el User Pool/Client de `dev`.
 
@@ -43,17 +45,38 @@ dev_cognito_user_pool_id = "<output cognito_pool_id de dev>"
 cd infrastructure/terraform/environments/staging
 terraform init
 terraform plan -target=module.vpc -target=module.rds -target=module.s3 \
-  -target=module.dynamodb -target=module.ecr -target=aws_acm_certificate.api \
-  -target=aws_route53_record.api_cert_validation \
-  -target=aws_acm_certificate_validation.api
+  -target=module.dynamodb -target=module.ecr -target=aws_acm_certificate.api
 terraform apply -target=module.vpc -target=module.rds -target=module.s3 \
-  -target=module.dynamodb -target=module.ecr -target=aws_acm_certificate.api \
-  -target=aws_route53_record.api_cert_validation \
-  -target=aws_acm_certificate_validation.api
+  -target=module.dynamodb -target=module.ecr -target=aws_acm_certificate.api
 ```
 
-Espera a que el certificado ACM quede `ISSUED` (la validación DNS via
-Route53 suele tardar unos minutos) antes de continuar.
+El certificado ACM queda en estado `PENDING_VALIDATION` (la validación DNS es
+manual, ver paso 2b).
+
+## 2b. Validación DNS manual en GoDaddy
+
+`lievant.com` está delegado en GoDaddy, así que Terraform **no** crea ni
+valida registros DNS automáticamente. Después del paso 2, obtén los registros
+pendientes:
+
+```bash
+terraform output -json dns_records_to_create
+```
+
+En este punto solo está disponible `acm_certificate_validation` (los demás
+campos del output dependen de recursos que se crean en pasos posteriores).
+Crea en GoDaddy un registro `CNAME` por cada entrada de
+`acm_certificate_validation` (`name` → `value`).
+
+Espera a que el certificado pase a estado `ISSUED`:
+
+```bash
+aws acm describe-certificate --certificate-arn <arn> --query Certificate.Status
+```
+
+Esto puede tardar varios minutos hasta horas (propagación DNS de GoDaddy).
+**No continúes al paso 4 hasta que el certificado esté `ISSUED`** — el
+listener HTTPS del ALB falla si el certificado aún no fue emitido.
 
 ## 3. Build y push de la imagen Docker del backend
 
@@ -89,8 +112,8 @@ antes de continuar.
 
 ### Apuntar `api.staging.system.lievant.com` al ALB
 
-Crea un registro Route53 tipo `A` (alias) o `CNAME` apuntando a
-`module.ecs.alb_dns_name` (output del módulo ECS):
+En GoDaddy, crea un registro `CNAME` para `api.staging` apuntando al DNS del
+ALB (`dns_records_to_create.api_alb`, o directamente `alb_dns_name`):
 
 ```bash
 terraform output -raw alb_dns_name
@@ -129,10 +152,21 @@ variables de entorno (configuradas vía `aws_amplify_app.environment_variables`)
 
 La asociación de dominio (`aws_amplify_domain_association.web`) deja
 `staging.system.lievant.com` apuntando a la rama `staging`. Amplify provisiona
-y valida automáticamente su propio certificado ACM para ese dominio
-(`type = AMPLIFY_MANAGED`); revisa en la consola de Amplify > Domain
-management que el estado sea `Available` y, si pide registros DNS de
-verificación adicionales, agrégalos en Route53.
+su propio certificado ACM para ese dominio (`type = AMPLIFY_MANAGED`), pero
+como `lievant.com` está en GoDaddy, los registros de verificación y el
+registro del subdominio deben crearse a mano:
+
+```bash
+terraform output -json dns_records_to_create
+```
+
+- `amplify_certificate_verification`: registro `CNAME` de verificación del
+  certificado de Amplify.
+- `amplify_subdomains`: registro(s) `CNAME` que apuntan
+  `staging.system.lievant.com` a Amplify.
+
+Crea ambos en GoDaddy y luego revisa en la consola de Amplify > Domain
+management que el estado pase a `Available`.
 
 ## 7. Disparar el primer build
 
@@ -174,3 +208,4 @@ ejecuta `amplify.yml`:
 | `db_endpoint` | Endpoint de RDS Postgres |
 | `datalake_bucket` | Bucket S3 del datalake |
 | `audit_table` | Tabla DynamoDB de auditoría |
+| `dns_records_to_create` | Registros DNS a crear manualmente en GoDaddy (validación ACM, alias del ALB y registros de Amplify) |
