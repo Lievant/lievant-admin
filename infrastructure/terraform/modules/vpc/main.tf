@@ -1,16 +1,27 @@
-variable "name_prefix" { type = string }
-variable "environment" { type = string }
+variable "name_prefix" {
+  type = string
+}
+
+variable "environment" {
+  type = string
+}
 
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
-  tags = { Name = "${var.name_prefix}-vpc" }
+
+  tags = {
+    Name = "${var.name_prefix}-vpc"
+  }
 }
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
-  tags   = { Name = "${var.name_prefix}-igw" }
+
+  tags = {
+    Name = "${var.name_prefix}-igw"
+  }
 }
 
 resource "aws_subnet" "public" {
@@ -19,7 +30,10 @@ resource "aws_subnet" "public" {
   cidr_block        = "10.0.${count.index}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
   map_public_ip_on_launch = true
-  tags = { Name = "${var.name_prefix}-public-${count.index + 1}" }
+
+  tags = {
+    Name = "${var.name_prefix}-public-${count.index + 1}"
+  }
 }
 
 resource "aws_subnet" "private" {
@@ -27,11 +41,24 @@ resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.${count.index + 10}.0/24"
   availability_zone = data.aws_availability_zones.available.names[count.index]
-  tags = { Name = "${var.name_prefix}-private-${count.index + 1}" }
+
+  tags = {
+    Name = "${var.name_prefix}-private-${count.index + 1}"
+  }
 }
 
-data "aws_availability_zones" "available" { state = "available" }
+data "aws_availability_zones" "available" {
+  state = "available"
+}
 
-output "vpc_id"             { value = aws_vpc.main.id }
-output "public_subnet_ids"  { value = aws_subnet.public[*].id }
-output "private_subnet_ids" { value = aws_subnet.private[*].id }
+output "vpc_id" {
+  value = aws_vpc.main.id
+}
+
+output "public_subnet_ids" {
+  value = aws_subnet.public[*].id
+}
+
+output "private_subnet_ids" {
+  value = aws_subnet.private[*].id
+}

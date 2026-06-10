@@ -1,14 +1,30 @@
-# ─── Ambiente: Development ──────────────────────────────────────
 terraform {
   required_version = ">= 1.7.0"
+
   required_providers {
-    aws = { source = "hashicorp/aws"; version = "~> 5.0" }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+
+  backend "s3" {
+    bucket         = "lievant-terraform-state"
+    key            = "lievant-admin/dev/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "lievant-terraform-locks"
   }
 }
 
-provider "aws" { region = "us-east-1" }
+provider "aws" {
+  region = "us-east-1"
+}
 
-variable "db_password" { type = string; sensitive = true }
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
 
 module "vpc" {
   source      = "../../modules/vpc"
@@ -44,8 +60,22 @@ module "dynamodb" {
   environment = "dev"
 }
 
-output "db_endpoint"      { value = module.rds.db_endpoint }
-output "cognito_pool_id"  { value = module.cognito.user_pool_id }
-output "cognito_client"   { value = module.cognito.client_id }
-output "datalake_bucket"  { value = module.s3.datalake_bucket_name }
-output "audit_table"      { value = module.dynamodb.audit_table_name }
+output "db_endpoint" {
+  value = module.rds.db_endpoint
+}
+
+output "cognito_pool_id" {
+  value = module.cognito.user_pool_id
+}
+
+output "cognito_client_id" {
+  value = module.cognito.client_id
+}
+
+output "datalake_bucket" {
+  value = module.s3.datalake_bucket_name
+}
+
+output "audit_table" {
+  value = module.dynamodb.audit_table_name
+}

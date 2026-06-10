@@ -8,7 +8,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL no está definido');
 }
 
-export const AppDataSource = new DataSource({
+const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   schema: process.env.DATABASE_SCHEMA ?? 'auth',
