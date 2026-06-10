@@ -44,14 +44,8 @@ variable "desired_count" {
   default = 1
 }
 
-variable "enable_https" {
-  description = "Si es true, el listener HTTP (80) redirige (301) a HTTPS. Sirve como placeholder mientras el listener HTTPS aún no existe (ver https_listener_enabled)."
-  type        = bool
-  default     = false
-}
-
 variable "https_listener_enabled" {
-  description = "Crea el listener HTTPS (443) del ALB. Debe ser true solo cuando el certificado de certificate_arn está en estado ISSUED."
+  description = "Crea el listener HTTPS (443) del ALB y hace que el listener HTTP (80) redirija (301) a HTTPS. Debe ser true solo cuando el certificado de certificate_arn está en estado ISSUED."
   type        = bool
   default     = false
 }
@@ -233,24 +227,21 @@ resource "aws_lb_listener" "http" {
   port              = 80
   protocol          = "HTTP"
 
-  dynamic "default_action" {
-    for_each = var.enable_https ? [1] : []
-    content {
-      type = "redirect"
+  # Redirige a HTTPS solo cuando el listener HTTPS ya existe
+  # (https_listener_enabled = true). Mientras tanto el target group no tiene
+  # otro listener que lo use, asi que HTTP debe hacer forward directamente
+  # para que el ALB tenga un punto de entrada funcional.
+  default_action {
+    type             = var.https_listener_enabled ? "redirect" : "forward"
+    target_group_arn = var.https_listener_enabled ? null : aws_lb_target_group.api.arn
 
-      redirect {
+    dynamic "redirect" {
+      for_each = var.https_listener_enabled ? [1] : []
+      content {
         port        = "443"
         protocol    = "HTTPS"
         status_code = "HTTP_301"
       }
-    }
-  }
-
-  dynamic "default_action" {
-    for_each = var.enable_https ? [] : [1]
-    content {
-      type             = "forward"
-      target_group_arn = aws_lb_target_group.api.arn
     }
   }
 }

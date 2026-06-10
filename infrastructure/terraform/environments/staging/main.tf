@@ -142,7 +142,6 @@ module "ecs" {
   public_subnet_ids = module.vpc.public_subnet_ids
 
   ecr_repository_url     = module.ecr.repository_url
-  enable_https           = true
   https_listener_enabled = local.api_certificate_issued
   certificate_arn        = aws_acm_certificate.api.arn
   health_check_path      = "/api/v1"

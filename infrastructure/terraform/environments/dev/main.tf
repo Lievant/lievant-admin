@@ -116,7 +116,6 @@ module "ecs" {
   public_subnet_ids = module.vpc.public_subnet_ids
 
   ecr_repository_url     = module.ecr.repository_url
-  enable_https           = false
   https_listener_enabled = false
   certificate_arn        = ""
   health_check_path      = "/api/v1"
