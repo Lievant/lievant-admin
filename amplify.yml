@@ -1,0 +1,27 @@
+# Build spec para AWS Amplify Hosting — apps/web (Next.js 15, output: 'standalone')
+#
+# Las variables de entorno de Amplify (NEXT_PUBLIC_API_URL, NEXT_PUBLIC_COGNITO_DOMAIN,
+# NEXT_PUBLIC_COGNITO_CLIENT_ID, NODE_ENV) se configuran a nivel de la app Amplify
+# (ver infrastructure/terraform/environments/staging/main.tf -> aws_amplify_app
+# y docs/deploy-staging.md), no en este archivo, para evitar duplicidad.
+version: 1
+applications:
+  - appRoot: apps/web
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - cd ../.. && npm ci
+        build:
+          commands:
+            - cd ../.. && npm run build --workspace=@lievant/web
+            - cp -r public .next/standalone/apps/web/public
+            - cp -r .next/static .next/standalone/apps/web/.next/static
+      artifacts:
+        baseDirectory: .next/standalone/apps/web
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
+          - apps/web/.next/cache/**/*

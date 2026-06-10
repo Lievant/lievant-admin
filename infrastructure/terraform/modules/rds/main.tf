@@ -60,12 +60,12 @@ resource "aws_db_instance" "main" {
   username = "lievant_admin"
   password = var.db_password
 
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
-  multi_az               = local.multi_az
-  publicly_accessible    = false
-  deletion_protection    = var.environment == "prod" ? true : false
-  skip_final_snapshot    = var.environment != "prod" ? true : false
+  db_subnet_group_name    = aws_db_subnet_group.main.name
+  vpc_security_group_ids  = [aws_security_group.rds.id]
+  multi_az                = local.multi_az
+  publicly_accessible     = false
+  deletion_protection     = var.environment == "prod" ? true : false
+  skip_final_snapshot     = var.environment != "prod" ? true : false
   backup_retention_period = var.environment == "prod" ? 7 : 1
 
   tags = {

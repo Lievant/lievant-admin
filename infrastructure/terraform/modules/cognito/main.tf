@@ -10,6 +10,18 @@ variable "callback_url" {
   type = string
 }
 
+variable "additional_callback_urls" {
+  description = "Callback URLs adicionales para el cliente web (p. ej. ambientes que reutilizan este User Pool)"
+  type        = list(string)
+  default     = []
+}
+
+variable "additional_logout_urls" {
+  description = "Logout URLs adicionales para el cliente web (p. ej. ambientes que reutilizan este User Pool)"
+  type        = list(string)
+  default     = []
+}
+
 variable "microsoft_idp_enabled" {
   description = "Habilita el Identity Provider OIDC de Microsoft Entra (Azure AD) en el User Pool"
   type        = bool
@@ -90,8 +102,8 @@ resource "aws_cognito_user_pool_client" "web" {
   allowed_oauth_flows                  = ["code"]
   allowed_oauth_flows_user_pool_client = true
   allowed_oauth_scopes                 = ["openid", "email", "profile"]
-  callback_urls                        = [var.callback_url, "http://localhost:3000/api/auth/callback"]
-  logout_urls                          = ["http://localhost:3000"]
+  callback_urls                        = concat([var.callback_url, "http://localhost:3000/api/auth/callback"], var.additional_callback_urls)
+  logout_urls                          = concat(["http://localhost:3000"], var.additional_logout_urls)
   supported_identity_providers         = var.microsoft_idp_enabled ? ["COGNITO", "Microsoft"] : ["COGNITO"]
   prevent_user_existence_errors        = "ENABLED"
 
