@@ -201,6 +201,11 @@ resource "aws_amplify_domain_association" "web" {
   app_id      = aws_amplify_app.web.id
   domain_name = "system.lievant.com"
 
+  # lievant.com esta en GoDaddy: la verificacion DNS del dominio se hace a
+  # mano (ver dns_records_to_create). No bloquear el apply esperando a que
+  # Amplify la detecte.
+  wait_for_verification = false
+
   sub_domain {
     branch_name = aws_amplify_branch.staging.branch_name
     prefix      = "staging"

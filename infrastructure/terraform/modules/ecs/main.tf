@@ -330,7 +330,10 @@ resource "aws_ecs_service" "api" {
     container_port   = var.container_port
   }
 
-  depends_on = [aws_lb_listener.http, aws_lb_listener.https]
+  # Depende solo del listener HTTP: el HTTPS (443) es condicional y aun no
+  # existe mientras el certificado ACM esta PENDING_VALIDATION (ver
+  # https_listener_enabled). El service debe poder arrancar igual.
+  depends_on = [aws_lb_listener.http]
 
   tags = {
     Name = "${var.name_prefix}-api"
