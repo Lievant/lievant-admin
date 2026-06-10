@@ -52,6 +52,11 @@ module "cognito" {
   name_prefix  = "lievant-admin-dev"
   environment  = "dev"
   callback_url = "https://dev.system.lievant.com/api/auth/callback"
+
+  microsoft_idp_enabled        = true
+  microsoft_client_id          = "496101e4-23a2-4c35-9989-85800ea91eaa"
+  azure_ad_tenant_id           = "b4d50261-e85a-4096-befe-b476ec7c0a21"
+  microsoft_client_secret_name = "dev/cognito/microsoft-client-secret"
 }
 
 module "dynamodb" {
