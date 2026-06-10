@@ -44,8 +44,14 @@ variable "desired_count" {
   default = 1
 }
 
+variable "enable_https" {
+  description = "Crea el listener HTTPS (443) del ALB y redirige HTTP -> HTTPS. Debe ser un valor conocido en plan time, por lo que no puede derivarse de un certificado aún no emitido."
+  type        = bool
+  default     = false
+}
+
 variable "certificate_arn" {
-  description = "ARN del certificado ACM para el listener HTTPS del ALB. Si está vacío, el ALB solo expone HTTP."
+  description = "ARN del certificado ACM para el listener HTTPS del ALB. Requerido si enable_https = true."
   type        = string
   default     = ""
 }
@@ -222,7 +228,7 @@ resource "aws_lb_listener" "http" {
   protocol          = "HTTP"
 
   dynamic "default_action" {
-    for_each = var.certificate_arn != "" ? [1] : []
+    for_each = var.enable_https ? [1] : []
     content {
       type = "redirect"
 
@@ -235,7 +241,7 @@ resource "aws_lb_listener" "http" {
   }
 
   dynamic "default_action" {
-    for_each = var.certificate_arn == "" ? [1] : []
+    for_each = var.enable_https ? [] : [1]
     content {
       type             = "forward"
       target_group_arn = aws_lb_target_group.api.arn
@@ -244,7 +250,7 @@ resource "aws_lb_listener" "http" {
 }
 
 resource "aws_lb_listener" "https" {
-  count = var.certificate_arn != "" ? 1 : 0
+  count = var.enable_https ? 1 : 0
 
   load_balancer_arn = aws_lb.main.arn
   port              = 443
