@@ -16,7 +16,8 @@
     "clean": "rimraf dist coverage",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
-    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts"
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
+    "seed:super-admin": "ts-node -T src/database/seeds/super-admin.seed.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.0",
