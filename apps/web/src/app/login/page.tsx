@@ -111,7 +111,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           <a
-            href="mailto:soporte.ti@lievant.com"
+            href="mailto:transformaciondigital@lievant.com"
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-navy transition-colors hover:border-terracota"
           >
             ✉ Contactar a soporte de TI
