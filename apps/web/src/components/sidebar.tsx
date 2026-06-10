@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { MODULES, modulesForRoles } from '@/lib/modules';
-import { HomeIcon, LogoutIcon, ModuleIconView } from '@/components/icons';
+import { HomeIcon, LogoutIcon, ModuleIconView, PeopleIcon } from '@/components/icons';
 import type { CurrentUser } from '@/lib/api';
 
 interface SidebarProps {
@@ -49,11 +49,15 @@ export function Sidebar({ user }: SidebarProps) {
               Administración
             </p>
             {MODULES.filter((mod) => mod.id === 'admin').map((mod) => (
-              <NavLink key={mod.id} href={mod.href} active={pathname.startsWith(mod.href)}>
+              <NavLink key={mod.id} href={mod.href} active={pathname === mod.href}>
                 <ModuleIconView icon={mod.icon} className="h-5 w-5" />
                 {mod.name}
               </NavLink>
             ))}
+            <NavLink href="/admin/users" active={pathname.startsWith('/admin/users')}>
+              <PeopleIcon className="h-5 w-5" />
+              Usuarios
+            </NavLink>
           </>
         )}
       </nav>

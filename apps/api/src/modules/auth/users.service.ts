@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+import { EmailService } from '../notifications/email.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Role } from './entities/role.entity';
@@ -11,16 +12,18 @@ export class UsersService {
   constructor(
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     @InjectRepository(Role) private readonly rolesRepository: Repository<Role>,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(): Promise<User[]> {
-    return this.usersRepository.find({ relations: { roles: true } });
+    return this.usersRepository.find({ relations: { roles: true }, withDeleted: true });
   }
 
   async findById(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
       relations: { roles: { permissions: true } },
+      withDeleted: true,
     });
 
     if (!user) {
@@ -55,8 +58,12 @@ export class UsersService {
     return user;
   }
 
+  async recordLogin(id: string): Promise<void> {
+    await this.usersRepository.update(id, { lastLoginAt: new Date(), mfaEnabled: true });
+  }
+
   async create(dto: CreateUserDto, createdBy?: string): Promise<User> {
-    const existing = await this.usersRepository.findOne({ where: { email: dto.email } });
+    const existing = await this.usersRepository.findOne({ where: { email: dto.email }, withDeleted: true });
     if (existing) {
       throw new ConflictException(`Ya existe un usuario con el email ${dto.email}`);
     }
@@ -68,11 +75,20 @@ export class UsersService {
       name: dto.name,
       cognitoId: dto.cognitoId ?? null,
       isActive: dto.isActive ?? true,
+      location: dto.location ?? null,
       roles,
       createdBy: createdBy ?? null,
     });
 
-    return this.usersRepository.save(user);
+    const saved = await this.usersRepository.save(user);
+
+    await this.emailService.sendWelcomeEmail(
+      saved.email,
+      saved.name,
+      saved.roles.map((role) => role.name),
+    );
+
+    return saved;
   }
 
   async update(id: string, dto: UpdateUserDto, updatedBy?: string): Promise<User> {
@@ -88,9 +104,17 @@ export class UsersService {
 
     if (dto.name !== undefined) user.name = dto.name;
     if (dto.cognitoId !== undefined) user.cognitoId = dto.cognitoId;
-    if (dto.isActive !== undefined) user.isActive = dto.isActive;
+    if (dto.location !== undefined) user.location = dto.location;
     if (dto.roleIds !== undefined) {
       user.roles = dto.roleIds.length ? await this.rolesRepository.findBy({ id: In(dto.roleIds) }) : [];
+    }
+
+    if (dto.isActive !== undefined) {
+      user.isActive = dto.isActive;
+      if (dto.isActive && user.deletedAt) {
+        await this.usersRepository.restore(id);
+        user.deletedAt = null;
+      }
     }
 
     user.updatedBy = updatedBy ?? null;

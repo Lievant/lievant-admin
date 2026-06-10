@@ -1,4 +1,5 @@
 import AppDataSource from '../data-source';
+import { UserLocation } from '../../modules/auth/constants/locations.constant';
 import { Role } from '../../modules/auth/entities/role.entity';
 import { User } from '../../modules/auth/entities/user.entity';
 
@@ -44,6 +45,7 @@ async function run(): Promise<void> {
   }
 
   user.email = SUPER_ADMIN_EMAIL;
+  user.location = user.location ?? UserLocation.LEON;
 
   if (!user.roles?.some((role) => role.name === SUPER_ADMIN_ROLE)) {
     user.roles = [...(user.roles ?? []), superAdminRole];

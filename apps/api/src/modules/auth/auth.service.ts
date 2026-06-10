@@ -87,6 +87,8 @@ export class AuthService {
       throw new ForbiddenException('Usuario inactivo');
     }
 
+    await this.usersService.recordLogin(user.id);
+
     return { ...this.issueTokens(user), user };
   }
 }

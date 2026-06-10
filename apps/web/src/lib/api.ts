@@ -28,14 +28,24 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
 
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { message?: string | string[] };
+      if (body.message) {
+        message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      }
+    } catch {
+      // el cuerpo no es JSON, se usa el mensaje por defecto
+    }
+    throw new ApiError(res.status, message);
   }
 
   if (res.status === 204) {
     return undefined as T;
   }
 
-  return (await res.json()) as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export interface CurrentUser {
@@ -46,11 +56,19 @@ export interface CurrentUser {
   roles: { id: string; name: string }[];
 }
 
+export type UserLocation = 'LEON' | 'CDMX' | 'GUADALAJARA';
+
 export interface UserSummary {
   id: string;
   email: string;
   name: string;
   isActive: boolean;
+  cognitoId: string | null;
+  location: UserLocation | null;
+  mfaEnabled: boolean;
+  lastLoginAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
   roles: { id: string; name: string }[];
 }
 
@@ -60,6 +78,22 @@ export interface RoleSummary {
   description: string | null;
   color: string | null;
   isSystem: boolean;
+}
+
+export interface CreateUserPayload {
+  email: string;
+  name: string;
+  location?: UserLocation;
+  roleIds?: string[];
+  isActive?: boolean;
+}
+
+export interface UpdateUserPayload {
+  email?: string;
+  name?: string;
+  location?: UserLocation;
+  roleIds?: string[];
+  isActive?: boolean;
 }
 
 export function getCurrentUser(): Promise<CurrentUser> {
@@ -72,4 +106,24 @@ export function listUsers(): Promise<UserSummary[]> {
 
 export function listRoles(): Promise<RoleSummary[]> {
   return apiFetch<RoleSummary[]>('/roles');
+}
+
+export function createUser(payload: CreateUserPayload): Promise<UserSummary> {
+  return apiFetch<UserSummary>('/users', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateUser(id: string, payload: UpdateUserPayload): Promise<UserSummary> {
+  return apiFetch<UserSummary>(`/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteUser(id: string): Promise<void> {
+  return apiFetch<void>(`/users/${id}`, {
+    method: 'DELETE',
+  });
 }
