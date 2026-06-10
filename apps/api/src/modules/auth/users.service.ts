@@ -37,6 +37,24 @@ export class UsersService {
     });
   }
 
+  async linkCognitoIdByEmail(email: string, cognitoId: string): Promise<User | null> {
+    const user = await this.usersRepository.findOne({
+      where: { email },
+      relations: { roles: { permissions: true } },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    if (!user.cognitoId) {
+      user.cognitoId = cognitoId;
+      await this.usersRepository.save(user);
+    }
+
+    return user;
+  }
+
   async create(dto: CreateUserDto, createdBy?: string): Promise<User> {
     const existing = await this.usersRepository.findOne({ where: { email: dto.email } });
     if (existing) {

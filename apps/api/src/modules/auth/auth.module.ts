@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { CognitoService } from './cognito.service';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
@@ -28,7 +29,14 @@ import { UsersService } from './users.service';
     }),
   ],
   controllers: [AuthController, UsersController, RolesController],
-  providers: [AuthService, UsersService, RolesService, JwtStrategy, JwtRefreshStrategy],
+  providers: [
+    AuthService,
+    UsersService,
+    RolesService,
+    CognitoService,
+    JwtStrategy,
+    JwtRefreshStrategy,
+  ],
   exports: [AuthService, UsersService, RolesService],
 })
 export class AuthModule {}

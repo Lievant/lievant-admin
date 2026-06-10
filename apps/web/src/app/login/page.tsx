@@ -1,5 +1,4 @@
 import { MicrosoftLogo } from '@/components/icons';
-import { getMicrosoftSsoUrl } from '@/lib/cognito';
 
 const MODULE_CHIPS = [
   { icon: '🏢', label: 'Clientes y cuentas' },
@@ -8,8 +7,18 @@ const MODULE_CHIPS = [
   { icon: '🔑', label: 'Administración del sistema' },
 ];
 
-export default function LoginPage() {
-  const ssoUrl = getMicrosoftSsoUrl();
+const ERROR_MESSAGES: Record<string, string> = {
+  sso: 'No se pudo completar el inicio de sesión con Microsoft. Intenta nuevamente.',
+  unregistered: 'Tu cuenta no está registrada en el sistema. Contacta a un administrador.',
+};
+
+interface LoginPageProps {
+  searchParams: Promise<{ error?: string }>;
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const { error } = await searchParams;
+  const errorMessage = error ? (ERROR_MESSAGES[error] ?? ERROR_MESSAGES.sso) : null;
 
   return (
     <main className="flex min-h-screen flex-col lg:flex-row">
@@ -72,8 +81,14 @@ export default function LoginPage() {
             Inicia sesión con tu cuenta corporativa @lievant.com
           </p>
 
+          {errorMessage && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600">
+              {errorMessage}
+            </div>
+          )}
+
           <a
-            href={ssoUrl}
+            href="/api/auth/login"
             className="mb-4 flex w-full items-center justify-center gap-3 rounded-lg bg-terracota px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-terracota-dark"
           >
             <MicrosoftLogo className="h-[18px] w-[18px]" />

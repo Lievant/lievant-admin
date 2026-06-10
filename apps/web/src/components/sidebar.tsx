@@ -68,13 +68,13 @@ export function Sidebar({ user }: SidebarProps) {
             <p className="truncate text-xs text-slate-400">{user?.email ?? 'Sesión no iniciada'}</p>
           </div>
         </div>
-        <Link
-          href="/login"
+        <a
+          href="/api/auth/logout"
           className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-navy-light hover:text-white"
         >
           <LogoutIcon className="h-5 w-5" />
           Cerrar sesión
-        </Link>
+        </a>
       </div>
     </aside>
   );
