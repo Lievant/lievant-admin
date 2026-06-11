@@ -10,6 +10,8 @@ export interface ClientListItem {
   companiesCount: number;
   brandsCount: number;
   missingDocumentsCount: number;
+  country: string | null;
+  city: string | null;
   createdAt: Date;
 }
 

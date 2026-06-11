@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import type { RoleSummary, UserSummary } from '@/lib/api';
+import { avatarColor, initials } from '@/lib/avatar';
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon } from '@/components/icons';
 import { activateUserAction, deactivateUserAction } from './actions';
 import {
@@ -12,10 +13,8 @@ import {
   ROLE_BADGE_STYLES,
   STATUS_BADGE_STYLES,
   STATUS_LABELS,
-  avatarColor,
   formatLastLogin,
   getUserStatus,
-  initials,
   type UserStatus,
 } from './constants';
 import { NewUserDialog } from './new-user-dialog';

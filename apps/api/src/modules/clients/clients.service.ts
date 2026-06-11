@@ -435,6 +435,8 @@ export class ClientsService {
       companiesCount: companyIds.length,
       brandsCount,
       missingDocumentsCount,
+      country: record.country,
+      city: record.city,
       createdAt: record.createdAt,
     };
   }

@@ -37,10 +37,19 @@ export function Sidebar({ user }: SidebarProps) {
         {modules
           .filter((mod) => mod.id !== 'admin')
           .map((mod) => (
-            <NavLink key={mod.id} href={mod.href} active={pathname.startsWith(mod.href)}>
-              <ModuleIconView icon={mod.icon} className="h-5 w-5" />
-              {mod.name}
-            </NavLink>
+            <div key={mod.id}>
+              <NavLink href={mod.href} active={pathname.startsWith(mod.href)}>
+                <ModuleIconView icon={mod.icon} className="h-5 w-5" />
+                {mod.name}
+              </NavLink>
+              {mod.id === 'finanzas' && pathname.startsWith('/finanzas') && (
+                <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
+                  <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
+                    Clientes
+                  </NavSubLink>
+                </div>
+              )}
+            </div>
           ))}
 
         {modules.some((mod) => mod.id === 'admin') && (
@@ -101,6 +110,30 @@ function NavLink({
         active
           ? 'bg-terracota text-white'
           : 'text-slate-300 hover:bg-navy-light hover:text-white',
+      )}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function NavSubLink({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        'block rounded-lg px-3 py-1.5 text-sm transition-colors',
+        active
+          ? 'bg-terracota/20 font-medium text-white'
+          : 'text-slate-400 hover:bg-navy-light hover:text-white',
       )}
     >
       {children}
