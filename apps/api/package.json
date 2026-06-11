@@ -17,7 +17,8 @@
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
-    "seed:super-admin": "ts-node -T src/database/seeds/super-admin.seed.ts"
+    "seed:super-admin": "ts-node -T src/database/seeds/super-admin.seed.ts",
+    "seed:clients": "ts-node -T src/database/seeds/clients.seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-ses": "^3.1065.0",
