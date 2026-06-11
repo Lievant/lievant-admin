@@ -2,4 +2,6 @@ export enum UserLocation {
   LEON = 'LEON',
   CDMX = 'CDMX',
   GUADALAJARA = 'GUADALAJARA',
+  COLOMBIA = 'COLOMBIA',
+  ESTADOS_UNIDOS = 'ESTADOS_UNIDOS',
 }

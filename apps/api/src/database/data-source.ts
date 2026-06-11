@@ -4,6 +4,13 @@ import { DataSource } from 'typeorm';
 import { Permission } from '../modules/auth/entities/permission.entity';
 import { Role } from '../modules/auth/entities/role.entity';
 import { User } from '../modules/auth/entities/user.entity';
+import { Brand } from '../modules/clients/entities/brand.entity';
+import { ClientDocument } from '../modules/clients/entities/client-document.entity';
+import { ClientRecord } from '../modules/clients/entities/client-record.entity';
+import { Company } from '../modules/clients/entities/company.entity';
+import { Contact } from '../modules/clients/entities/contact.entity';
+import { FinancialData } from '../modules/clients/entities/financial-data.entity';
+import { Group } from '../modules/clients/entities/group.entity';
 
 for (const envFile of ['.env.local', '.env', '../../.env.local', '../../.env']) {
   dotenv.config({ path: path.resolve(process.cwd(), envFile) });
@@ -17,7 +24,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   schema: process.env.DATABASE_SCHEMA ?? 'auth',
-  entities: [User, Role, Permission],
+  entities: [User, Role, Permission, Group, Company, Brand, ClientRecord, FinancialData, ClientDocument, Contact],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
 });
