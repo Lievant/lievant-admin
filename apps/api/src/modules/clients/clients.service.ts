@@ -8,10 +8,11 @@ import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { ClientCreationType, CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
-import { CreateDocumentDto } from './dto/document.dto';
+import { UploadDocumentDto } from './dto/document.dto';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+import { DocumentStorageService } from './document-storage.service';
 import { Brand } from './entities/brand.entity';
 import { ClientDocument } from './entities/client-document.entity';
 import { ClientRecord } from './entities/client-record.entity';
@@ -28,6 +29,10 @@ export interface ClientDetail extends ClientRecord {
   contacts: Contact[];
 }
 
+export interface ClientDocumentWithUrl extends ClientDocument {
+  downloadUrl?: string;
+}
+
 @Injectable()
 export class ClientsService {
   constructor(
@@ -39,6 +44,7 @@ export class ClientsService {
     @InjectRepository(ClientDocument) private readonly documentsRepository: Repository<ClientDocument>,
     @InjectRepository(Contact) private readonly contactsRepository: Repository<Contact>,
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
+    private readonly documentStorageService: DocumentStorageService,
   ) {}
 
   async findAll(query: QueryClientsDto): Promise<PaginatedResult<ClientListItem>> {
@@ -298,24 +304,49 @@ export class ClientsService {
     return this.financialRepository.save(financial);
   }
 
-  async listDocuments(clientId: string): Promise<ClientDocument[]> {
+  async listDocuments(clientId: string): Promise<ClientDocumentWithUrl[]> {
     await this.getClientOrFail(clientId);
-    return this.documentsRepository.find({ where: { clientRecordId: clientId }, order: { createdAt: 'DESC' } });
+    const documents = await this.documentsRepository.find({
+      where: { clientRecordId: clientId },
+      order: { createdAt: 'DESC' },
+    });
+
+    return Promise.all(
+      documents.map(async (document): Promise<ClientDocumentWithUrl> => {
+        if (document.status !== DocumentStatus.UPLOADED) {
+          return document;
+        }
+        const downloadUrl = await this.documentStorageService.getPresignedUrl(document.filePath, 3600);
+        return { ...document, downloadUrl };
+      }),
+    );
   }
 
-  async addDocument(clientId: string, dto: CreateDocumentDto, uploadedBy: string): Promise<ClientDocument> {
+  async addDocument(
+    clientId: string,
+    file: Express.Multer.File,
+    dto: UploadDocumentDto,
+    uploadedBy: string,
+  ): Promise<ClientDocumentWithUrl> {
     await this.getClientOrFail(clientId);
 
-    return this.documentsRepository.save(
+    const key = await this.documentStorageService.uploadDocument(file, clientId, dto.documentType);
+
+    const document = await this.documentsRepository.save(
       this.documentsRepository.create({
         clientRecordId: clientId,
         documentType: dto.documentType,
-        fileName: dto.fileName,
-        filePath: dto.filePath,
-        status: dto.status ?? DocumentStatus.UPLOADED,
+        fileName: file.originalname,
+        filePath: key,
+        status: DocumentStatus.UPLOADED,
+        version: dto.version ?? 1,
         uploadedBy,
       }),
     );
+
+    const downloadUrl = await this.documentStorageService.getPresignedUrl(key, 3600);
+
+    return { ...document, downloadUrl };
   }
 
   async removeDocument(docId: string): Promise<void> {
@@ -323,6 +354,7 @@ export class ClientsService {
     if (!doc) {
       throw new NotFoundException(`Documento ${docId} no encontrado`);
     }
+    await this.documentStorageService.deleteDocument(doc.filePath);
     await this.documentsRepository.delete(docId);
   }
 

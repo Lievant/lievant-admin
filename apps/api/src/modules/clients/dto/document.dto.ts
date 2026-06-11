@@ -1,20 +1,14 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
-import { DocumentStatus } from '../constants/document-status.constant';
+import { Type } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
-export class CreateDocumentDto {
+export class UploadDocumentDto {
   @IsString()
   @IsNotEmpty()
   documentType!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  fileName!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  filePath!: string;
-
   @IsOptional()
-  @IsEnum(DocumentStatus)
-  status?: DocumentStatus;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  version?: number;
 }

@@ -1,4 +1,19 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRole } from '../auth/constants/roles.constant';
@@ -10,10 +25,12 @@ import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
-import { CreateDocumentDto } from './dto/document.dto';
+import { UploadDocumentDto } from './dto/document.dto';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
+
+const ALLOWED_DOCUMENT_EXTENSIONS = /\.(pdf|jpe?g|png|docx|xlsx)$/i;
 
 @UseGuards(JwtAuthGuard)
 @Controller('clients')
@@ -90,8 +107,28 @@ export class ClientsController {
   }
 
   @Post(':id/documents')
-  addDocument(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateDocumentDto, @CurrentUser() user: User) {
-    return this.clientsService.addDocument(id, dto, user.id);
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 20 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_DOCUMENT_EXTENSIONS.test(file.originalname)) {
+          callback(new BadRequestException('Tipo de archivo no permitido'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  addDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    if (!file) {
+      throw new BadRequestException('El archivo es obligatorio');
+    }
+    return this.clientsService.addDocument(id, file, dto, user.id);
   }
 
   @Delete('documents/:docId')

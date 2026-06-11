@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
+import { DocumentStorageService } from './document-storage.service';
 import { Brand } from './entities/brand.entity';
 import { ClientDocument } from './entities/client-document.entity';
 import { ClientRecord } from './entities/client-record.entity';
@@ -16,7 +17,7 @@ import { Group } from './entities/group.entity';
     TypeOrmModule.forFeature([ClientRecord, Group, Company, Brand, FinancialData, ClientDocument, Contact, User]),
   ],
   controllers: [ClientsController],
-  providers: [ClientsService],
+  providers: [ClientsService, DocumentStorageService],
   exports: [ClientsService],
 })
 export class ClientsModule {}
