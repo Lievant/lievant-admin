@@ -49,6 +49,13 @@ export function Sidebar({ user }: SidebarProps) {
                   </NavSubLink>
                 </div>
               )}
+              {mod.id === 'rrhh' && pathname.startsWith('/rrhh') && (
+                <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
+                  <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
+                    Empleados
+                  </NavSubLink>
+                </div>
+              )}
             </div>
           ))}
 

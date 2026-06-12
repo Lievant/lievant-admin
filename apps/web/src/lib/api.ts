@@ -491,3 +491,405 @@ export function removeClientContact(contactId: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// ---------------------------------------------------------------------------
+// Empleados (Módulo 3)
+// ---------------------------------------------------------------------------
+
+export type EmployeeStatus = 'active' | 'inactive';
+
+export type Modality = 'presencial' | 'hibrido' | 'remoto';
+
+export interface EmployeeListItem {
+  id: string;
+  displayId: string;
+  status: EmployeeStatus;
+  fullName: string;
+  corporateEmail: string | null;
+  companyCode: string;
+  companyName: string;
+  division: string | null;
+  area: string | null;
+  position: string;
+  location: string | null;
+  modality: Modality | null;
+  seniorityDate: string | null;
+  contractEndDate: string | null;
+  createdAt: string;
+}
+
+export interface EmployeeStats {
+  total: number;
+  active: number;
+  inactive: number;
+  companies: number;
+  expiringContracts: number;
+}
+
+export interface EmployeesPage {
+  data: EmployeeListItem[];
+  nextCursor: string | null;
+  stats: EmployeeStats;
+}
+
+export interface EmployeeAuthUserSummary {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface EmployeeDetail {
+  id: string;
+  displayId: string;
+  codNom: string | null;
+  companyCode: string;
+  companyName: string;
+  division: string | null;
+  area: string | null;
+  project: string | null;
+  level: string | null;
+  position: string;
+  emailSignature: string | null;
+  location: string | null;
+  modality: Modality | null;
+  contractSchema: string | null;
+  fullName: string;
+  directReportTo: string | null;
+  corporateEmail: string | null;
+  gender: string | null;
+  nationality: string | null;
+  seniorityDate: string | null;
+  contractType: string | null;
+  contractEndDate: string | null;
+  schedule: string | null;
+  lunchTime: string | null;
+  studies: string | null;
+  status: EmployeeStatus;
+  authUserId: string | null;
+  authUser: EmployeeAuthUserSummary | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CreateEmployeePayload {
+  codNom?: string;
+  companyCode: string;
+  companyName: string;
+  division?: string;
+  area?: string;
+  project?: string;
+  level?: string;
+  position: string;
+  emailSignature?: string;
+  location?: string;
+  modality?: Modality;
+  contractSchema?: string;
+  fullName: string;
+  directReportTo?: string;
+  corporateEmail?: string;
+  gender?: string;
+  nationality?: string;
+  seniorityDate?: string;
+  contractType?: string;
+  contractEndDate?: string;
+  schedule?: string;
+  lunchTime?: string;
+  studies?: string;
+  status?: EmployeeStatus;
+  authUserId?: string;
+}
+
+export type UpdateEmployeePayload = Partial<CreateEmployeePayload>;
+
+export interface ListEmployeesParams {
+  cursor?: string;
+  limit?: number;
+  status?: EmployeeStatus;
+  companyCode?: string;
+  division?: string;
+  location?: string;
+  search?: string;
+}
+
+export function listEmployees(params: ListEmployeesParams = {}): Promise<EmployeesPage> {
+  const query = new URLSearchParams();
+  if (params.cursor) query.set('cursor', params.cursor);
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.status) query.set('status', params.status);
+  if (params.companyCode) query.set('companyCode', params.companyCode);
+  if (params.division) query.set('division', params.division);
+  if (params.location) query.set('location', params.location);
+  if (params.search) query.set('search', params.search);
+
+  const qs = query.toString();
+  return apiFetch<EmployeesPage>(`/employees${qs ? `?${qs}` : ''}`);
+}
+
+export function getEmployee(id: string): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/${id}`);
+}
+
+export function createEmployee(payload: CreateEmployeePayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>('/employees', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateEmployee(id: string, payload: UpdateEmployeePayload): Promise<EmployeeDetail> {
+  return apiFetch<EmployeeDetail>(`/employees/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteEmployee(id: string): Promise<void> {
+  return apiFetch<void>(`/employees/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// Datos personales (acceso restringido: ADMIN_RRHH, SUPER_ADMIN)
+
+export interface EmployeePersonalData {
+  id: string;
+  employeeId: string;
+  rfc: string | null;
+  imssNumber: string | null;
+  curp: string | null;
+  birthDate: string | null;
+  bloodType: string | null;
+  maritalStatus: string | null;
+  children: number;
+  phone: string | null;
+  street: string | null;
+  extNumber: string | null;
+  intNumber: string | null;
+  neighborhood: string | null;
+  postalCode: string | null;
+  city: string | null;
+  state: string | null;
+  mainTransport: string | null;
+  commuteTime: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdatePersonalDataPayload {
+  rfc?: string;
+  imssNumber?: string;
+  curp?: string;
+  birthDate?: string;
+  bloodType?: string;
+  maritalStatus?: string;
+  children?: number;
+  phone?: string;
+  street?: string;
+  extNumber?: string;
+  intNumber?: string;
+  neighborhood?: string;
+  postalCode?: string;
+  city?: string;
+  state?: string;
+  mainTransport?: string;
+  commuteTime?: string;
+}
+
+export function getEmployeePersonalData(employeeId: string): Promise<EmployeePersonalData | null> {
+  return apiFetch<EmployeePersonalData | null>(`/employees/${employeeId}/personal`);
+}
+
+export function updateEmployeePersonalData(
+  employeeId: string,
+  payload: UpdatePersonalDataPayload,
+): Promise<EmployeePersonalData> {
+  return apiFetch<EmployeePersonalData>(`/employees/${employeeId}/personal`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+// Compensación (acceso restringido: ADMIN_NOMINA, SUPER_ADMIN)
+
+export interface EmployeeCompensation {
+  id: string;
+  employeeId: string;
+  dailyGrossSalary: string | null;
+  monthlyGrossSalary: string | null;
+  servicePayment: string | null;
+  lastSalaryChange: string | null;
+  remoteWorkAllowance: string | null;
+  groceryVouchers: string | null;
+  gasVouchers: string | null;
+  healthInsurance: string | null;
+  phoneAllowance: string | null;
+  punctualityBonus: string | null;
+  otherBenefits: string | null;
+  totalGross: string | null;
+  netEstimate: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateCompensationPayload {
+  dailyGrossSalary?: number;
+  monthlyGrossSalary?: number;
+  servicePayment?: number;
+  lastSalaryChange?: string;
+  remoteWorkAllowance?: number;
+  groceryVouchers?: number;
+  gasVouchers?: number;
+  healthInsurance?: string;
+  phoneAllowance?: number;
+  punctualityBonus?: number;
+  otherBenefits?: string;
+  totalGross?: number;
+  netEstimate?: number;
+}
+
+export function getEmployeeCompensation(employeeId: string): Promise<EmployeeCompensation | null> {
+  return apiFetch<EmployeeCompensation | null>(`/employees/${employeeId}/compensation`);
+}
+
+export function updateEmployeeCompensation(
+  employeeId: string,
+  payload: UpdateCompensationPayload,
+): Promise<EmployeeCompensation> {
+  return apiFetch<EmployeeCompensation>(`/employees/${employeeId}/compensation`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+// Vacaciones
+
+export interface EmployeeVacation {
+  id: string;
+  employeeId: string;
+  year: number;
+  openingBalance: string | null;
+  taken: string;
+  closingBalance: string | null;
+  supportActivityDays: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateVacationPayload {
+  year: number;
+  openingBalance?: number;
+  taken?: number;
+  supportActivityDays?: number;
+  notes?: string;
+}
+
+export type UpdateVacationPayload = Partial<CreateVacationPayload>;
+
+export function listEmployeeVacations(employeeId: string): Promise<EmployeeVacation[]> {
+  return apiFetch<EmployeeVacation[]>(`/employees/${employeeId}/vacations`);
+}
+
+export function createEmployeeVacation(employeeId: string, payload: CreateVacationPayload): Promise<EmployeeVacation> {
+  return apiFetch<EmployeeVacation>(`/employees/${employeeId}/vacations`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateEmployeeVacation(vacationId: string, payload: UpdateVacationPayload): Promise<EmployeeVacation> {
+  return apiFetch<EmployeeVacation>(`/employees/vacations/${vacationId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+// Contactos de emergencia
+
+export interface EmployeeEmergencyContact {
+  id: string;
+  employeeId: string;
+  name: string;
+  relationship: string | null;
+  phone: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CreateEmergencyContactPayload {
+  name: string;
+  relationship?: string;
+  phone?: string;
+}
+
+export type UpdateEmergencyContactPayload = Partial<CreateEmergencyContactPayload>;
+
+export function listEmployeeContacts(employeeId: string): Promise<EmployeeEmergencyContact[]> {
+  return apiFetch<EmployeeEmergencyContact[]>(`/employees/${employeeId}/contacts`);
+}
+
+export function addEmployeeContact(
+  employeeId: string,
+  payload: CreateEmergencyContactPayload,
+): Promise<EmployeeEmergencyContact> {
+  return apiFetch<EmployeeEmergencyContact>(`/employees/${employeeId}/contacts`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateEmployeeContact(
+  contactId: string,
+  payload: UpdateEmergencyContactPayload,
+): Promise<EmployeeEmergencyContact> {
+  return apiFetch<EmployeeEmergencyContact>(`/employees/contacts/${contactId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function removeEmployeeContact(contactId: string): Promise<void> {
+  return apiFetch<void>(`/employees/contacts/${contactId}`, {
+    method: 'DELETE',
+  });
+}
+
+// Baja (acceso restringido: ADMIN_RRHH, SUPER_ADMIN)
+
+export interface EmployeeTermination {
+  id: string;
+  employeeId: string;
+  terminationDate: string | null;
+  reason: string | null;
+  severancePaid: boolean;
+  severanceAmount: string | null;
+  references: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateTerminationPayload {
+  terminationDate?: string;
+  reason?: string;
+  severancePaid?: boolean;
+  severanceAmount?: number;
+  references?: string;
+  notes?: string;
+}
+
+export function getEmployeeTermination(employeeId: string): Promise<EmployeeTermination | null> {
+  return apiFetch<EmployeeTermination | null>(`/employees/${employeeId}/termination`);
+}
+
+export function updateEmployeeTermination(
+  employeeId: string,
+  payload: UpdateTerminationPayload,
+): Promise<EmployeeTermination> {
+  return apiFetch<EmployeeTermination>(`/employees/${employeeId}/termination`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
