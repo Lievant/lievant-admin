@@ -1,7 +1,27 @@
 import 'reflect-metadata';
+import { createServer } from 'net';
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = createServer()
+      .once('error', () => resolve(false))
+      .once('listening', () => tester.close(() => resolve(true)))
+      .listen(port, '0.0.0.0');
+  });
+}
+
+async function findAvailablePort(startPort: number, maxAttempts = 10): Promise<number> {
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const port = startPort + i;
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  throw new Error(`No se encontró un puerto disponible a partir de ${startPort}.`);
+}
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
@@ -21,7 +41,12 @@ async function bootstrap(): Promise<void> {
     credentials: true,
   });
 
-  const port = process.env.PORT ?? 3001;
+  const basePort = Number(process.env.PORT ?? 3001);
+  const port = await findAvailablePort(basePort);
+  if (port !== basePort) {
+    console.warn(`Puerto ${basePort} ocupado, usando ${port} en su lugar.`);
+  }
+
   await app.listen(port);
 }
 

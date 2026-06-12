@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useTransition } from 'react';
-import type { UploadDocumentPayload } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import { CloseIcon } from '@/components/icons';
 import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from '../constants';
-import { addDocumentAction } from './actions';
 import { TextField } from '../form-field';
 
 export function UploadDocumentDialog({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+  const router = useRouter();
   const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES[0]);
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState('');
@@ -28,14 +28,32 @@ export function UploadDocumentDialog({ clientId, onClose }: { clientId: string; 
     }
 
     startTransition(async () => {
-      const payload: UploadDocumentPayload = { file, documentType };
-      if (version !== '') payload.version = Number(version);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentType', documentType);
+      if (version !== '') formData.append('version', version);
 
-      const result = await addDocumentAction(clientId, payload);
-      if (result.success) {
+      try {
+        const res = await fetch(`/api/clients/${clientId}/documents`, {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+          const message = body?.message
+            ? Array.isArray(body.message)
+              ? body.message.join(', ')
+              : body.message
+            : 'No se pudo cargar el documento.';
+          setError(message);
+          return;
+        }
+
+        router.refresh();
         onClose();
-      } else {
-        setError(result.error ?? 'No se pudo cargar el documento.');
+      } catch {
+        setError('No se pudo cargar el documento.');
       }
     });
   };
@@ -91,9 +109,14 @@ export function UploadDocumentDialog({ clientId, onClose }: { clientId: string; 
             <input
               id="doc-file"
               type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp,.svg"
               onChange={handleFileChange}
               className="text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-600 hover:file:bg-slate-200"
             />
+            <p className="text-xs text-slate-400">
+              Formatos permitidos: PDF, Word, Excel, PowerPoint, TXT e imágenes (JPG, PNG, GIF, WEBP, SVG) · Máximo 20
+              MB
+            </p>
           </div>
 
           {error && (

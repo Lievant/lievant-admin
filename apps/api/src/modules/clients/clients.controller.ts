@@ -21,6 +21,7 @@ import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ClientsService } from './clients.service';
+import { ALLOWED_DOCUMENT_MIME_TYPES } from './document-storage.service';
 import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
@@ -29,8 +30,6 @@ import { UploadDocumentDto } from './dto/document.dto';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-
-const ALLOWED_DOCUMENT_EXTENSIONS = /\.(pdf|jpe?g|png|docx|xlsx)$/i;
 
 @UseGuards(JwtAuthGuard)
 @Controller('clients')
@@ -111,7 +110,7 @@ export class ClientsController {
     FileInterceptor('file', {
       limits: { fileSize: 20 * 1024 * 1024 },
       fileFilter: (_req, file, callback) => {
-        if (!ALLOWED_DOCUMENT_EXTENSIONS.test(file.originalname)) {
+        if (!(ALLOWED_DOCUMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
           callback(new BadRequestException('Tipo de archivo no permitido'), false);
           return;
         }

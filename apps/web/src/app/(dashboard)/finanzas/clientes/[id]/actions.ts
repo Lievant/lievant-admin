@@ -6,7 +6,6 @@ import {
   addBrand,
   addClientCompany,
   addClientContact,
-  addClientDocument,
   removeClientContact,
   removeClientDocument,
   updateClient,
@@ -17,7 +16,6 @@ import {
   type UpdateClientPayload,
   type UpdateContactPayload,
   type UpdateFinancialPayload,
-  type UploadDocumentPayload,
 } from '@/lib/api';
 
 export interface ActionResult {
@@ -65,16 +63,6 @@ export async function addBrandAction(clientId: string, companyId: string, name: 
 export async function updateFinancialAction(clientId: string, payload: UpdateFinancialPayload): Promise<ActionResult> {
   try {
     await updateClientFinancial(clientId, payload);
-    revalidatePath(`/finanzas/clientes/${clientId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}
-
-export async function addDocumentAction(clientId: string, payload: UploadDocumentPayload): Promise<ActionResult> {
-  try {
-    await addClientDocument(clientId, payload);
     revalidatePath(`/finanzas/clientes/${clientId}`);
     return { success: true };
   } catch (err) {

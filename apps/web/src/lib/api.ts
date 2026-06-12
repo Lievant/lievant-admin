@@ -52,23 +52,6 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return parseResponse<T>(res);
 }
 
-export async function apiFetchUpload<T>(path: string, formData: FormData): Promise<T> {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get('access_token')?.value;
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    },
-    body: formData,
-    cache: 'no-store',
-  });
-
-  return parseResponse<T>(res);
-}
-
 export interface CurrentUser {
   id: string;
   email: string;
@@ -459,21 +442,6 @@ export function updateClientFinancial(clientId: string, payload: UpdateFinancial
 
 export function listClientDocuments(clientId: string): Promise<ClientDocumentSummary[]> {
   return apiFetch<ClientDocumentSummary[]>(`/clients/${clientId}/documents`);
-}
-
-export interface UploadDocumentPayload {
-  file: File;
-  documentType: string;
-  version?: number;
-}
-
-export function addClientDocument(clientId: string, payload: UploadDocumentPayload): Promise<ClientDocumentSummary> {
-  const formData = new FormData();
-  formData.append('file', payload.file);
-  formData.append('documentType', payload.documentType);
-  if (payload.version != null) formData.append('version', String(payload.version));
-
-  return apiFetchUpload<ClientDocumentSummary>(`/clients/${clientId}/documents`, formData);
 }
 
 export function removeClientDocument(docId: string): Promise<void> {
