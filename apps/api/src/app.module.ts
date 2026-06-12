@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AuthModule } from './modules/auth/auth.module';
+import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 
@@ -26,6 +27,7 @@ import { EmployeesModule } from './modules/employees/employees.module';
     AuthModule,
     ClientsModule,
     EmployeesModule,
+    CatalogsModule,
   ],
 })
 export class AppModule {}

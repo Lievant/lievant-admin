@@ -4,6 +4,18 @@ import { DataSource } from 'typeorm';
 import { Permission } from '../modules/auth/entities/permission.entity';
 import { Role } from '../modules/auth/entities/role.entity';
 import { User } from '../modules/auth/entities/user.entity';
+import { CatalogArea } from '../modules/catalogs/entities/catalog-area.entity';
+import { CatalogBloodType } from '../modules/catalogs/entities/catalog-blood-type.entity';
+import { CatalogCompany } from '../modules/catalogs/entities/catalog-company.entity';
+import { CatalogContractSchema } from '../modules/catalogs/entities/catalog-contract-schema.entity';
+import { CatalogContractType } from '../modules/catalogs/entities/catalog-contract-type.entity';
+import { CatalogDivision } from '../modules/catalogs/entities/catalog-division.entity';
+import { CatalogDocumentType } from '../modules/catalogs/entities/catalog-document-type.entity';
+import { CatalogIndustry } from '../modules/catalogs/entities/catalog-industry.entity';
+import { CatalogLocation } from '../modules/catalogs/entities/catalog-location.entity';
+import { CatalogMaritalStatus } from '../modules/catalogs/entities/catalog-marital-status.entity';
+import { CatalogModality } from '../modules/catalogs/entities/catalog-modality.entity';
+import { CatalogOrgLevel } from '../modules/catalogs/entities/catalog-org-level.entity';
 import { Brand } from '../modules/clients/entities/brand.entity';
 import { ClientDocument } from '../modules/clients/entities/client-document.entity';
 import { ClientRecord } from '../modules/clients/entities/client-record.entity';
@@ -47,6 +59,18 @@ const AppDataSource = new DataSource({
     Vacation,
     EmergencyContact,
     TerminationData,
+    CatalogCompany,
+    CatalogLocation,
+    CatalogModality,
+    CatalogDivision,
+    CatalogArea,
+    CatalogContractSchema,
+    CatalogContractType,
+    CatalogOrgLevel,
+    CatalogBloodType,
+    CatalogMaritalStatus,
+    CatalogIndustry,
+    CatalogDocumentType,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
