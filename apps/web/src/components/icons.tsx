@@ -170,6 +170,125 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+export function CatalogIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3" width="8" height="8" rx="1.5" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" />
+    </Svg>
+  );
+}
+
+export function BuildingIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="3" width="11" height="18" rx="1" />
+      <path d="M9 8h1M9 12h1M9 16h1M15 21v-7h4a1 1 0 0 1 1 1v6" />
+    </Svg>
+  );
+}
+
+export function MapPinIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z" />
+      <circle cx="12" cy="10" r="2.5" />
+    </Svg>
+  );
+}
+
+export function LaptopIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="4" width="16" height="11" rx="1" />
+      <path d="M2 19h20M9 19v-1.5M15 19v-1.5" />
+    </Svg>
+  );
+}
+
+export function SitemapIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <rect x="3" y="15" width="6" height="4" rx="1" />
+      <rect x="15" y="15" width="6" height="4" rx="1" />
+      <path d="M12 7v4M6 15v-2a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v2" />
+    </Svg>
+  );
+}
+
+export function LayersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+      <path d="M3 12l9 5 9-5M3 16l9 5 9-5" />
+    </Svg>
+  );
+}
+
+export function ContractIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6 2h9l3 3v17H6Z" />
+      <path d="M15 2v3h3M9 11h6M9 14h6M9 17h4" />
+    </Svg>
+  );
+}
+
+export function FileTextIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6 2h8l4 4v16H6Z" />
+      <path d="M14 2v4h4M9 13h6M9 17h6" />
+    </Svg>
+  );
+}
+
+export function LevelsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="14" width="4" height="7" />
+      <rect x="10" y="9" width="4" height="12" />
+      <rect x="17" y="4" width="4" height="17" />
+    </Svg>
+  );
+}
+
+export function DropletIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 2.5s6 7 6 11.5a6 6 0 1 1-12 0c0-4.5 6-11.5 6-11.5Z" />
+    </Svg>
+  );
+}
+
+export function HeartIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20.5 4.5 13a4.5 4.5 0 0 1 6.5-6.2L12 7.5l1-0.7a4.5 4.5 0 0 1 6.5 6.2L12 20.5Z" />
+    </Svg>
+  );
+}
+
+export function FactoryIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 21V11l6 4v-4l6 4V8l6 4v9Z" />
+      <path d="M3 21h18" />
+    </Svg>
+  );
+}
+
+export function FolderIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z" />
+    </Svg>
+  );
+}
+
 export function MicrosoftLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" {...props}>

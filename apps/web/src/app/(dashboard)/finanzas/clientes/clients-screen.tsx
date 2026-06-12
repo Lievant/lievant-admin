@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { ClientsPage, UserSummary } from '@/lib/api';
+import type { CatalogItem, ClientsPage, UserSummary } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import {
@@ -25,6 +25,7 @@ interface ClientsFilters {
 interface ClientsScreenProps {
   page: ClientsPage;
   accountManagers: UserSummary[];
+  industries: CatalogItem[];
   apiUnavailable: boolean;
   filters: ClientsFilters;
   cursor: string;
@@ -34,6 +35,7 @@ interface ClientsScreenProps {
 export function ClientsScreen({
   page,
   accountManagers,
+  industries,
   apiUnavailable,
   filters,
   cursor,
@@ -41,22 +43,20 @@ export function ClientsScreen({
 }: ClientsScreenProps) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
-  const [industry, setIndustry] = useState(filters.industry);
 
   useEffect(() => {
     setSearch(filters.search);
-    setIndustry(filters.industry);
-  }, [filters.search, filters.industry]);
+  }, [filters.search]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
-      if (search !== filters.search || industry !== filters.industry) {
-        updateParams({ search: search || null, industry: industry || null });
+      if (search !== filters.search) {
+        updateParams({ search: search || null });
       }
     }, 400);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, industry]);
+  }, [search]);
 
   function buildParams(overrides: Record<string, string | null>, keepPagination: boolean) {
     const sp = new URLSearchParams();
@@ -167,13 +167,18 @@ export function ClientsScreen({
           ))}
         </select>
 
-        <input
-          type="text"
-          value={industry}
-          onChange={(e) => setIndustry(e.target.value)}
-          placeholder="Industria"
-          className="w-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 placeholder:text-slate-400 focus:border-terracota focus:outline-none"
-        />
+        <select
+          value={filters.industry}
+          onChange={(e) => updateParams({ industry: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+        >
+          <option value="">Industria: Todas</option>
+          {industries.map((ind) => (
+            <option key={ind.id} value={ind.name}>
+              {ind.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}

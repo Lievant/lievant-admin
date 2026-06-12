@@ -1,4 +1,5 @@
 import { listEmployees, type EmployeeStatus, type ListEmployeesParams } from '@/lib/api';
+import { loadEmployeeFilterCatalogs } from './catalog-data';
 import { EmployeesScreen } from './employees-screen';
 
 async function safe<T>(promise: Promise<T>): Promise<T | null> {
@@ -37,7 +38,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
   if (location) query.location = location;
   if (search) query.search = search;
 
-  const employeesPage = await safe(listEmployees(query));
+  const [employeesPage, catalogs] = await Promise.all([safe(listEmployees(query)), loadEmployeeFilterCatalogs()]);
   const apiUnavailable = employeesPage === null;
 
   return (
@@ -60,6 +61,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
         }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
+        catalogs={catalogs}
       />
     </div>
   );

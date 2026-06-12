@@ -11,16 +11,9 @@ import type {
   UpdateCompensationPayload,
   UpdatePersonalDataPayload,
 } from '@/lib/api';
-import {
-  BLOOD_TYPES,
-  EMPLOYEE_STATUSES,
-  EMPLOYEE_STATUS_LABELS,
-  GENDERS,
-  MARITAL_STATUSES,
-  MODALITIES,
-  MODALITY_LABELS,
-} from '../constants';
+import { EMPLOYEE_STATUSES, EMPLOYEE_STATUS_LABELS, GENDERS, modalityFromCatalogName } from '../constants';
 import { TextField, SelectField } from '../form-field';
+import type { EmployeeFormCatalogs } from '../catalog-data';
 import { createEmployeeAction } from './actions';
 
 const STEP_LABELS = {
@@ -34,9 +27,10 @@ type StepId = keyof typeof STEP_LABELS;
 interface NewEmployeeFormProps {
   canEditPersonal: boolean;
   canEditCompensation: boolean;
+  catalogs: EmployeeFormCatalogs;
 }
 
-export function NewEmployeeForm({ canEditPersonal, canEditCompensation }: NewEmployeeFormProps) {
+export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs }: NewEmployeeFormProps) {
   const router = useRouter();
 
   const steps = useMemo<StepId[]>(() => {
@@ -110,6 +104,55 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation }: NewEmp
 
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const companyOptions = useMemo(
+    () => catalogs.companies.map((c) => ({ value: c.code ?? '', label: c.name })),
+    [catalogs.companies],
+  );
+  const divisionOptions = useMemo(
+    () => catalogs.divisions.map((d) => ({ value: d.name, label: d.name })),
+    [catalogs.divisions],
+  );
+  const locationOptions = useMemo(
+    () => catalogs.locations.map((l) => ({ value: l.name, label: l.name })),
+    [catalogs.locations],
+  );
+  const modalityOptions = useMemo(
+    () =>
+      catalogs.modalities
+        .map((m) => {
+          const enumValue = modalityFromCatalogName(m.name);
+          return enumValue ? { value: enumValue as string, label: m.name } : null;
+        })
+        .filter((option): option is { value: string; label: string } => option !== null),
+    [catalogs.modalities],
+  );
+  const contractSchemaOptions = useMemo(
+    () => catalogs.contractSchemas.map((c) => ({ value: c.name, label: c.name })),
+    [catalogs.contractSchemas],
+  );
+  const contractTypeOptions = useMemo(
+    () => catalogs.contractTypes.map((c) => ({ value: c.name, label: c.name })),
+    [catalogs.contractTypes],
+  );
+  const orgLevelOptions = useMemo(
+    () => catalogs.orgLevels.map((l) => ({ value: l.code ?? '', label: `${l.code} - ${l.name}` })),
+    [catalogs.orgLevels],
+  );
+  const bloodTypeOptions = useMemo(
+    () => catalogs.bloodTypes.map((b) => ({ value: b.name, label: b.name })),
+    [catalogs.bloodTypes],
+  );
+  const maritalStatusOptions = useMemo(
+    () => catalogs.maritalStatuses.map((m) => ({ value: m.name, label: m.name })),
+    [catalogs.maritalStatuses],
+  );
+
+  const handleCompanyChange = (code: string) => {
+    setCompanyCode(code);
+    const match = catalogs.companies.find((c) => c.code === code);
+    setCompanyName(match?.name ?? '');
+  };
 
   const currentStep = steps[stepIndex];
   const isLastStep = stepIndex === steps.length - 1;
@@ -263,30 +306,48 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation }: NewEmp
             <div className="border-t border-slate-100 pt-4">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Organización</p>
               <div className="grid grid-cols-3 gap-4">
-                <TextField id="new-employee-company-code" label="Código de empresa" value={companyCode} onChange={setCompanyCode} mono placeholder="LVT" />
-                <TextField id="new-employee-company-name" label="Empresa" value={companyName} onChange={setCompanyName} placeholder="Lievant" />
+                <SelectField
+                  id="new-employee-company-code"
+                  label="Empresa"
+                  value={companyCode}
+                  onChange={handleCompanyChange}
+                  options={companyOptions}
+                />
                 <TextField id="new-employee-cod-nom" label="Código de nómina" value={codNom} onChange={setCodNom} mono />
+                <SelectField
+                  id="new-employee-contract-type"
+                  label="Tipo de contrato"
+                  value={contractType}
+                  onChange={setContractType}
+                  options={contractTypeOptions}
+                />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
-                <TextField id="new-employee-division" label="División" value={division} onChange={setDivision} />
+                <SelectField id="new-employee-division" label="División" value={division} onChange={setDivision} options={divisionOptions} />
                 <TextField id="new-employee-area" label="Área" value={area} onChange={setArea} />
                 <TextField id="new-employee-project" label="Proyecto" value={project} onChange={setProject} />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
                 <TextField id="new-employee-position" label="Puesto" value={position} onChange={setPosition} placeholder="Diseñador UX" />
-                <TextField id="new-employee-level" label="Nivel" value={level} onChange={setLevel} />
+                <SelectField id="new-employee-level" label="Nivel" value={level} onChange={setLevel} options={orgLevelOptions} />
                 <TextField id="new-employee-direct-report" label="Reporta a" value={directReportTo} onChange={setDirectReportTo} />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
-                <TextField id="new-employee-location" label="Ubicación" value={location} onChange={setLocation} placeholder="León, GTO" />
+                <SelectField id="new-employee-location" label="Ubicación" value={location} onChange={setLocation} options={locationOptions} />
                 <SelectField
                   id="new-employee-modality"
                   label="Modalidad"
                   value={modality}
                   onChange={(v) => setModality(v as Modality | '')}
-                  options={MODALITIES.map((m) => ({ value: m, label: MODALITY_LABELS[m] }))}
+                  options={modalityOptions}
                 />
-                <TextField id="new-employee-contract-schema" label="Esquema de contrato" value={contractSchema} onChange={setContractSchema} />
+                <SelectField
+                  id="new-employee-contract-schema"
+                  label="Esquema de contrato"
+                  value={contractSchema}
+                  onChange={setContractSchema}
+                  options={contractSchemaOptions}
+                />
               </div>
             </div>
 
@@ -305,8 +366,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation }: NewEmp
                 <TextField id="new-employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} placeholder="Mexicana" />
                 <TextField id="new-employee-seniority-date" label="Fecha de antigüedad" type="date" value={seniorityDate} onChange={setSeniorityDate} />
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-4">
-                <TextField id="new-employee-contract-type" label="Tipo de contrato" value={contractType} onChange={setContractType} />
+              <div className="mt-4 grid grid-cols-2 gap-4">
                 <TextField id="new-employee-contract-end" label="Fin de contrato" type="date" value={contractEndDate} onChange={setContractEndDate} />
                 <TextField id="new-employee-schedule" label="Horario" value={schedule} onChange={setSchedule} placeholder="9:00 - 18:00" />
               </div>
@@ -333,13 +393,13 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation }: NewEmp
             </div>
             <div className="grid grid-cols-3 gap-4">
               <TextField id="new-employee-imss" label="Número IMSS" value={imssNumber} onChange={setImssNumber} mono />
-              <SelectField id="new-employee-blood-type" label="Tipo de sangre" value={bloodType} onChange={setBloodType} options={BLOOD_TYPES.map((b) => ({ value: b, label: b }))} />
+              <SelectField id="new-employee-blood-type" label="Tipo de sangre" value={bloodType} onChange={setBloodType} options={bloodTypeOptions} />
               <TextField id="new-employee-birth-date" label="Fecha de nacimiento" type="date" value={birthDate} onChange={setBirthDate} />
             </div>
 
             <div className="border-t border-slate-100 pt-4">
               <div className="grid grid-cols-3 gap-4">
-                <SelectField id="new-employee-marital-status" label="Estado civil" value={maritalStatus} onChange={setMaritalStatus} options={MARITAL_STATUSES} />
+                <SelectField id="new-employee-marital-status" label="Estado civil" value={maritalStatus} onChange={setMaritalStatus} options={maritalStatusOptions} />
                 <TextField id="new-employee-children" label="Hijos" type="number" value={children} onChange={setChildren} />
                 <TextField id="new-employee-phone" label="Teléfono" value={phone} onChange={setPhone} />
               </div>

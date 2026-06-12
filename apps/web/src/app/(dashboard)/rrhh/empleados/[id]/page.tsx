@@ -10,6 +10,7 @@ import {
   listEmployeeVacations,
   type EmployeeDetail,
 } from '@/lib/api';
+import { loadEmployeeFormCatalogs } from '../catalog-data';
 import { EmployeeDetailScreen } from './employee-detail-screen';
 
 async function safe<T>(promise: Promise<T>): Promise<T | null> {
@@ -54,12 +55,13 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
   const canViewPersonal = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_RRHH');
   const canViewCompensation = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_NOMINA');
 
-  const [personal, compensation, vacations, contacts, termination] = await Promise.all([
+  const [personal, compensation, vacations, contacts, termination, catalogs] = await Promise.all([
     canViewPersonal ? safe(getEmployeePersonalData(id)) : Promise.resolve(null),
     canViewCompensation ? safe(getEmployeeCompensation(id)) : Promise.resolve(null),
     canViewPersonal ? safe(listEmployeeVacations(id)) : Promise.resolve(null),
     canViewPersonal ? safe(listEmployeeContacts(id)) : Promise.resolve(null),
     canViewPersonal ? safe(getEmployeeTermination(id)) : Promise.resolve(null),
+    loadEmployeeFormCatalogs(),
   ]);
 
   return (
@@ -73,6 +75,7 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
         termination={termination}
         canViewPersonal={canViewPersonal}
         canViewCompensation={canViewCompensation}
+        catalogs={catalogs}
       />
     </div>
   );

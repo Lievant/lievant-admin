@@ -893,3 +893,82 @@ export function updateEmployeeTermination(
     body: JSON.stringify(payload),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Catálogos (Administración)
+// ---------------------------------------------------------------------------
+
+export type CatalogEntity =
+  | 'companies'
+  | 'locations'
+  | 'modalities'
+  | 'divisions'
+  | 'areas'
+  | 'contract_schemas'
+  | 'contract_types'
+  | 'org_levels'
+  | 'blood_types'
+  | 'marital_statuses'
+  | 'industries'
+  | 'document_types';
+
+export interface CatalogItem {
+  id: string;
+  name: string;
+  code?: string | null;
+  country?: string | null;
+  companyCode?: string | null;
+  divisionName?: string | null;
+  appliesTo?: string | null;
+  isRequired?: boolean;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCatalogItemPayload {
+  name: string;
+  code?: string;
+  country?: string;
+  companyCode?: string;
+  divisionName?: string;
+  appliesTo?: string;
+  isRequired?: boolean;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export type UpdateCatalogItemPayload = Partial<CreateCatalogItemPayload>;
+
+export function listCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
+  return apiFetch<CatalogItem[]>(`/catalogs/${entity}`);
+}
+
+export function listActiveCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
+  return apiFetch<CatalogItem[]>(`/catalogs/${entity}/active`);
+}
+
+export function createCatalogItem(entity: CatalogEntity, payload: CreateCatalogItemPayload): Promise<CatalogItem> {
+  return apiFetch<CatalogItem>(`/catalogs/${entity}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCatalogItem(
+  entity: CatalogEntity,
+  id: string,
+  payload: UpdateCatalogItemPayload,
+): Promise<CatalogItem> {
+  return apiFetch<CatalogItem>(`/catalogs/${entity}/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateCatalogItem(entity: CatalogEntity, id: string): Promise<void> {
+  return apiFetch<void>(`/catalogs/${entity}/${id}`, {
+    method: 'DELETE',
+  });
+}

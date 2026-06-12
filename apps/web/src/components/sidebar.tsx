@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { MODULES, modulesForRoles } from '@/lib/modules';
-import { HomeIcon, LogoutIcon, ModuleIconView, PeopleIcon } from '@/components/icons';
+import { CatalogIcon, HomeIcon, LogoutIcon, ModuleIconView, PeopleIcon } from '@/components/icons';
 import type { CurrentUser } from '@/lib/api';
 
 interface SidebarProps {
@@ -73,6 +73,10 @@ export function Sidebar({ user }: SidebarProps) {
             <NavLink href="/admin/users" active={pathname.startsWith('/admin/users')}>
               <PeopleIcon className="h-5 w-5" />
               Usuarios
+            </NavLink>
+            <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
+              <CatalogIcon className="h-5 w-5" />
+              Catálogos
             </NavLink>
           </>
         )}

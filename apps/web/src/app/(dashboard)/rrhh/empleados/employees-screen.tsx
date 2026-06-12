@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import type { EmployeesPage } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
+import type { EmployeeFilterCatalogs } from './catalog-data';
 import {
   EMPLOYEE_STATUSES,
   EMPLOYEE_STATUS_BADGE_STYLES,
@@ -32,41 +33,26 @@ interface EmployeesScreenProps {
   filters: EmployeesFilters;
   cursor: string;
   cursorsStack: string[];
+  catalogs: EmployeeFilterCatalogs;
 }
 
-export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursorsStack }: EmployeesScreenProps) {
+export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursorsStack, catalogs }: EmployeesScreenProps) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
-  const [companyCode, setCompanyCode] = useState(filters.companyCode);
-  const [division, setDivision] = useState(filters.division);
-  const [location, setLocation] = useState(filters.location);
 
   useEffect(() => {
     setSearch(filters.search);
-    setCompanyCode(filters.companyCode);
-    setDivision(filters.division);
-    setLocation(filters.location);
-  }, [filters.search, filters.companyCode, filters.division, filters.location]);
+  }, [filters.search]);
 
   useEffect(() => {
     const handle = setTimeout(() => {
-      if (
-        search !== filters.search ||
-        companyCode !== filters.companyCode ||
-        division !== filters.division ||
-        location !== filters.location
-      ) {
-        updateParams({
-          search: search || null,
-          companyCode: companyCode || null,
-          division: division || null,
-          location: location || null,
-        });
+      if (search !== filters.search) {
+        updateParams({ search: search || null });
       }
     }, 400);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, companyCode, division, location]);
+  }, [search]);
 
   function buildParams(overrides: Record<string, string | null>, keepPagination: boolean) {
     const sp = new URLSearchParams();
@@ -161,29 +147,44 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
           />
         </div>
 
-        <input
-          type="text"
-          value={companyCode}
-          onChange={(e) => setCompanyCode(e.target.value)}
-          placeholder="Empresa"
-          className="w-36 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 placeholder:text-slate-400 focus:border-terracota focus:outline-none"
-        />
+        <select
+          value={filters.companyCode}
+          onChange={(e) => updateParams({ companyCode: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+        >
+          <option value="">Empresa: Todas</option>
+          {catalogs.companies.map((company) => (
+            <option key={company.id} value={company.code ?? ''}>
+              {company.name}
+            </option>
+          ))}
+        </select>
 
-        <input
-          type="text"
-          value={division}
-          onChange={(e) => setDivision(e.target.value)}
-          placeholder="División"
-          className="w-36 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 placeholder:text-slate-400 focus:border-terracota focus:outline-none"
-        />
+        <select
+          value={filters.division}
+          onChange={(e) => updateParams({ division: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+        >
+          <option value="">División: Todas</option>
+          {catalogs.divisions.map((division) => (
+            <option key={division.id} value={division.name}>
+              {division.name}
+            </option>
+          ))}
+        </select>
 
-        <input
-          type="text"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          placeholder="Ubicación"
-          className="w-36 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 placeholder:text-slate-400 focus:border-terracota focus:outline-none"
-        />
+        <select
+          value={filters.location}
+          onChange={(e) => updateParams({ location: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+        >
+          <option value="">Ubicación: Todas</option>
+          {catalogs.locations.map((location) => (
+            <option key={location.id} value={location.name}>
+              {location.name}
+            </option>
+          ))}
+        </select>
 
         <select
           value={filters.status}

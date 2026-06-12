@@ -17,6 +17,7 @@ import {
   EMPLOYEE_STATUS_LABELS,
   companyBadgeStyle,
 } from '../constants';
+import type { EmployeeFormCatalogs } from '../catalog-data';
 import { GeneralTab } from './general-tab';
 import { PersonalTab } from './personal-tab';
 import { CompensationTab } from './compensation-tab';
@@ -43,6 +44,7 @@ interface EmployeeDetailScreenProps {
   termination: EmployeeTermination | null;
   canViewPersonal: boolean;
   canViewCompensation: boolean;
+  catalogs: EmployeeFormCatalogs;
 }
 
 export function EmployeeDetailScreen({
@@ -54,6 +56,7 @@ export function EmployeeDetailScreen({
   termination,
   canViewPersonal,
   canViewCompensation,
+  catalogs,
 }: EmployeeDetailScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [isEditOpen, setEditOpen] = useState(false);
@@ -168,7 +171,7 @@ export function EmployeeDetailScreen({
         )}
       </div>
 
-      {isEditOpen && <EditEmployeeDialog employee={employee} onClose={() => setEditOpen(false)} />}
+      {isEditOpen && <EditEmployeeDialog employee={employee} catalogs={catalogs} onClose={() => setEditOpen(false)} />}
     </div>
   );
 }

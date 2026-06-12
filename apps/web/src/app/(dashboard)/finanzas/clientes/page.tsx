@@ -1,4 +1,4 @@
-import { listClients, listUsers, type ClientStatus, type ListClientsParams } from '@/lib/api';
+import { listActiveCatalogItems, listClients, listUsers, type ClientStatus, type ListClientsParams } from '@/lib/api';
 import { ClientsScreen } from './clients-screen';
 
 async function safe<T>(promise: Promise<T>): Promise<T | null> {
@@ -35,9 +35,10 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   if (industry) query.industry = industry;
   if (search) query.search = search;
 
-  const [clientsPage, accountManagers] = await Promise.all([
+  const [clientsPage, accountManagers, industries] = await Promise.all([
     safe(listClients(query)),
     safe(listUsers()),
+    safe(listActiveCatalogItems('industries')),
   ]);
 
   const apiUnavailable = clientsPage === null;
@@ -47,6 +48,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
       <ClientsScreen
         page={clientsPage ?? { data: [], nextCursor: null }}
         accountManagers={accountManagers ?? []}
+        industries={industries ?? []}
         apiUnavailable={apiUnavailable}
         filters={{ status: status ?? '', accountManagerId: accountManagerId ?? '', industry: industry ?? '', search: search ?? '' }}
         cursor={cursor ?? ''}

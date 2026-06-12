@@ -26,6 +26,11 @@ export const MODALITY_BADGE_STYLES: Record<Modality, string> = {
   remoto: 'bg-emerald-50 text-emerald-600',
 };
 
+export function modalityFromCatalogName(name: string): Modality | null {
+  const entry = (Object.entries(MODALITY_LABELS) as [Modality, string][]).find(([, label]) => label === name);
+  return entry ? entry[0] : null;
+}
+
 export const GENDERS: { value: string; label: string }[] = [
   { value: 'Masculino', label: 'Masculino' },
   { value: 'Femenino', label: 'Femenino' },
