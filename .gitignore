@@ -9,6 +9,7 @@ node_modules
 dist
 build
 out
+**/*.tsbuildinfo
 
 # Environment files — NUNCA commitear .env con valores reales
 .env
