@@ -47,6 +47,9 @@ export function Sidebar({ user }: SidebarProps) {
                   <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
                     Clientes
                   </NavSubLink>
+                  <NavSubLink href="/finanzas/proveedores" active={pathname.startsWith('/finanzas/proveedores')}>
+                    Proveedores
+                  </NavSubLink>
                 </div>
               )}
               {mod.id === 'rrhh' && pathname.startsWith('/rrhh') && (

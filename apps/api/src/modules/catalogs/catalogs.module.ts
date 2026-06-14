@@ -14,6 +14,7 @@ import { CatalogLocation } from './entities/catalog-location.entity';
 import { CatalogMaritalStatus } from './entities/catalog-marital-status.entity';
 import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
+import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
       CatalogMaritalStatus,
       CatalogIndustry,
       CatalogDocumentType,
+      CatalogVendorCategory,
     ]),
   ],
   controllers: [CatalogsController],

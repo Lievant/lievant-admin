@@ -910,7 +910,8 @@ export type CatalogEntity =
   | 'blood_types'
   | 'marital_statuses'
   | 'industries'
-  | 'document_types';
+  | 'document_types'
+  | 'vendor_categories';
 
 export interface CatalogItem {
   id: string;
@@ -969,6 +970,308 @@ export function updateCatalogItem(
 
 export function deactivateCatalogItem(entity: CatalogEntity, id: string): Promise<void> {
   return apiFetch<void>(`/catalogs/${entity}/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Proveedores (Finanzas)
+// ---------------------------------------------------------------------------
+
+export type VendorStatus = 'activo' | 'inactivo';
+
+export type ProductType = 'producto' | 'servicio';
+
+export type POStatus = 'borrador' | 'aprobada' | 'cerrada';
+
+export type InvoiceStatus = 'pendiente' | 'pagada';
+
+export interface VendorProduct {
+  id: string;
+  vendorId: string;
+  name: string;
+  type: ProductType;
+  description: string | null;
+  unitPrice: string | null;
+  currency: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface POLineItem {
+  id: string;
+  poId: string;
+  productId: string | null;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  total: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  status: POStatus;
+  notes: string | null;
+  subtotal: string;
+  tax: string;
+  total: string;
+  approvedAt: string | null;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy: string;
+  updatedBy: string;
+  lineItems?: POLineItem[];
+  invoices?: Invoice[];
+}
+
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  amount: string;
+  paymentDate: string;
+  paymentMethod: string | null;
+  reference: string | null;
+  voucherS3Key: string | null;
+  notes: string | null;
+  createdAt: string;
+  createdBy: string;
+}
+
+export interface Invoice {
+  id: string;
+  vendorId: string;
+  poId: string | null;
+  invoiceNumber: string;
+  amount: string;
+  tax: string;
+  total: string;
+  issueDate: string;
+  dueDate: string | null;
+  status: InvoiceStatus;
+  pdfS3Key: string | null;
+  pdfUrl?: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy: string;
+  updatedBy: string;
+  payments?: Payment[];
+}
+
+export interface VendorDocument {
+  id: string;
+  vendorId: string;
+  type: string;
+  name: string;
+  s3Key: string;
+  fileSize: number | null;
+  uploadedAt: string;
+  uploadedBy: string;
+  downloadUrl?: string;
+  deletedAt: string | null;
+}
+
+export interface Vendor {
+  id: string;
+  name: string;
+  tradeName: string | null;
+  rfc: string;
+  categoryId: string | null;
+  status: VendorStatus;
+  paymentTermsDays: number | null;
+  clabe: string | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  createdBy: string;
+  updatedBy: string;
+}
+
+export interface VendorDetail extends Vendor {
+  products: VendorProduct[];
+  purchaseOrders: PurchaseOrder[];
+  invoices: Invoice[];
+  documents: VendorDocument[];
+}
+
+export interface VendorStatement {
+  total_pending: number;
+  total_paid: number;
+  invoices: Invoice[];
+}
+
+export interface ListVendorsParams {
+  category_id?: string;
+  status?: VendorStatus;
+  search?: string;
+}
+
+export function listVendors(params: ListVendorsParams = {}): Promise<Vendor[]> {
+  const query = new URLSearchParams();
+  if (params.category_id) query.set('category_id', params.category_id);
+  if (params.status) query.set('status', params.status);
+  if (params.search) query.set('search', params.search);
+
+  const qs = query.toString();
+  return apiFetch<Vendor[]>(`/vendors${qs ? `?${qs}` : ''}`);
+}
+
+export function getVendor(id: string): Promise<VendorDetail> {
+  return apiFetch<VendorDetail>(`/vendors/${id}`);
+}
+
+export interface CreateVendorPayload {
+  name: string;
+  trade_name?: string;
+  rfc: string;
+  category_id?: string;
+  status?: VendorStatus;
+  payment_terms_days?: number;
+  clabe?: string;
+  bank_name?: string;
+  bank_account?: string;
+  notes?: string;
+}
+
+export function createVendor(payload: CreateVendorPayload): Promise<VendorDetail> {
+  return apiFetch<VendorDetail>('/vendors', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export type UpdateVendorPayload = Partial<CreateVendorPayload>;
+
+export function updateVendor(id: string, payload: UpdateVendorPayload): Promise<VendorDetail> {
+  return apiFetch<VendorDetail>(`/vendors/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listVendorProducts(vendorId: string): Promise<VendorProduct[]> {
+  return apiFetch<VendorProduct[]>(`/vendors/${vendorId}/products`);
+}
+
+export interface CreateProductPayload {
+  name: string;
+  type: ProductType;
+  description?: string;
+  unit_price?: number;
+  currency?: string;
+  is_active?: boolean;
+}
+
+export function addVendorProduct(vendorId: string, payload: CreateProductPayload): Promise<VendorProduct> {
+  return apiFetch<VendorProduct>(`/vendors/${vendorId}/products`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface ListPurchaseOrdersParams {
+  status?: POStatus;
+}
+
+export function listVendorPurchaseOrders(
+  vendorId: string,
+  params: ListPurchaseOrdersParams = {},
+): Promise<PurchaseOrder[]> {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+
+  const qs = query.toString();
+  return apiFetch<PurchaseOrder[]>(`/vendors/${vendorId}/purchase-orders${qs ? `?${qs}` : ''}`);
+}
+
+export interface CreatePOLineItemPayload {
+  product_id?: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+}
+
+export interface CreatePurchaseOrderPayload {
+  vendor_id: string;
+  notes?: string;
+  line_items: CreatePOLineItemPayload[];
+}
+
+export function createPurchaseOrder(payload: CreatePurchaseOrderPayload): Promise<PurchaseOrder> {
+  return apiFetch<PurchaseOrder>('/purchase-orders', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getPurchaseOrder(poId: string): Promise<PurchaseOrder> {
+  return apiFetch<PurchaseOrder>(`/purchase-orders/${poId}`);
+}
+
+export function updatePOStatus(poId: string, status: POStatus): Promise<PurchaseOrder> {
+  return apiFetch<PurchaseOrder>(`/purchase-orders/${poId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export interface ListInvoicesParams {
+  status?: InvoiceStatus;
+  date_from?: string;
+  date_to?: string;
+}
+
+export function listVendorInvoices(vendorId: string, params: ListInvoicesParams = {}): Promise<Invoice[]> {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.date_from) query.set('date_from', params.date_from);
+  if (params.date_to) query.set('date_to', params.date_to);
+
+  const qs = query.toString();
+  return apiFetch<Invoice[]>(`/vendors/${vendorId}/invoices${qs ? `?${qs}` : ''}`);
+}
+
+export function getVendorStatement(vendorId: string): Promise<VendorStatement> {
+  return apiFetch<VendorStatement>(`/vendors/${vendorId}/statement`);
+}
+
+export interface CreateInvoicePayload {
+  vendor_id: string;
+  po_id?: string;
+  invoice_number: string;
+  amount: number;
+  tax?: number;
+  total: number;
+  issue_date: string;
+  due_date?: string;
+  notes?: string;
+}
+
+export function createInvoice(payload: CreateInvoicePayload): Promise<Invoice> {
+  return apiFetch<Invoice>('/invoices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listVendorDocuments(vendorId: string): Promise<VendorDocument[]> {
+  return apiFetch<VendorDocument[]>(`/vendors/${vendorId}/documents`);
+}
+
+export function removeVendorDocument(docId: string): Promise<void> {
+  return apiFetch<void>(`/vendors/documents/${docId}`, {
     method: 'DELETE',
   });
 }

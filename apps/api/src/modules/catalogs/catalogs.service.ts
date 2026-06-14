@@ -15,6 +15,7 @@ import { CatalogLocation } from './entities/catalog-location.entity';
 import { CatalogMaritalStatus } from './entities/catalog-marital-status.entity';
 import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
+import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 
 export interface CatalogRecord {
   id: string;
@@ -48,6 +49,7 @@ export class CatalogsService {
     @InjectRepository(CatalogMaritalStatus) maritalStatuses: Repository<CatalogMaritalStatus>,
     @InjectRepository(CatalogIndustry) industries: Repository<CatalogIndustry>,
     @InjectRepository(CatalogDocumentType) documentTypes: Repository<CatalogDocumentType>,
+    @InjectRepository(CatalogVendorCategory) vendorCategories: Repository<CatalogVendorCategory>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -62,6 +64,7 @@ export class CatalogsService {
       marital_statuses: maritalStatuses as unknown as Repository<CatalogRecord>,
       industries: industries as unknown as Repository<CatalogRecord>,
       document_types: documentTypes as unknown as Repository<CatalogRecord>,
+      vendor_categories: vendorCategories as unknown as Repository<CatalogRecord>,
     };
   }
 
