@@ -289,6 +289,85 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+export function DoorIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="2.5" width="14" height="19" rx="1" />
+      <circle cx="14.5" cy="12" r="0.75" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function TvIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="12" rx="1.5" />
+      <path d="M8 20h8M12 17v3" />
+    </Svg>
+  );
+}
+
+export function VideoIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="6" width="13" height="12" rx="1.5" />
+      <path d="M16 10.5 21 7.5v9l-5-3Z" />
+    </Svg>
+  );
+}
+
+export function WhiteboardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="4" width="18" height="13" rx="1.5" />
+      <path d="M8 21h8M12 17v4M7 13l3-4 2 2 3-4" />
+    </Svg>
+  );
+}
+
+export function ProjectorIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="8" width="14" height="8" rx="1.5" />
+      <circle cx="9" cy="12" r="2.5" />
+      <path d="M16 11h2l3-2v6l-3-2h-2" />
+    </Svg>
+  );
+}
+
+export function PhoneIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M5 3h3l1.5 4.5L7.5 9a10 10 0 0 0 6.5 6.5l1.5-2L20 15v3a2 2 0 0 1-2 2C9.7 20 4 14.3 4 6a2 2 0 0 1 1-3Z" />
+    </Svg>
+  );
+}
+
+export function AcIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="5" width="18" height="6" rx="1.5" />
+      <path d="M7 15c0 1.5-1 2-1 3.5M12 15c0 1.5-1 2-1 3.5M17 15c0 1.5-1 2-1 3.5" />
+    </Svg>
+  );
+}
+
+export function ChevronLeftIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m15 6-6 6 6 6" />
+    </Svg>
+  );
+}
+
+export function ChevronRightIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m9 6 6 6-6 6" />
+    </Svg>
+  );
+}
+
 export function MicrosoftLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" {...props}>

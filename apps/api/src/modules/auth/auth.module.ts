@@ -43,6 +43,6 @@ import { UsersService } from './users.service';
     JwtStrategy,
     JwtRefreshStrategy,
   ],
-  exports: [AuthService, UsersService, RolesService],
+  exports: [AuthService, UsersService, RolesService, GraphTokenService],
 })
 export class AuthModule {}

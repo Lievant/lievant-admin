@@ -1275,3 +1275,317 @@ export function removeVendorDocument(docId: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// ---------------------------------------------------------------------------
+// Reserva de salas (Herramientas)
+// ---------------------------------------------------------------------------
+
+export type RoomType = 'sala_reunion' | 'phone_booth';
+
+export type BookingStatus = 'confirmada' | 'cancelada' | 'pendiente_aprobacion';
+
+export type AdminScope = 'global' | 'office';
+
+export interface Country {
+  id: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface City {
+  id: string;
+  countryId: string;
+  name: string;
+  timezone: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface Office {
+  id: string;
+  cityId: string;
+  name: string;
+  address: string | null;
+  isActive: boolean;
+  sortOrder: number;
+  city?: City;
+}
+
+export interface CityWithOffices extends City {
+  offices: Office[];
+}
+
+export interface CountryWithCities extends Country {
+  cities: CityWithOffices[];
+}
+
+export interface Room {
+  id: string;
+  officeId: string;
+  name: string;
+  type: RoomType;
+  capacity: number;
+  floor: string | null;
+  amenities: string[];
+  openTime: string;
+  closeTime: string;
+  maxBookingHours: number;
+  requiresApprovalOverHours: number;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  office?: Office;
+}
+
+export interface RoomAvailability extends Room {
+  is_available: boolean;
+  occupied_by?: { userName: string; title: string };
+}
+
+export interface BookingUserSummary {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface Booking {
+  id: string;
+  roomId: string;
+  userId: string;
+  title: string;
+  startTime: string;
+  endTime: string;
+  status: BookingStatus;
+  isRecurring: boolean;
+  recurrenceRule: string | null;
+  recurrenceEndDate: string | null;
+  recurrenceGroupId: string | null;
+  msEventId: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  room?: Room;
+  user?: BookingUserSummary;
+}
+
+export interface AdminScopeInfo {
+  isGlobalAdmin: boolean;
+  officeIds: string[];
+}
+
+export function getLocationsTree(): Promise<CountryWithCities[]> {
+  return apiFetch<CountryWithCities[]>('/rooms/locations');
+}
+
+export function listRoomCountries(): Promise<Country[]> {
+  return apiFetch<Country[]>('/rooms/locations/countries');
+}
+
+export function listRoomCitiesByCountry(countryId: string): Promise<City[]> {
+  return apiFetch<City[]>(`/rooms/locations/countries/${countryId}/cities`);
+}
+
+export function listRoomOfficesByCity(cityId: string): Promise<Office[]> {
+  return apiFetch<Office[]>(`/rooms/locations/cities/${cityId}/offices`);
+}
+
+export function getRoomAdminScope(): Promise<AdminScopeInfo> {
+  return apiFetch<AdminScopeInfo>('/rooms/locations/admin-scope');
+}
+
+export interface SearchRoomsParams {
+  office_id: string;
+  date: string;
+  start_time: string;
+  duration_hours: number;
+  room_type?: RoomType;
+}
+
+export function searchRooms(params: SearchRoomsParams): Promise<RoomAvailability[]> {
+  const query = new URLSearchParams();
+  query.set('office_id', params.office_id);
+  query.set('date', params.date);
+  query.set('start_time', params.start_time);
+  query.set('duration_hours', String(params.duration_hours));
+  if (params.room_type) query.set('room_type', params.room_type);
+
+  return apiFetch<RoomAvailability[]>(`/rooms?${query.toString()}`);
+}
+
+export function getRoom(id: string): Promise<Room> {
+  return apiFetch<Room>(`/rooms/${id}`);
+}
+
+export function listRoomsByOffice(officeId: string): Promise<Room[]> {
+  return apiFetch<Room[]>(`/rooms/admin?office_id=${officeId}`);
+}
+
+export interface CreateRoomPayload {
+  office_id: string;
+  name: string;
+  type: RoomType;
+  capacity: number;
+  floor?: string;
+  amenities?: string[];
+  open_time?: string;
+  close_time?: string;
+  max_booking_hours?: number;
+  requires_approval_over_hours?: number;
+  notes?: string;
+}
+
+export type UpdateRoomPayload = Partial<Omit<CreateRoomPayload, 'office_id'>>;
+
+export function createRoom(payload: CreateRoomPayload): Promise<Room> {
+  return apiFetch<Room>('/rooms', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateRoom(id: string, payload: UpdateRoomPayload): Promise<Room> {
+  return apiFetch<Room>(`/rooms/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function toggleRoomActive(id: string): Promise<Room> {
+  return apiFetch<Room>(`/rooms/${id}/toggle-active`, {
+    method: 'PATCH',
+  });
+}
+
+export interface CreateBookingPayload {
+  room_id: string;
+  title: string;
+  start_time: string;
+  end_time: string;
+  is_recurring?: boolean;
+  recurrence_rule?: string;
+  recurrence_end_date?: string;
+  notes?: string;
+}
+
+export function createBooking(payload: CreateBookingPayload): Promise<Booking[]> {
+  return apiFetch<Booking[]>('/bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface CancelBookingPayload {
+  cancel_series?: boolean;
+}
+
+export function cancelBooking(id: string, payload: CancelBookingPayload = {}): Promise<Booking[]> {
+  return apiFetch<Booking[]>(`/bookings/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveBooking(id: string): Promise<Booking> {
+  return apiFetch<Booking>(`/bookings/${id}/approve`, {
+    method: 'PATCH',
+  });
+}
+
+export function rejectBooking(id: string): Promise<Booking> {
+  return apiFetch<Booking>(`/bookings/${id}/reject`, {
+    method: 'PATCH',
+  });
+}
+
+export interface ListMyBookingsParams {
+  status?: BookingStatus;
+  upcoming?: boolean;
+}
+
+export function listMyBookings(params: ListMyBookingsParams = {}): Promise<Booking[]> {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.upcoming !== undefined) query.set('upcoming', String(params.upcoming));
+
+  const qs = query.toString();
+  return apiFetch<Booking[]>(`/bookings/my${qs ? `?${qs}` : ''}`);
+}
+
+export interface ListAdminBookingsParams {
+  office_id?: string;
+  room_id?: string;
+  status?: BookingStatus;
+  date_from?: string;
+  date_to?: string;
+}
+
+export function listAdminBookings(params: ListAdminBookingsParams = {}): Promise<Booking[]> {
+  const query = new URLSearchParams();
+  if (params.office_id) query.set('office_id', params.office_id);
+  if (params.room_id) query.set('room_id', params.room_id);
+  if (params.status) query.set('status', params.status);
+  if (params.date_from) query.set('date_from', params.date_from);
+  if (params.date_to) query.set('date_to', params.date_to);
+
+  const qs = query.toString();
+  return apiFetch<Booking[]>(`/bookings/admin${qs ? `?${qs}` : ''}`);
+}
+
+export function listPendingApprovals(): Promise<Booking[]> {
+  return apiFetch<Booking[]>('/bookings/pending-approval');
+}
+
+export interface CreateRoomCountryPayload {
+  name: string;
+  code: string;
+  sort_order?: number;
+}
+
+export function createRoomCountry(payload: CreateRoomCountryPayload): Promise<Country> {
+  return apiFetch<Country>('/rooms/locations/countries', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface CreateRoomCityPayload {
+  country_id: string;
+  name: string;
+  timezone?: string;
+  sort_order?: number;
+}
+
+export function createRoomCity(payload: CreateRoomCityPayload): Promise<City> {
+  return apiFetch<City>('/rooms/locations/cities', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface CreateRoomOfficePayload {
+  city_id: string;
+  name: string;
+  address?: string;
+  sort_order?: number;
+}
+
+export function createRoomOffice(payload: CreateRoomOfficePayload): Promise<Office> {
+  return apiFetch<Office>('/rooms/locations/offices', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export type UpdateRoomOfficePayload = Partial<CreateRoomOfficePayload> & { is_active?: boolean };
+
+export function updateRoomOffice(id: string, payload: UpdateRoomOfficePayload): Promise<Office> {
+  return apiFetch<Office>(`/rooms/locations/offices/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
