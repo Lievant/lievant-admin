@@ -13,6 +13,16 @@ export interface CognitoIdTokenClaims {
   email: string;
   name?: string;
   'cognito:username': string;
+  identities?: string;
+}
+
+export interface CognitoFederatedIdentity {
+  userId: string;
+  providerName: string;
+  providerType?: string;
+  issuer?: string | null;
+  primary?: string;
+  dateCreated?: string;
 }
 
 interface CognitoTokenResponse {
@@ -74,6 +84,25 @@ export class CognitoService {
       return payload as unknown as CognitoIdTokenClaims;
     } catch {
       throw new UnauthorizedException('El token de Cognito no es válido');
+    }
+  }
+
+  /**
+   * Cognito como broker OIDC no reenvía el access_token de Microsoft al backend.
+   * Para identificar al usuario federado en Microsoft Graph, se extrae el claim
+   * "identities" del ID token (presente en logins federados), que contiene el
+   * providerName y el userId (Azure AD object ID) del IdP.
+   */
+  getMicrosoftIdentity(claims: CognitoIdTokenClaims): CognitoFederatedIdentity | undefined {
+    if (!claims.identities) {
+      return undefined;
+    }
+
+    try {
+      const identities = JSON.parse(claims.identities) as CognitoFederatedIdentity[];
+      return identities.find((identity) => identity.providerName === 'Microsoft');
+    } catch {
+      return undefined;
     }
   }
 }

@@ -44,6 +44,10 @@ Thumbs.db
 !*.tfvars.example
 .terraform.lock.hcl
 
+# Terraform plan files
+*.tfplan
+plan_*.txt
+
 # Coverage
 coverage
 *.lcov

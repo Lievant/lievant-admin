@@ -82,7 +82,7 @@ resource "aws_cognito_identity_provider" "microsoft" {
   provider_details = {
     client_id                     = var.microsoft_client_id
     client_secret                 = data.aws_secretsmanager_secret_version.microsoft_client_secret[0].secret_string
-    authorize_scopes              = "openid email profile"
+    authorize_scopes              = "openid email profile offline_access Calendars.ReadWrite"
     oidc_issuer                   = "https://login.microsoftonline.com/${var.azure_ad_tenant_id}/v2.0"
     attributes_request_method     = "GET"
     attributes_url_add_attributes = "false"

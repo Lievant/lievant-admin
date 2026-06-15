@@ -68,6 +68,10 @@ module "cognito" {
   microsoft_client_secret_name = "dev/cognito/microsoft-client-secret"
 }
 
+data "aws_secretsmanager_secret" "microsoft_client_secret" {
+  name = "dev/cognito/microsoft-client-secret"
+}
+
 module "dynamodb" {
   source      = "../../modules/dynamodb"
   name_prefix = "lievant-admin-dev"
@@ -129,11 +133,14 @@ module "ecs" {
     COGNITO_USER_POOL_ID = module.cognito.user_pool_id
     COGNITO_CLIENT_ID    = module.cognito.client_id
     COGNITO_DOMAIN       = module.cognito.cognito_domain
+    AZURE_AD_TENANT_ID   = "b4d50261-e85a-4096-befe-b476ec7c0a21"
+    MICROSOFT_CLIENT_ID  = "496101e4-23a2-4c35-9989-85800ea91eaa"
   }
 
   secrets = {
-    DATABASE_URL = aws_secretsmanager_secret_version.database_url.arn
-    JWT_SECRET   = aws_secretsmanager_secret_version.jwt_secret.arn
+    DATABASE_URL            = aws_secretsmanager_secret_version.database_url.arn
+    JWT_SECRET              = aws_secretsmanager_secret_version.jwt_secret.arn
+    MICROSOFT_CLIENT_SECRET = data.aws_secretsmanager_secret.microsoft_client_secret.arn
   }
 }
 
