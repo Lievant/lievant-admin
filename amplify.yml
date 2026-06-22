@@ -4,25 +4,26 @@
 # NEXT_PUBLIC_COGNITO_CLIENT_ID, NODE_ENV) se configuran a nivel de la app Amplify
 # (ver infrastructure/terraform/environments/staging/main.tf -> aws_amplify_app
 # y docs/deploy-staging.md), no en este archivo, para evitar duplicidad.
+#
+# Patrón de monorepo oficial de Amplify Hosting (buildPath + appRoot +
+# baseDirectory relativo a buildPath): ver
+# https://github.com/aws-amplify/amplify-hosting/blob/main/FAQ.md
 version: 1
 applications:
   - appRoot: apps/web
     frontend:
+      buildPath: /
       phases:
         preBuild:
           commands:
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm ci --include=dev
+            - npm ci --include=dev
         build:
           commands:
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm run build --workspace=@lievant/web
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/public || true)
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp -r apps/web/.next/static apps/web/.next/standalone/.next/static
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp apps/web/.next/required-server-files.json apps/web/.next/standalone/required-server-files.json
+            - npm run build --workspace=@lievant/web
       artifacts:
-        baseDirectory: .next/standalone
+        baseDirectory: apps/web/.next
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
-          - apps/web/.next/cache/**/*
