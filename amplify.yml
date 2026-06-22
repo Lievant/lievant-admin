@@ -17,6 +17,7 @@ applications:
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm run build --workspace=@lievant/web
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/apps/web/public || true)
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp apps/web/.next/required-server-files.json apps/web/.next/standalone/apps/web/required-server-files.json
       artifacts:
         baseDirectory: .next/standalone/apps/web
         files:
