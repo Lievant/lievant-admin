@@ -155,11 +155,12 @@ resource "aws_amplify_app" "web" {
   build_spec = file("${path.module}/../../../../amplify.yml")
 
   environment_variables = {
-    NEXT_PUBLIC_API_URL           = "https://${local.api_domain}/api/v1"
-    NEXT_PUBLIC_COGNITO_DOMAIN    = local.cognito_domain
-    NEXT_PUBLIC_COGNITO_CLIENT_ID = local.cognito_client_id
-    NODE_ENV                      = "production"
-    AMPLIFY_MONOREPO_APP_ROOT     = "apps/web"
+    NEXT_PUBLIC_API_URL              = "https://${local.api_domain}/api/v1"
+    NEXT_PUBLIC_COGNITO_DOMAIN       = local.cognito_domain
+    NEXT_PUBLIC_COGNITO_CLIENT_ID    = local.cognito_client_id
+    NEXT_PUBLIC_APP_URL              = "https://${local.app_domain}"
+    NEXT_PUBLIC_COGNITO_USER_POOL_ID = "us-east-1_n7lomis8q"
+    NODE_ENV                         = "production"
   }
 
   tags = {
