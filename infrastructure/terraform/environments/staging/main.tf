@@ -161,6 +161,7 @@ resource "aws_amplify_app" "web" {
     NEXT_PUBLIC_APP_URL              = "https://${local.app_domain}"
     NEXT_PUBLIC_COGNITO_USER_POOL_ID = "us-east-1_n7lomis8q"
     NODE_ENV                         = "production"
+    AMPLIFY_MONOREPO_APP_ROOT        = "apps/web"
   }
 
   tags = {
