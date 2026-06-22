@@ -5,9 +5,12 @@
 # (ver infrastructure/terraform/environments/staging/main.tf -> aws_amplify_app
 # y docs/deploy-staging.md), no en este archivo, para evitar duplicidad.
 #
-# Patrón de monorepo oficial de Amplify Hosting (buildPath + appRoot +
-# baseDirectory relativo a buildPath): ver
-# https://github.com/aws-amplify/amplify-hosting/blob/main/FAQ.md
+# baseDirectory apunta a apps/web/.next/standalone (no a apps/web/.next):
+# es el único output que empaqueta un node_modules trazado, autocontenido,
+# necesario para que el runtime SSR de Amplify Hosting pueda ejecutar el
+# servidor de Next.js. outputFileTracingRoot en next.config.ts aplana esa
+# carpeta (sin anidar apps/web/ adentro), por eso las rutas de copia abajo
+# no repiten el segmento apps/web una segunda vez.
 version: 1
 applications:
   - appRoot: apps/web
@@ -20,10 +23,13 @@ applications:
         build:
           commands:
             - npm run build --workspace=@lievant/web
+            - ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/public || true)
+            - cp -r apps/web/.next/static apps/web/.next/standalone/.next/static
       artifacts:
-        baseDirectory: apps/web/.next
+        baseDirectory: apps/web/.next/standalone
         files:
           - '**/*'
       cache:
         paths:
           - node_modules/**/*
+          - apps/web/.next/cache/**/*
