@@ -37,16 +37,16 @@ variable "dev_cognito_user_pool_id" {
 
 locals {
   name_prefix       = "lievant-admin-staging"
-  app_domain        = "staging.system.lievant.com"
-  api_domain        = "api.staging.system.lievant.com"
+  app_domain        = "lievant-admin-staging.siocore.ai"
+  api_domain        = "api.lievant-admin-staging.siocore.ai"
   cognito_domain    = "lievant-admin-dev.auth.us-east-1.amazoncognito.com"
   cognito_client_id = "1etqs6deci8s26elvntfbpbult"
 
-  # El listener HTTPS del ALB solo puede crearse una vez que ACM emite el
-  # certificado (validación DNS manual en GoDaddy, ver aws_acm_certificate.api).
-  # Mientras esté en PENDING_VALIDATION, module.ecs solo crea el listener HTTP
-  # con redirect a HTTPS como placeholder.
-  api_certificate_issued = aws_acm_certificate.api.status == "ISSUED"
+  # Certificado ACM solicitado manualmente (fuera de Terraform, vía AWS CLI)
+  # para el dominio temporal siocore.ai. Ya está ISSUED, por lo que el
+  # listener HTTPS del ALB se habilita directamente sin esperar validación.
+  api_certificate_arn    = "arn:aws:acm:us-east-1:966001266524:certificate/7117a66f-5e6c-46ef-999d-63278b9209d8"
+  api_certificate_issued = true
 }
 
 module "vpc" {
@@ -80,30 +80,6 @@ module "ecr" {
   source      = "../../modules/ecr"
   name_prefix = local.name_prefix
   environment = "staging"
-}
-
-# --- Certificado ACM para el ALB de la API (api.staging.system.lievant.com) ---
-#
-# El dominio lievant.com está delegado en GoDaddy, no en Route53, por lo que
-# la validación DNS del certificado es manual: terraform crea el certificado
-# en estado PENDING_VALIDATION y expone los registros CNAME requeridos en el
-# output `dns_records_to_create`. Esos registros deben crearse a mano en
-# GoDaddy; una vez que ACM valida el certificado (queda en estado ISSUED),
-# se puede aplicar module.ecs (el listener HTTPS requiere un certificado ya
-# emitido).
-
-resource "aws_acm_certificate" "api" {
-  domain_name               = local.api_domain
-  subject_alternative_names = [local.app_domain]
-  validation_method         = "DNS"
-
-  lifecycle {
-    create_before_destroy = true
-  }
-
-  tags = {
-    Name = "${local.name_prefix}-api-cert"
-  }
 }
 
 # --- Secrets Manager: credenciales de la API en ECS ---
@@ -143,7 +119,7 @@ module "ecs" {
 
   ecr_repository_url     = module.ecr.repository_url
   https_listener_enabled = local.api_certificate_issued
-  certificate_arn        = aws_acm_certificate.api.arn
+  certificate_arn        = local.api_certificate_arn
   health_check_path      = "/api/v1"
 
   environment_variables = {
@@ -165,14 +141,17 @@ module "ecs" {
 
 # --- AWS Amplify: Frontend Next.js (apps/web) ---
 
+data "aws_secretsmanager_secret_version" "github_token" {
+  secret_id = "staging/github/amplify-token"
+}
+
 resource "aws_amplify_app" "web" {
   name     = "${local.name_prefix}-web"
   platform = "WEB_COMPUTE"
 
-  # Sin repository/access_token: los tokens clásicos de GitHub (PAT) no son
-  # compatibles con la integración de Amplify (requiere un token de
-  # instalación de GitHub App). El repo se conecta manualmente desde la
-  # consola de Amplify (Hosting > Connect branch) tras el apply.
+  repository   = "https://github.com/Lievant/lievant-admin"
+  access_token = data.aws_secretsmanager_secret_version.github_token.secret_string
+
   build_spec = file("${path.module}/../../../../amplify.yml")
 
   environment_variables = {
@@ -180,6 +159,7 @@ resource "aws_amplify_app" "web" {
     NEXT_PUBLIC_COGNITO_DOMAIN    = local.cognito_domain
     NEXT_PUBLIC_COGNITO_CLIENT_ID = local.cognito_client_id
     NODE_ENV                      = "production"
+    AMPLIFY_MONOREPO_APP_ROOT     = "apps/web"
   }
 
   tags = {
@@ -198,16 +178,16 @@ resource "aws_amplify_branch" "staging" {
 
 resource "aws_amplify_domain_association" "web" {
   app_id      = aws_amplify_app.web.id
-  domain_name = "system.lievant.com"
+  domain_name = "siocore.ai"
 
-  # lievant.com esta en GoDaddy: la verificacion DNS del dominio se hace a
-  # mano (ver dns_records_to_create). No bloquear el apply esperando a que
-  # Amplify la detecte.
+  # siocore.ai (dominio temporal de staging): la verificacion DNS del dominio
+  # se hace a mano (ver dns_records_to_create). No bloquear el apply esperando
+  # a que Amplify la detecte.
   wait_for_verification = false
 
   sub_domain {
     branch_name = aws_amplify_branch.staging.branch_name
-    prefix      = "staging"
+    prefix      = "lievant-admin-staging"
   }
 }
 
@@ -237,19 +217,14 @@ output "audit_table" {
   value = module.dynamodb.audit_table_name
 }
 
-# Registros DNS que deben crearse manualmente en GoDaddy (lievant.com no está
-# delegado a Route53). Ejecutar `terraform output -json dns_records_to_create`
-# para obtener los valores tras el apply.
+# Registros DNS que deben crearse manualmente donde esté delegado siocore.ai.
+# El certificado ACM del ALB ya fue solicitado y validado manualmente (ver
+# local.api_certificate_arn), por lo que aquí solo quedan los registros de
+# Amplify. Ejecutar `terraform output -json dns_records_to_create` para
+# obtener los valores tras el apply.
 output "dns_records_to_create" {
-  description = "Registros DNS a crear en GoDaddy para staging.system.lievant.com / api.staging.system.lievant.com"
+  description = "Registros DNS a crear para lievant-admin-staging.siocore.ai / api.lievant-admin-staging.siocore.ai"
   value = {
-    acm_certificate_validation = [
-      for dvo in aws_acm_certificate.api.domain_validation_options : {
-        name  = dvo.resource_record_name
-        type  = dvo.resource_record_type
-        value = dvo.resource_record_value
-      }
-    ]
     api_alb = {
       name  = local.api_domain
       type  = "CNAME"

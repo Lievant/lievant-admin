@@ -11,12 +11,12 @@ applications:
       phases:
         preBuild:
           commands:
-            - cd ../.. && npm ci
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm ci
         build:
           commands:
-            - cd ../.. && npm run build --workspace=@lievant/web
-            - cp -r public .next/standalone/apps/web/public
-            - cp -r .next/static .next/standalone/apps/web/.next/static
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm run build --workspace=@lievant/web
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/apps/web/public || true)
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
       artifacts:
         baseDirectory: .next/standalone/apps/web
         files:

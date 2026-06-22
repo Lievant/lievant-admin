@@ -58,9 +58,16 @@ module "cognito" {
   callback_url = "https://dev.system.lievant.com/api/auth/callback"
 
   # Staging reutiliza este User Pool/Client, por lo que necesita poder
-  # completar el flujo OAuth contra su propio dominio.
-  additional_callback_urls = ["https://staging.system.lievant.com/api/auth/callback"]
-  additional_logout_urls   = ["https://staging.system.lievant.com"]
+  # completar el flujo OAuth contra su propio dominio. siocore.ai es el
+  # dominio temporal de staging mientras se valida lievant.com.
+  additional_callback_urls = [
+    "https://staging.system.lievant.com/api/auth/callback",
+    "https://lievant-admin-staging.siocore.ai/api/auth/callback",
+  ]
+  additional_logout_urls = [
+    "https://staging.system.lievant.com",
+    "https://lievant-admin-staging.siocore.ai",
+  ]
 
   microsoft_idp_enabled        = true
   microsoft_client_id          = "496101e4-23a2-4c35-9989-85800ea91eaa"
