@@ -11,7 +11,7 @@ applications:
       phases:
         preBuild:
           commands:
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm ci
+            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm ci --include=dev
         build:
           commands:
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && npm run build --workspace=@lievant/web
