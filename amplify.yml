@@ -18,9 +18,8 @@ applications:
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/apps/web/public || true)
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
             - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && cp apps/web/.next/required-server-files.json apps/web/.next/standalone/apps/web/required-server-files.json
-            - until [ -f package.json ] && grep -q '"workspaces"' package.json; do cd ..; done && echo DEBUG-STANDALONE-TREE && find apps/web/.next/standalone -maxdepth 6 && echo DEBUG-NEXT-SERVER-DIR && ls -la apps/web/.next/server | head -20
       artifacts:
-        baseDirectory: .next/standalone/apps/web
+        baseDirectory: .next/standalone
         files:
           - '**/*'
       cache:
