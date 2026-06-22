@@ -25,6 +25,7 @@ applications:
             - npm run build --workspace=@lievant/web
             - ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/public || true)
             - cp -r apps/web/.next/static apps/web/.next/standalone/.next/static
+            - cp apps/web/.next/required-server-files.json apps/web/.next/standalone/required-server-files.json
       artifacts:
         baseDirectory: apps/web/.next/standalone
         files:
