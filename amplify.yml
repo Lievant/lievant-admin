@@ -26,7 +26,6 @@ applications:
             - ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/public || true)
             - cp -r apps/web/.next/static apps/web/.next/standalone/.next/static
             - cp apps/web/.next/required-server-files.json apps/web/.next/standalone/required-server-files.json
-            - echo DEBUG-STANDALONE-SIZE && du -sh apps/web/.next/standalone && du -sh apps/web/.next/standalone/node_modules 2>&1 && find apps/web/.next/standalone -maxdepth 1 -mindepth 1
       artifacts:
         baseDirectory: apps/web/.next/standalone
         files:
