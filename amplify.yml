@@ -1,18 +1,3 @@
-# Build spec para AWS Amplify Hosting — apps/web (Next.js 15, output: 'standalone')
-#
-# Las variables de entorno de Amplify (NEXT_PUBLIC_API_URL, NEXT_PUBLIC_COGNITO_DOMAIN,
-# NEXT_PUBLIC_COGNITO_CLIENT_ID, NODE_ENV) se configuran a nivel de la app Amplify
-# (ver infrastructure/terraform/environments/staging/main.tf -> aws_amplify_app
-# y docs/deploy-staging.md), no en este archivo, para evitar duplicidad.
-#
-# baseDirectory apunta a apps/web/.next/standalone (no a apps/web/.next):
-# es el único output que empaqueta un node_modules trazado, autocontenido,
-# necesario para que el runtime SSR de Amplify Hosting pueda ejecutar el
-# servidor de Next.js. outputFileTracingRoot en next.config.ts apunta a la
-# raíz del monorepo para trazar también los node_modules hoisted, por lo
-# que Next anida la salida en apps/web/.next/standalone/apps/web/; el primer
-# comando de build aplana esa carpeta hacia la raíz de standalone/ antes de
-# copiar public/static/required-server-files.
 version: 1
 applications:
   - appRoot: apps/web
@@ -25,13 +10,8 @@ applications:
         build:
           commands:
             - npm run build --workspace=@lievant/web
-            - cp -a apps/web/.next/standalone/apps/web/. apps/web/.next/standalone/
-            - rm -rf apps/web/.next/standalone/apps
-            - ([ -d apps/web/public ] && cp -r apps/web/public apps/web/.next/standalone/public || true)
-            - cp -r apps/web/.next/static apps/web/.next/standalone/.next/static
-            - cp apps/web/.next/required-server-files.json apps/web/.next/standalone/required-server-files.json
       artifacts:
-        baseDirectory: apps/web/.next/standalone
+        baseDirectory: apps/web/.next
         files:
           - '**/*'
       cache:
