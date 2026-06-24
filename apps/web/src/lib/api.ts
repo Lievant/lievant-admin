@@ -894,6 +894,62 @@ export function updateEmployeeTermination(
   });
 }
 
+// Documentos generados (contratos, convenios)
+
+export type EmployeeDocumentType =
+  | 'contrato_determinado'
+  | 'contrato_indeterminado'
+  | 'convenio_practicas'
+  | 'confidencialidad'
+  | 'no_competencia';
+
+export interface GeneratedDocument {
+  base64: string;
+  filename: string;
+}
+
+export async function generateEmployeeDocument(
+  employeeId: string,
+  docType: EmployeeDocumentType,
+  extraParams: Record<string, string> = {},
+): Promise<GeneratedDocument> {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get('access_token')?.value;
+
+  const query = new URLSearchParams(extraParams);
+  const qs = query.toString();
+
+  const res = await fetch(`${API_URL}/employees/${employeeId}/documents/${docType}${qs ? `?${qs}` : ''}`, {
+    credentials: 'include',
+    headers: {
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    cache: 'no-store',
+  });
+
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = (await res.json()) as { message?: string | string[] };
+      if (body.message) {
+        message = Array.isArray(body.message) ? body.message.join(', ') : body.message;
+      }
+    } catch {
+      // el cuerpo no es JSON, se usa el mensaje por defecto
+    }
+    throw new ApiError(res.status, message);
+  }
+
+  const arrayBuffer = await res.arrayBuffer();
+  const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+  const disposition = res.headers.get('content-disposition');
+  const match = disposition?.match(/filename="(.+)"/);
+  const filename = match?.[1] ?? `${docType}.docx`;
+
+  return { base64, filename };
+}
+
 // ---------------------------------------------------------------------------
 // Catálogos (Administración)
 // ---------------------------------------------------------------------------
