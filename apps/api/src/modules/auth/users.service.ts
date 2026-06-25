@@ -22,7 +22,7 @@ export class UsersService {
   async findById(id: string): Promise<User> {
     const user = await this.usersRepository.findOne({
       where: { id },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, userPermissions: { permission: true } },
       withDeleted: true,
     });
 
@@ -36,14 +36,14 @@ export class UsersService {
   async findByCognitoId(cognitoId: string): Promise<User | null> {
     return this.usersRepository.findOne({
       where: { cognitoId },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, userPermissions: { permission: true } },
     });
   }
 
   async linkCognitoIdByEmail(email: string, cognitoId: string): Promise<User | null> {
     const user = await this.usersRepository.findOne({
       where: { email },
-      relations: { roles: { permissions: true } },
+      relations: { roles: { permissions: true }, userPermissions: { permission: true } },
     });
 
     if (!user) {

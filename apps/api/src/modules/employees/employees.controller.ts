@@ -13,10 +13,9 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { SystemRole } from '../auth/constants/roles.constant';
+import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdatePersonalDataDto } from './dto/personal-data.dto';
@@ -36,7 +35,8 @@ const VALID_DOCUMENT_TYPES: DocumentType[] = [
   'no_competencia',
 ];
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermission('rrhh', 'empleados', 'read')
 @Controller('employees')
 export class EmployeesController {
   constructor(
@@ -50,6 +50,7 @@ export class EmployeesController {
   }
 
   @Post()
+  @RequirePermission('rrhh', 'empleados', 'write')
   create(@Body() dto: CreateEmployeeDto) {
     return this.employeesService.create(dto);
   }
@@ -60,39 +61,36 @@ export class EmployeesController {
   }
 
   @Patch(':id')
+  @RequirePermission('rrhh', 'empleados', 'write')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateEmployeeDto) {
     return this.employeesService.update(id, dto);
   }
 
   @Delete(':id')
+  @RequirePermission('rrhh', 'empleados', 'write')
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.remove(id);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH)
   @Get(':id/personal')
   getPersonalData(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.getPersonalData(id);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH)
   @Patch(':id/personal')
+  @RequirePermission('rrhh', 'empleados.personal', 'write')
   updatePersonalData(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdatePersonalDataDto) {
     return this.employeesService.updatePersonalData(id, dto);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_NOMINA)
   @Get(':id/compensation')
+  @RequirePermission('rrhh', 'empleados.nomina', 'read')
   getCompensation(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.getCompensation(id);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_NOMINA)
   @Patch(':id/compensation')
+  @RequirePermission('rrhh', 'empleados.nomina', 'write')
   updateCompensation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCompensationDto) {
     return this.employeesService.updateCompensation(id, dto);
   }
@@ -103,11 +101,13 @@ export class EmployeesController {
   }
 
   @Post(':id/vacations')
+  @RequirePermission('rrhh', 'empleados', 'write')
   createVacation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateVacationDto) {
     return this.employeesService.createVacation(id, dto);
   }
 
   @Patch('vacations/:vacId')
+  @RequirePermission('rrhh', 'empleados', 'write')
   updateVacation(@Param('vacId', ParseUUIDPipe) vacId: string, @Body() dto: UpdateVacationDto) {
     return this.employeesService.updateVacation(vacId, dto);
   }
@@ -118,37 +118,39 @@ export class EmployeesController {
   }
 
   @Post(':id/contacts')
+  @RequirePermission('rrhh', 'empleados', 'write')
   addEmergencyContact(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateEmergencyContactDto) {
     return this.employeesService.addEmergencyContact(id, dto);
   }
 
   @Patch('contacts/:contactId')
-  updateEmergencyContact(@Param('contactId', ParseUUIDPipe) contactId: string, @Body() dto: UpdateEmergencyContactDto) {
+  @RequirePermission('rrhh', 'empleados', 'write')
+  updateEmergencyContact(
+    @Param('contactId', ParseUUIDPipe) contactId: string,
+    @Body() dto: UpdateEmergencyContactDto,
+  ) {
     return this.employeesService.updateEmergencyContact(contactId, dto);
   }
 
   @Delete('contacts/:contactId')
+  @RequirePermission('rrhh', 'empleados', 'write')
   removeEmergencyContact(@Param('contactId', ParseUUIDPipe) contactId: string) {
     return this.employeesService.removeEmergencyContact(contactId);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH)
   @Get(':id/termination')
   getTermination(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.getTermination(id);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH)
   @Patch(':id/termination')
+  @RequirePermission('rrhh', 'empleados.personal', 'write')
   updateTermination(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTerminationDto) {
     return this.employeesService.updateTermination(id, dto);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH, SystemRole.ADMIN_NOMINA)
   @Get(':id/documents/:docType')
+  @RequirePermission('rrhh', 'empleados.documentos', 'write')
   async generateDocument(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('docType') docType: string,

@@ -3,8 +3,26 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { MODULES, modulesForRoles } from '@/lib/modules';
-import { CatalogIcon, DoorIcon, HomeIcon, LogoutIcon, ModuleIconView, PeopleIcon } from '@/components/icons';
+import {
+  BroadcastIcon,
+  BuildingIcon,
+  CpuIcon,
+  DoorIcon,
+  HomeIcon,
+  IdCardIcon,
+  LaptopIcon,
+  LicenseIcon,
+  ListIcon,
+  LogoutIcon,
+  PeopleIcon,
+  ReportMoneyIcon,
+  ShieldLockIcon,
+  ShoppingCartIcon,
+  SpeakerphoneIcon,
+  TicketIcon,
+  TruckIcon,
+  UsersGroupIcon,
+} from '@/components/icons';
 import type { CurrentUser } from '@/lib/api';
 
 interface SidebarProps {
@@ -13,8 +31,7 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const roleNames = user?.roles.map((role) => role.name) ?? [];
-  const modules = modulesForRoles(roleNames);
+  const isSuperAdmin = (user?.roles.some((r) => r.name === 'SUPER_ADMIN') ?? false) || !user;
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-navy text-slate-200">
@@ -31,62 +48,102 @@ export function Sidebar({ user }: SidebarProps) {
           Inicio
         </NavLink>
 
-        <p className="mt-4 px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Módulos
-        </p>
-        {modules
-          .filter((mod) => mod.id !== 'admin')
-          .map((mod) => (
-            <div key={mod.id}>
-              <NavLink href={mod.href} active={pathname.startsWith(mod.href)}>
-                <ModuleIconView icon={mod.icon} className="h-5 w-5" />
-                {mod.name}
-              </NavLink>
-              {mod.id === 'finanzas' && pathname.startsWith('/finanzas') && (
-                <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
-                  <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
-                    Clientes
-                  </NavSubLink>
-                  <NavSubLink href="/finanzas/proveedores" active={pathname.startsWith('/finanzas/proveedores')}>
-                    Proveedores
-                  </NavSubLink>
-                </div>
-              )}
-              {mod.id === 'rrhh' && pathname.startsWith('/rrhh') && (
-                <div className="mt-1 space-y-1 border-l border-white/10 pl-3">
-                  <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
-                    Empleados
-                  </NavSubLink>
-                </div>
-              )}
-            </div>
-          ))}
+        <SectionLabel>Módulos</SectionLabel>
 
-        <p className="mt-4 px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-          Herramientas
-        </p>
+        <NavLink href="/finanzas" active={pathname.startsWith('/finanzas')}>
+          <ReportMoneyIcon className="h-5 w-5" />
+          Finanzas
+        </NavLink>
+        {pathname.startsWith('/finanzas') && (
+          <SubMenu>
+            <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
+              <BuildingIcon className="h-4 w-4" />
+              Clientes
+            </NavSubLink>
+            <NavSubLink href="/finanzas/proveedores" active={pathname.startsWith('/finanzas/proveedores')}>
+              <TruckIcon className="h-4 w-4" />
+              Proveedores
+            </NavSubLink>
+          </SubMenu>
+        )}
+
+        <NavLink href="/rrhh" active={pathname.startsWith('/rrhh')}>
+          <PeopleIcon className="h-5 w-5" />
+          RRHH
+        </NavLink>
+        {pathname.startsWith('/rrhh') && (
+          <SubMenu>
+            <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
+              <IdCardIcon className="h-4 w-4" />
+              Empleados
+            </NavSubLink>
+          </SubMenu>
+        )}
+
+        <NavLink href="/ecommerce" active={pathname.startsWith('/ecommerce')}>
+          <ShoppingCartIcon className="h-5 w-5" />
+          Ecommerce
+        </NavLink>
+
+        <NavLink href="/marketing" active={pathname.startsWith('/marketing')}>
+          <SpeakerphoneIcon className="h-5 w-5" />
+          Marketing Digital
+        </NavLink>
+
+        <NavLink href="/omnicanalidad" active={pathname.startsWith('/omnicanalidad')}>
+          <BroadcastIcon className="h-5 w-5" />
+          Omnicanalidad
+        </NavLink>
+
+        <NavLink href="/transformacion" active={pathname.startsWith('/transformacion')}>
+          <CpuIcon className="h-5 w-5" />
+          Transformación Digital
+        </NavLink>
+        {pathname.startsWith('/transformacion') && (
+          <SubMenu>
+            <NavSubLink
+              href="/transformacion/licenciamientos"
+              active={pathname.startsWith('/transformacion/licenciamientos')}
+            >
+              <LicenseIcon className="h-4 w-4" />
+              Maestro de Licenciamientos
+            </NavSubLink>
+            <NavSubLink
+              href="/transformacion/inventario"
+              active={pathname.startsWith('/transformacion/inventario')}
+            >
+              <LaptopIcon className="h-4 w-4" />
+              Inventario Tecnológico
+            </NavSubLink>
+            <NavSubLink
+              href="/transformacion/tickets"
+              active={pathname.startsWith('/transformacion/tickets')}
+            >
+              <TicketIcon className="h-4 w-4" />
+              Tickets de Soporte
+            </NavSubLink>
+          </SubMenu>
+        )}
+
+        <SectionLabel>Herramientas</SectionLabel>
         <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
           <DoorIcon className="h-5 w-5" />
           Reserva de salas
         </NavLink>
 
-        {modules.some((mod) => mod.id === 'admin') && (
+        {isSuperAdmin && (
           <>
-            <p className="mt-4 px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Administración
-            </p>
-            {MODULES.filter((mod) => mod.id === 'admin').map((mod) => (
-              <NavLink key={mod.id} href={mod.href} active={pathname === mod.href}>
-                <ModuleIconView icon={mod.icon} className="h-5 w-5" />
-                {mod.name}
-              </NavLink>
-            ))}
-            <NavLink href="/admin/users" active={pathname.startsWith('/admin/users')}>
-              <PeopleIcon className="h-5 w-5" />
+            <SectionLabel>Configuración</SectionLabel>
+            <NavLink href="/admin/usuarios" active={pathname.startsWith('/admin/usuarios')}>
+              <UsersGroupIcon className="h-5 w-5" />
               Usuarios
             </NavLink>
+            <NavLink href="/admin/permisos" active={pathname.startsWith('/admin/permisos')}>
+              <ShieldLockIcon className="h-5 w-5" />
+              Permisos
+            </NavLink>
             <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
-              <CatalogIcon className="h-5 w-5" />
+              <ListIcon className="h-5 w-5" />
               Catálogos
             </NavLink>
           </>
@@ -113,6 +170,18 @@ export function Sidebar({ user }: SidebarProps) {
       </div>
     </aside>
   );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-4 px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+      {children}
+    </p>
+  );
+}
+
+function SubMenu({ children }: { children: React.ReactNode }) {
+  return <div className="mt-1 space-y-1 border-l border-white/10 pl-3">{children}</div>;
 }
 
 function NavLink({
@@ -152,7 +221,7 @@ function NavSubLink({
     <Link
       href={href}
       className={cn(
-        'block rounded-lg px-3 py-1.5 text-sm transition-colors',
+        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
         active
           ? 'bg-terracota/20 font-medium text-white'
           : 'text-slate-400 hover:bg-navy-light hover:text-white',

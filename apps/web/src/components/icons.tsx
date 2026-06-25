@@ -289,6 +289,131 @@ export function FolderIcon(props: IconProps) {
   );
 }
 
+export function ReportMoneyIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+      <rect x="9" y="3" width="6" height="4" rx="2" />
+      <path d="M14 12h-2.5a1.5 1.5 0 0 0 0 3h1a1.5 1.5 0 0 1 0 3H10" />
+      <path d="M12 11.5v1M12 18.5v1" />
+    </Svg>
+  );
+}
+
+export function TruckIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="6" width="13" height="10" rx="1" />
+      <path d="M15 8.5h3.5l2.5 4V16h-6V8.5z" />
+      <circle cx="7" cy="18" r="1.5" />
+      <circle cx="19" cy="18" r="1.5" />
+    </Svg>
+  );
+}
+
+export function IdCardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="11" r="2.5" />
+      <path d="M5 19a4 4 0 0 1 8 0" />
+      <path d="M15 9h3M15 13h2" />
+    </Svg>
+  );
+}
+
+export function ShoppingCartIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 3h2l2.5 12h9.5l2-8H7" />
+      <circle cx="10" cy="19" r="2" />
+      <circle cx="17" cy="19" r="2" />
+    </Svg>
+  );
+}
+
+export function SpeakerphoneIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M18 8a3 3 0 0 1 0 6" />
+      <path d="M10 8v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1v-5" />
+      <path d="M12 8H4a1 1 0 0 0-1 1v4a1 1 0 0 0 1 1h8l7-3-7-3z" />
+    </Svg>
+  );
+}
+
+export function BroadcastIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6.343 17.657A8 8 0 0 1 6.343 6.343M17.657 6.343A8 8 0 0 1 17.657 17.657" />
+      <path d="M9.172 14.828A4 4 0 0 1 9.172 9.172M14.828 9.172A4 4 0 0 1 14.828 14.828" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function CpuIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="7" y="7" width="10" height="10" rx="1" />
+      <path d="M7 10H4M7 14H4M10 7V4M14 7V4M17 10H20M17 14H20M10 17V20M14 17V20" />
+    </Svg>
+  );
+}
+
+export function LicenseIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="2" width="16" height="20" rx="1" />
+      <path d="M8 7h8M8 11h8M8 15h5" />
+      <circle cx="16" cy="17" r="2" />
+    </Svg>
+  );
+}
+
+export function TicketIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2 9a2 2 0 0 0 0 4v4a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-4a2 2 0 0 0 0-4V6a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1v3z" />
+      <path d="M9 5v14M6 9h1M6 13h1" />
+    </Svg>
+  );
+}
+
+export function UsersGroupIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="7" r="3" />
+      <path d="M4 21v-1a7 7 0 0 1 7-7h2a7 7 0 0 1 7 7v1" />
+      <circle cx="5" cy="8" r="2" />
+      <path d="M2 21v-.5A4.5 4.5 0 0 1 5 16" />
+      <circle cx="19" cy="8" r="2" />
+      <path d="M22 21v-.5A4.5 4.5 0 0 0 19 16" />
+    </Svg>
+  );
+}
+
+export function ShieldLockIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3 4.5 6v5c0 4.2 3 7.6 7.5 9 4.5-1.4 7.5-4.8 7.5-9V6L12 3Z" />
+      <rect x="9.5" y="10.5" width="5" height="4" rx="1" />
+      <path d="M11.5 10.5V9.5a1.5 1.5 0 0 1 3 0v1" />
+    </Svg>
+  );
+}
+
+export function ListIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 6h10M9 12h10M9 18h10" />
+      <circle cx="5" cy="6" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="18" r="1.5" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 export function DoorIcon(props: IconProps) {
   return (
     <Svg {...props}>

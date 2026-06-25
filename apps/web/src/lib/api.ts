@@ -57,7 +57,9 @@ export interface CurrentUser {
   email: string;
   name: string;
   isActive: boolean;
+  location: string | null;
   roles: { id: string; name: string }[];
+  permissions: { section: string; module: string; action: string }[];
 }
 
 export type UserLocation = 'LEON' | 'CDMX' | 'GUADALAJARA' | 'COLOMBIA' | 'ESTADOS_UNIDOS';

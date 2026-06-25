@@ -1,5 +1,6 @@
 import { IdleLogout } from '@/components/idle-logout';
 import { Sidebar } from '@/components/sidebar';
+import { UserProvider } from '@/components/user-provider';
 import { getCurrentUser, type CurrentUser } from '@/lib/api';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -14,8 +15,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="flex min-h-screen bg-surface">
       <IdleLogout />
-      <Sidebar user={user} />
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <UserProvider user={user}>
+        <Sidebar user={user} />
+        <main className="flex-1 overflow-y-auto">{children}</main>
+      </UserProvider>
     </div>
   );
 }

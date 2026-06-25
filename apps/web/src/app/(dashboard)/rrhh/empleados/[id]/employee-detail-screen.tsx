@@ -18,6 +18,7 @@ import {
   companyBadgeStyle,
 } from '../constants';
 import type { EmployeeFormCatalogs } from '../catalog-data';
+import { usePermission } from '@/hooks/use-permission';
 import { GeneralTab } from './general-tab';
 import { PersonalTab } from './personal-tab';
 import { CompensationTab } from './compensation-tab';
@@ -26,15 +27,15 @@ import { FamilyTab } from './family-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
 
-const TABS = [
-  { id: 'general', label: 'General' },
-  { id: 'personal', label: 'Datos personales' },
-  { id: 'compensation', label: 'Compensación' },
-  { id: 'vacation', label: 'Vacaciones' },
-  { id: 'family', label: 'Familia y baja' },
+const ALL_TABS = [
+  { id: 'general',      label: 'General',          badge: null },
+  { id: 'personal',     label: 'Datos personales',  badge: 'RRHH' },
+  { id: 'compensation', label: 'Compensación',       badge: 'Nómina' },
+  { id: 'vacation',     label: 'Vacaciones',         badge: null },
+  { id: 'family',       label: 'Familia y baja',     badge: 'RRHH' },
 ] as const;
 
-type TabId = (typeof TABS)[number]['id'];
+type TabId = (typeof ALL_TABS)[number]['id'];
 
 interface EmployeeDetailScreenProps {
   employee: EmployeeDetail;
@@ -43,8 +44,6 @@ interface EmployeeDetailScreenProps {
   vacations: EmployeeVacation[];
   contacts: EmployeeEmergencyContact[];
   termination: EmployeeTermination | null;
-  canViewPersonal: boolean;
-  canViewCompensation: boolean;
   catalogs: EmployeeFormCatalogs;
 }
 
@@ -55,14 +54,23 @@ export function EmployeeDetailScreen({
   vacations,
   contacts,
   termination,
-  canViewPersonal,
-  canViewCompensation,
   catalogs,
 }: EmployeeDetailScreenProps) {
+  const canViewPersonal      = usePermission('rrhh', 'empleados.personal');
+  const canViewCompensation  = usePermission('rrhh', 'empleados.nomina');
+  const canGenerateDocuments = usePermission('rrhh', 'empleados.documentos', 'write');
+
+  const visibleTabs = ALL_TABS.filter((tab) => {
+    if (tab.id === 'personal' || tab.id === 'vacation' || tab.id === 'family') return canViewPersonal;
+    if (tab.id === 'compensation') return canViewCompensation;
+    return true; // general
+  });
+
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [isEditOpen, setEditOpen] = useState(false);
   const [isDocumentsOpen, setDocumentsOpen] = useState(false);
-  const canGenerateDocuments = canViewPersonal || canViewCompensation;
+
+  const effectiveTab = visibleTabs.some((t) => t.id === activeTab) ? activeTab : visibleTabs[0]?.id ?? 'general';
 
   return (
     <div>
@@ -135,25 +143,25 @@ export function EmployeeDetailScreen({
       {/* Tabs */}
       <div className="mt-6 border-b border-slate-200">
         <nav className="flex gap-6">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
               className={cn(
                 'flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors',
-                activeTab === tab.id
+                effectiveTab === tab.id
                   ? 'border-terracota text-terracota'
                   : 'border-transparent text-slate-500 hover:text-navy',
               )}
             >
               {tab.label}
-              {(tab.id === 'personal' || tab.id === 'family') && (
+              {tab.badge === 'RRHH' && (
                 <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-600">
                   RRHH
                 </span>
               )}
-              {tab.id === 'compensation' && (
+              {tab.badge === 'Nómina' && (
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
                   Nómina
                 </span>
@@ -165,17 +173,17 @@ export function EmployeeDetailScreen({
 
       {/* Tab content */}
       <div className="mt-6">
-        {activeTab === 'general' && <GeneralTab employee={employee} />}
-        {activeTab === 'personal' && (
+        {effectiveTab === 'general' && <GeneralTab employee={employee} />}
+        {effectiveTab === 'personal' && (
           <PersonalTab employee={employee} personal={personal} canView={canViewPersonal} />
         )}
-        {activeTab === 'compensation' && (
+        {effectiveTab === 'compensation' && (
           <CompensationTab employee={employee} compensation={compensation} canView={canViewCompensation} />
         )}
-        {activeTab === 'vacation' && (
+        {effectiveTab === 'vacation' && (
           <VacationTab employee={employee} vacations={vacations} canView={canViewPersonal} />
         )}
-        {activeTab === 'family' && (
+        {effectiveTab === 'family' && (
           <FamilyTab
             employee={employee}
             contacts={contacts}

@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
-import { AuthService, AuthTokens, SsoLoginResult } from './auth.service';
+import { AuthService, AuthTokens, MeResponse, SsoLoginResult } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { SsoCallbackDto } from './dto/sso-callback.dto';
 import { User } from './entities/user.entity';
@@ -18,7 +18,7 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  getMe(@CurrentUser() user: User): Promise<User> {
+  getMe(@CurrentUser() user: User): Promise<MeResponse> {
     return this.authService.getMe(user.id);
   }
 

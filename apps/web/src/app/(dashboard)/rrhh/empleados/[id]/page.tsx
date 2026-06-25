@@ -51,16 +51,26 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
   }
 
   const currentUser = await safe(getCurrentUser());
-  const roleNames = currentUser?.roles.map((role) => role.name) ?? [];
-  const canViewPersonal = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_RRHH');
-  const canViewCompensation = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_NOMINA');
+  const perms = currentUser?.permissions ?? [];
+
+  const hasPermission = (section: string, module: string, action?: string) =>
+    perms.some(
+      (p) =>
+        p.section === section &&
+        p.module === module &&
+        (action === undefined || p.action === action),
+    );
+
+  const canViewPersonal     = hasPermission('rrhh', 'empleados.personal');
+  const canViewCompensation = hasPermission('rrhh', 'empleados.nomina');
+  const canGenerateDocs     = hasPermission('rrhh', 'empleados.documentos', 'write');
 
   const [personal, compensation, vacations, contacts, termination, catalogs] = await Promise.all([
     canViewPersonal ? safe(getEmployeePersonalData(id)) : Promise.resolve(null),
     canViewCompensation ? safe(getEmployeeCompensation(id)) : Promise.resolve(null),
     canViewPersonal ? safe(listEmployeeVacations(id)) : Promise.resolve(null),
     canViewPersonal ? safe(listEmployeeContacts(id)) : Promise.resolve(null),
-    canViewPersonal ? safe(getEmployeeTermination(id)) : Promise.resolve(null),
+    (canViewPersonal || canGenerateDocs) ? safe(getEmployeeTermination(id)) : Promise.resolve(null),
     loadEmployeeFormCatalogs(),
   ]);
 
@@ -73,8 +83,6 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
         vacations={vacations ?? []}
         contacts={contacts ?? []}
         termination={termination}
-        canViewPersonal={canViewPersonal}
-        canViewCompensation={canViewCompensation}
         catalogs={catalogs}
       />
     </div>
