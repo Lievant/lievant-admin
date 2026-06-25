@@ -155,6 +155,7 @@ module "ecs" {
     COGNITO_USER_POOL_ID = var.dev_cognito_user_pool_id
     COGNITO_CLIENT_ID    = local.cognito_client_id
     COGNITO_DOMAIN       = local.cognito_domain
+    S3_BUCKET            = module.s3.datalake_bucket_name
   }
 
   secrets = {
