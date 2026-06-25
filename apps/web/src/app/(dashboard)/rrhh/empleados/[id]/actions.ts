@@ -5,6 +5,7 @@ import {
   ApiError,
   addEmployeeContact,
   createEmployeeVacation,
+  generateEmployeeDocument,
   removeEmployeeContact,
   updateEmployee,
   updateEmployeeCompensation,
@@ -14,6 +15,7 @@ import {
   updateEmployeeVacation,
   type CreateEmergencyContactPayload,
   type CreateVacationPayload,
+  type EmployeeDocumentType,
   type UpdateCompensationPayload,
   type UpdateEmergencyContactPayload,
   type UpdateEmployeePayload,
@@ -25,6 +27,10 @@ import {
 export interface ActionResult {
   success: boolean;
   error?: string;
+}
+
+export interface GenerateDocumentActionResult extends ActionResult {
+  base64?: string;
 }
 
 function toResult(err: unknown): ActionResult {
@@ -139,6 +145,19 @@ export async function updateTerminationAction(
     await updateEmployeeTermination(employeeId, payload);
     revalidatePath(`/rrhh/empleados/${employeeId}`);
     return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function generateEmployeeDocumentAction(
+  employeeId: string,
+  docType: EmployeeDocumentType,
+  extraParams?: Record<string, string>,
+): Promise<GenerateDocumentActionResult> {
+  try {
+    const doc = await generateEmployeeDocument(employeeId, docType, extraParams ?? {});
+    return { success: true, base64: doc.base64 };
   } catch (err) {
     return toResult(err);
   }

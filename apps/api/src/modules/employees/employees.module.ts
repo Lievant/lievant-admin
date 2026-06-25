@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
+import { DocumentsService } from './documents.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
 import { Compensation } from './entities/compensation.entity';
@@ -23,7 +24,7 @@ import { Vacation } from './entities/vacation.entity';
     ]),
   ],
   controllers: [EmployeesController],
-  providers: [EmployeesService],
+  providers: [EmployeesService, DocumentsService],
   exports: [EmployeesService],
 })
 export class EmployeesModule {}

@@ -19,7 +19,9 @@
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
     "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/database/data-source.ts",
     "seed:super-admin": "ts-node -T src/database/seeds/super-admin.seed.ts",
-    "seed:clients": "ts-node -T src/database/seeds/clients.seed.ts"
+    "seed:clients": "ts-node -T src/database/seeds/clients.seed.ts",
+    "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/001-admin-user.ts",
+    "seed:contpaqi-clients": "ts-node -T src/database/seeds/002-contpaqi-clients.seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1067.0",
@@ -36,6 +38,7 @@
     "aws-jwt-verify": "^5.2.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "docx-templates": "^4.15.0",
     "ioredis": "^5.11.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

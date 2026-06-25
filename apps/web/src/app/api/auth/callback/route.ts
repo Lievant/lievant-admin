@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ApiError, apiFetch } from '@/lib/api';
 import { getCognitoCallbackRedirectUri } from '@/lib/cognito';
 
-const ACCESS_TOKEN_MAX_AGE = 60 * 15;
+const ACCESS_TOKEN_MAX_AGE = 60 * 60;
 const REFRESH_TOKEN_MAX_AGE = 60 * 60 * 24 * 7;
 
 interface SsoCallbackResponse {

@@ -24,6 +24,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
         autoLoadEntities: true,
         synchronize: false,
         logging: config.get<string>('NODE_ENV') === 'development',
+        ssl: config.get<string>('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
       }),
     }),
     AuthModule,

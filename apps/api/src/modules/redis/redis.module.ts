@@ -11,7 +11,10 @@ import { RedisService } from './redis.service';
     {
       provide: REDIS_CLIENT,
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => new Redis(configService.getOrThrow<string>('REDIS_URL')),
+      useFactory: (configService: ConfigService): Redis | null => {
+        const url = configService.get<string>('REDIS_URL');
+        return url ? new Redis(url) : null;
+      },
     },
     RedisService,
   ],

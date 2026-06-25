@@ -1,4 +1,18 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response } from 'express';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRole } from '../auth/constants/roles.constant';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -12,11 +26,23 @@ import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emer
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { EmployeesService } from './employees.service';
+import { DocumentsService, DocumentType } from './documents.service';
+
+const VALID_DOCUMENT_TYPES: DocumentType[] = [
+  'contrato_determinado',
+  'contrato_indeterminado',
+  'convenio_practicas',
+  'confidencialidad',
+  'no_competencia',
+];
 
 @UseGuards(JwtAuthGuard)
 @Controller('employees')
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly documentsService: DocumentsService,
+  ) {}
 
   @Get()
   findAll(@Query() query: QueryEmployeesDto) {
@@ -118,5 +144,26 @@ export class EmployeesController {
   @Patch(':id/termination')
   updateTermination(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTerminationDto) {
     return this.employeesService.updateTermination(id, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_RRHH, SystemRole.ADMIN_NOMINA)
+  @Get(':id/documents/:docType')
+  async generateDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('docType') docType: string,
+    @Query() extraData: Record<string, string>,
+    @Res() res: Response,
+  ): Promise<void> {
+    if (!VALID_DOCUMENT_TYPES.includes(docType as DocumentType)) {
+      throw new BadRequestException('Tipo de documento inválido');
+    }
+
+    const buffer = await this.documentsService.generateDocument(id, docType as DocumentType, extraData);
+
+    const filename = `${docType}_${Date.now()}.docx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buffer);
   }
 }

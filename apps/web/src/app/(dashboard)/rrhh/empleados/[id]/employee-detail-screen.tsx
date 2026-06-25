@@ -24,6 +24,7 @@ import { CompensationTab } from './compensation-tab';
 import { VacationTab } from './vacation-tab';
 import { FamilyTab } from './family-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
+import { GenerateDocumentsDialog } from './generate-documents-dialog';
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -60,6 +61,8 @@ export function EmployeeDetailScreen({
 }: EmployeeDetailScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [isEditOpen, setEditOpen] = useState(false);
+  const [isDocumentsOpen, setDocumentsOpen] = useState(false);
+  const canGenerateDocuments = canViewPersonal || canViewCompensation;
 
   return (
     <div>
@@ -109,13 +112,24 @@ export function EmployeeDetailScreen({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
-        >
-          Editar
-        </button>
+        <div className="flex items-center gap-2">
+          {canGenerateDocuments && (
+            <button
+              type="button"
+              onClick={() => setDocumentsOpen(true)}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+            >
+              Generar documentos
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+          >
+            Editar
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}
@@ -172,6 +186,13 @@ export function EmployeeDetailScreen({
       </div>
 
       {isEditOpen && <EditEmployeeDialog employee={employee} catalogs={catalogs} onClose={() => setEditOpen(false)} />}
+      <GenerateDocumentsDialog
+        isOpen={isDocumentsOpen}
+        onClose={() => setDocumentsOpen(false)}
+        employeeId={employee.id}
+        employeeName={employee.fullName}
+        contractType={employee.contractType}
+      />
     </div>
   );
 }

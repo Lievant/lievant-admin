@@ -30,15 +30,21 @@ interface GraphCalendarEventResponse {
  */
 @Injectable()
 export class GraphTokenService {
+  private memoryTokenCache: { value: string; expiresAt: number } | null = null;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly redisService: RedisService,
   ) {}
 
   async getAppToken(): Promise<string> {
-    const cached = await this.redisService.get(APP_TOKEN_CACHE_KEY);
-    if (cached) {
-      return cached;
+    if (this.redisService.isAvailable) {
+      const cached = await this.redisService.get(APP_TOKEN_CACHE_KEY);
+      if (cached) {
+        return cached;
+      }
+    } else if (this.memoryTokenCache && this.memoryTokenCache.expiresAt > Date.now()) {
+      return this.memoryTokenCache.value;
     }
 
     const tenantId = this.configService.getOrThrow<string>('AZURE_AD_TENANT_ID');
@@ -69,7 +75,14 @@ export class GraphTokenService {
 
     const data = (await response.json()) as AzureAdTokenResponse;
 
-    await this.redisService.set(APP_TOKEN_CACHE_KEY, data.access_token, APP_TOKEN_CACHE_TTL_SECONDS);
+    if (this.redisService.isAvailable) {
+      await this.redisService.set(APP_TOKEN_CACHE_KEY, data.access_token, APP_TOKEN_CACHE_TTL_SECONDS);
+    } else {
+      this.memoryTokenCache = {
+        value: data.access_token,
+        expiresAt: Date.now() + APP_TOKEN_CACHE_TTL_SECONDS * 1000,
+      };
+    }
 
     return data.access_token;
   }
