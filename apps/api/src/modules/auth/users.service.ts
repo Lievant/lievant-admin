@@ -4,14 +4,18 @@ import { In, Repository } from 'typeorm';
 import { EmailService } from '../notifications/email.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
+import { UserPermission } from './entities/user-permission.entity';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     @InjectRepository(Role) private readonly rolesRepository: Repository<Role>,
+    @InjectRepository(Permission) private readonly permissionsRepository: Repository<Permission>,
+    @InjectRepository(UserPermission) private readonly userPermissionsRepository: Repository<UserPermission>,
     private readonly emailService: EmailService,
   ) {}
 
@@ -128,5 +132,46 @@ export class UsersService {
     user.updatedBy = updatedBy ?? null;
     await this.usersRepository.save(user);
     await this.usersRepository.softDelete(id);
+  }
+
+  async listAllPermissions(): Promise<Permission[]> {
+    return this.permissionsRepository.find({
+      order: { section: 'ASC', module: 'ASC', action: 'ASC' },
+    });
+  }
+
+  async getUserPermissionOverrides(userId: string): Promise<UserPermission[]> {
+    await this.findById(userId);
+    return this.userPermissionsRepository.find({
+      where: { userId },
+      relations: { permission: true },
+    });
+  }
+
+  async setUserPermission(
+    userId: string,
+    permissionId: string,
+    granted: boolean,
+    grantedBy?: string,
+  ): Promise<UserPermission> {
+    await this.findById(userId);
+    let up = await this.userPermissionsRepository.findOne({ where: { userId, permissionId } });
+    if (up) {
+      up.granted = granted;
+      up.grantedBy = grantedBy ?? null;
+      up.grantedAt = new Date();
+    } else {
+      up = this.userPermissionsRepository.create({
+        userId,
+        permissionId,
+        granted,
+        grantedBy: grantedBy ?? null,
+      });
+    }
+    return this.userPermissionsRepository.save(up);
+  }
+
+  async removeUserPermission(userId: string, permissionId: string): Promise<void> {
+    await this.userPermissionsRepository.delete({ userId, permissionId });
   }
 }

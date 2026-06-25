@@ -1647,3 +1647,60 @@ export function updateRoomOffice(id: string, payload: UpdateRoomOfficePayload): 
     body: JSON.stringify(payload),
   });
 }
+
+// ---------------------------------------------------------------------------
+// Permisos (Administración)
+// ---------------------------------------------------------------------------
+
+export interface PermissionDef {
+  id: string;
+  section: string | null;
+  module: string;
+  action: string;
+  description: string | null;
+}
+
+export interface RoleWithPermissions {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  isSystem: boolean;
+  permissions: PermissionDef[];
+}
+
+export interface UserPermissionOverride {
+  id: string;
+  permissionId: string;
+  granted: boolean;
+  grantedAt: string;
+}
+
+export function listRolesWithPermissions(): Promise<RoleWithPermissions[]> {
+  return apiFetch<RoleWithPermissions[]>('/auth/roles');
+}
+
+export function listAllPermissions(): Promise<PermissionDef[]> {
+  return apiFetch<PermissionDef[]>('/auth/permissions');
+}
+
+export function getUserPermissionOverrides(userId: string): Promise<UserPermissionOverride[]> {
+  return apiFetch<UserPermissionOverride[]>(`/auth/users/${userId}/permissions`);
+}
+
+export function setUserPermission(
+  userId: string,
+  permissionId: string,
+  granted: boolean,
+): Promise<UserPermissionOverride> {
+  return apiFetch<UserPermissionOverride>(`/auth/users/${userId}/permissions`, {
+    method: 'POST',
+    body: JSON.stringify({ permissionId, granted }),
+  });
+}
+
+export function removeUserPermissionOverride(userId: string, permissionId: string): Promise<void> {
+  return apiFetch<void>(`/auth/users/${userId}/permissions/${permissionId}`, {
+    method: 'DELETE',
+  });
+}

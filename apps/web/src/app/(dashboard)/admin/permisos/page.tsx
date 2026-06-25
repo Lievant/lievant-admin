@@ -1,8 +1,28 @@
-export default function PermisosPage() {
+import { listAllPermissions, listRolesWithPermissions, listUsers } from '@/lib/api';
+import { PermissionsScreen } from './permissions-screen';
+
+async function safe<T>(promise: Promise<T>): Promise<T | null> {
+  try {
+    return await promise;
+  } catch {
+    return null;
+  }
+}
+
+export default async function PermisosPage() {
+  const [roles, permissions, users] = await Promise.all([
+    safe(listRolesWithPermissions()),
+    safe(listAllPermissions()),
+    safe(listUsers()),
+  ]);
+
   return (
     <div className="mx-auto max-w-7xl px-8 py-10">
-      <h1 className="text-2xl font-bold text-navy">Permisos</h1>
-      <p className="mt-2 text-slate-500">Próximamente — este módulo está en desarrollo.</p>
+      <PermissionsScreen
+        roles={roles ?? []}
+        permissions={permissions ?? []}
+        users={users ?? []}
+      />
     </div>
   );
 }
