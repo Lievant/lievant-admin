@@ -12,6 +12,7 @@ export const CATALOG_ENTITY_NAMES = [
   'industries',
   'document_types',
   'vendor_categories',
+  'employee_document_types',
 ] as const;
 
 export type CatalogEntityName = (typeof CATALOG_ENTITY_NAMES)[number];

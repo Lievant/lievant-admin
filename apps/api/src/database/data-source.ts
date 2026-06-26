@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { Permission } from '../modules/auth/entities/permission.entity';
 import { Role } from '../modules/auth/entities/role.entity';
 import { User } from '../modules/auth/entities/user.entity';
+import { UserPermission } from '../modules/auth/entities/user-permission.entity';
 import { CatalogArea } from '../modules/catalogs/entities/catalog-area.entity';
 import { CatalogBloodType } from '../modules/catalogs/entities/catalog-blood-type.entity';
 import { CatalogCompany } from '../modules/catalogs/entities/catalog-company.entity';
@@ -46,6 +47,7 @@ const AppDataSource = new DataSource({
     User,
     Role,
     Permission,
+    UserPermission,
     Group,
     Company,
     Brand,

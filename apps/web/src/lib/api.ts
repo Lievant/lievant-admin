@@ -57,7 +57,9 @@ export interface CurrentUser {
   email: string;
   name: string;
   isActive: boolean;
+  location: string | null;
   roles: { id: string; name: string }[];
+  permissions: { section: string; module: string; action: string }[];
 }
 
 export type UserLocation = 'LEON' | 'CDMX' | 'GUADALAJARA' | 'COLOMBIA' | 'ESTADOS_UNIDOS';
@@ -967,7 +969,8 @@ export type CatalogEntity =
   | 'marital_statuses'
   | 'industries'
   | 'document_types'
-  | 'vendor_categories';
+  | 'vendor_categories'
+  | 'employee_document_types';
 
 export interface CatalogItem {
   id: string;
@@ -1333,6 +1336,30 @@ export function removeVendorDocument(docId: string): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Documentos adjuntos de empleados
+// ---------------------------------------------------------------------------
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  type: string;
+  name: string;
+  s3Key: string;
+  fileSize: number | null;
+  uploadedAt: string;
+  uploadedBy: string;
+  downloadUrl?: string;
+}
+
+export function listEmployeeDocuments(employeeId: string): Promise<EmployeeDocument[]> {
+  return apiFetch<EmployeeDocument[]>(`/employees/${employeeId}/documents`);
+}
+
+export function removeEmployeeDocument(docId: string): Promise<void> {
+  return apiFetch<void>(`/employees/documents/${docId}`, { method: 'DELETE' });
+}
+
+// ---------------------------------------------------------------------------
 // Reserva de salas (Herramientas)
 // ---------------------------------------------------------------------------
 
@@ -1644,4 +1671,84 @@ export function updateRoomOffice(id: string, payload: UpdateRoomOfficePayload): 
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Permisos (Administración)
+// ---------------------------------------------------------------------------
+
+export interface PermissionDef {
+  id: string;
+  section: string | null;
+  module: string;
+  action: string;
+  description: string | null;
+}
+
+export interface RoleWithPermissions {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string | null;
+  isSystem: boolean;
+  permissions: PermissionDef[];
+}
+
+export interface UserPermissionOverride {
+  id: string;
+  permissionId: string;
+  granted: boolean;
+  grantedAt: string;
+}
+
+export function listRolesWithPermissions(): Promise<RoleWithPermissions[]> {
+  return apiFetch<RoleWithPermissions[]>('/auth/roles');
+}
+
+export function listAllPermissions(): Promise<PermissionDef[]> {
+  return apiFetch<PermissionDef[]>('/auth/permissions');
+}
+
+export function getUserPermissionOverrides(userId: string): Promise<UserPermissionOverride[]> {
+  return apiFetch<UserPermissionOverride[]>(`/auth/users/${userId}/permissions`);
+}
+
+export function setUserPermission(
+  userId: string,
+  permissionId: string,
+  granted: boolean,
+): Promise<UserPermissionOverride> {
+  return apiFetch<UserPermissionOverride>(`/auth/users/${userId}/permissions`, {
+    method: 'POST',
+    body: JSON.stringify({ permissionId, granted }),
+  });
+}
+
+export function removeUserPermissionOverride(userId: string, permissionId: string): Promise<void> {
+  return apiFetch<void>(`/auth/users/${userId}/permissions/${permissionId}`, {
+    method: 'DELETE',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Reportes RRHH
+// ---------------------------------------------------------------------------
+
+export interface BirthdayReportItem {
+  id: string;
+  fullName: string;
+  area: string | null;
+  division: string | null;
+  position: string;
+  companyCode: string;
+  companyName: string;
+  seniorityDate: string | null;
+  birthDate: string; // "MM-DD"
+}
+
+export function getBirthdayReport(
+  month: number,
+  orderBy: 'date' | 'name' | 'area' = 'date',
+): Promise<BirthdayReportItem[]> {
+  return apiFetch<BirthdayReportItem[]>(`/employees/reports/birthdays?month=${month}&orderBy=${orderBy}`);
 }

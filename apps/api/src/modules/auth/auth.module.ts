@@ -11,6 +11,7 @@ import { CognitoService } from './cognito.service';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
+import { UserPermission } from './entities/user-permission.entity';
 import { GraphTokenService } from './graph-token.service';
 import { RolesController } from './roles.controller';
 import { RolesService } from './roles.service';
@@ -21,7 +22,7 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, Permission]),
+    TypeOrmModule.forFeature([User, Role, Permission, UserPermission]),
     NotificationsModule,
     RedisModule,
     PassportModule,

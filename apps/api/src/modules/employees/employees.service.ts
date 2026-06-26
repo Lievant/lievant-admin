@@ -11,14 +11,18 @@ import { CreateVacationDto, UpdateVacationDto } from './dto/vacation.dto';
 import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emergency-contact.dto';
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import { UploadEmployeeDocumentDto } from './dto/upload-employee-document.dto';
 import { Compensation } from './entities/compensation.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
+import { EmployeeDocument } from './entities/employee-document.entity';
 import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
 import { TerminationData } from './entities/termination-data.entity';
 import { Vacation } from './entities/vacation.entity';
 import { EmployeeListItem, EmployeesPaginatedResult, EmployeeStats } from './interfaces/employee-list-item.interface';
+import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
+import { EmployeeStorageService } from './employee-storage.service';
 
 function toFixed(value: number | undefined, fallback = 0): string {
   return (value ?? fallback).toFixed(1);
@@ -34,6 +38,8 @@ export class EmployeesService {
     @InjectRepository(EmergencyContact) private readonly emergencyContactsRepository: Repository<EmergencyContact>,
     @InjectRepository(TerminationData) private readonly terminationRepository: Repository<TerminationData>,
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
+    @InjectRepository(EmployeeDocument) private readonly documentsRepository: Repository<EmployeeDocument>,
+    private readonly storageService: EmployeeStorageService,
   ) {}
 
   async findAll(query: QueryEmployeesDto): Promise<EmployeesPaginatedResult<EmployeeListItem>> {
@@ -355,6 +361,73 @@ export class EmployeesService {
     }
 
     return saved;
+  }
+
+  async getDocuments(employeeId: string): Promise<(EmployeeDocument & { downloadUrl?: string })[]> {
+    await this.getEmployeeOrFail(employeeId);
+    const docs = await this.documentsRepository.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
+    return Promise.all(
+      docs.map(async (doc) => ({ ...doc, downloadUrl: await this.storageService.getPresignedUrl(doc.s3Key) })),
+    );
+  }
+
+  async uploadDocument(
+    employeeId: string,
+    file: Express.Multer.File,
+    dto: UploadEmployeeDocumentDto,
+    userId: string,
+  ): Promise<EmployeeDocument & { downloadUrl?: string }> {
+    await this.getEmployeeOrFail(employeeId);
+    const s3Key = await this.storageService.uploadDocument(file, employeeId, dto.type);
+    const doc = await this.documentsRepository.save(
+      this.documentsRepository.create({
+        employeeId,
+        type: dto.type,
+        name: dto.name,
+        s3Key,
+        fileSize: file.size,
+        uploadedBy: userId,
+      }),
+    );
+    const downloadUrl = await this.storageService.getPresignedUrl(doc.s3Key);
+    return { ...doc, downloadUrl };
+  }
+
+  async removeDocument(docId: string): Promise<void> {
+    const doc = await this.documentsRepository.findOne({ where: { id: docId } });
+    if (!doc) throw new NotFoundException(`Documento ${docId} no encontrado`);
+    await this.storageService.deleteDocument(doc.s3Key);
+    await this.documentsRepository.softDelete(docId);
+  }
+
+  async getBirthdayReport(month: number, orderBy: 'date' | 'name' | 'area'): Promise<BirthdayReportItem[]> {
+    const ORDER_CLAUSES: Record<string, string> = {
+      date: 'EXTRACT(DAY FROM pd.birth_date)',
+      name: 'e.full_name',
+      area: 'e.area NULLS LAST, e.full_name',
+    };
+    const orderClause = ORDER_CLAUSES[orderBy] ?? ORDER_CLAUSES.date;
+
+    const rows = await this.employeesRepository.manager.query(
+      `SELECT
+        e.id,
+        e.full_name AS "fullName",
+        e.area,
+        e.division,
+        e.position,
+        e.company_code AS "companyCode",
+        e.company_name AS "companyName",
+        TO_CHAR(e.seniority_date, 'YYYY-MM-DD') AS "seniorityDate",
+        TO_CHAR(pd.birth_date, 'MM-DD') AS "birthDate"
+      FROM employees.employee_records e
+      INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
+      WHERE e.deleted_at IS NULL
+        AND pd.birth_date IS NOT NULL
+        AND EXTRACT(MONTH FROM pd.birth_date) = $1
+      ORDER BY ${orderClause}`,
+      [month],
+    );
+    return rows as BirthdayReportItem[];
   }
 
   private toListItem(record: EmployeeRecord): EmployeeListItem {

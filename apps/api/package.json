@@ -21,7 +21,8 @@
     "seed:super-admin": "ts-node -T src/database/seeds/super-admin.seed.ts",
     "seed:clients": "ts-node -T src/database/seeds/clients.seed.ts",
     "seed:admin": "ts-node -r tsconfig-paths/register src/database/seeds/001-admin-user.ts",
-    "seed:contpaqi-clients": "ts-node -T src/database/seeds/002-contpaqi-clients.seed.ts"
+    "seed:contpaqi-clients": "ts-node -T src/database/seeds/002-contpaqi-clients.seed.ts",
+    "seed:employees": "ts-node -T src/database/seeds/003-employees-headcount.seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1067.0",

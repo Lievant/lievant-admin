@@ -6,6 +6,9 @@ export class Permission {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  section!: string | null;
+
   @Column({ type: 'varchar', length: 100 })
   module!: string;
 
