@@ -10,13 +10,14 @@ import {
   Post,
   Query,
   Res,
+  SetMetadata,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { RequirePermission } from '../auth/decorators/permission.decorator';
+import { PERMISSION_KEY, RequirePermission } from '../auth/decorators/permission.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -51,6 +52,13 @@ export class EmployeesController {
     private readonly employeesService: EmployeesService,
     private readonly documentsService: DocumentsService,
   ) {}
+
+  // Accessible to any authenticated user — null overrides the class-level RequirePermission
+  @SetMetadata(PERMISSION_KEY, null)
+  @Get('dashboard')
+  getDashboard(@CurrentUser() user: User) {
+    return this.employeesService.getDashboard(user.id);
+  }
 
   @Get()
   findAll(@Query() query: QueryEmployeesDto) {

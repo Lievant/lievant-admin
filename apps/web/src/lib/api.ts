@@ -52,6 +52,26 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return parseResponse<T>(res);
 }
 
+export async function apiFetchWithRetry<T>(
+  path: string,
+  options?: RequestInit,
+  retries = 3,
+  delay = 1000,
+): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (error) {
+    const isNetworkError =
+      error instanceof TypeError && error.message.toLowerCase().includes('fetch');
+
+    if (retries > 0 && isNetworkError) {
+      await new Promise<void>((r) => setTimeout(r, delay));
+      return apiFetchWithRetry<T>(path, options, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
+
 export interface CurrentUser {
   id: string;
   email: string;
@@ -103,33 +123,33 @@ export interface UpdateUserPayload {
 }
 
 export function getCurrentUser(): Promise<CurrentUser> {
-  return apiFetch<CurrentUser>('/auth/me');
+  return apiFetchWithRetry<CurrentUser>('/auth/me');
 }
 
 export function listUsers(): Promise<UserSummary[]> {
-  return apiFetch<UserSummary[]>('/users');
+  return apiFetchWithRetry<UserSummary[]>('/users');
 }
 
 export function listRoles(): Promise<RoleSummary[]> {
-  return apiFetch<RoleSummary[]>('/roles');
+  return apiFetchWithRetry<RoleSummary[]>('/roles');
 }
 
 export function createUser(payload: CreateUserPayload): Promise<UserSummary> {
-  return apiFetch<UserSummary>('/users', {
+  return apiFetchWithRetry<UserSummary>('/users', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateUser(id: string, payload: UpdateUserPayload): Promise<UserSummary> {
-  return apiFetch<UserSummary>(`/users/${id}`, {
+  return apiFetchWithRetry<UserSummary>(`/users/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function deleteUser(id: string): Promise<void> {
-  return apiFetch<void>(`/users/${id}`, {
+  return apiFetchWithRetry<void>(`/users/${id}`, {
     method: 'DELETE',
   });
 }
@@ -314,11 +334,11 @@ export function listClients(params: ListClientsParams = {}): Promise<ClientsPage
   if (params.search) query.set('search', params.search);
 
   const qs = query.toString();
-  return apiFetch<ClientsPage>(`/clients${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<ClientsPage>(`/clients${qs ? `?${qs}` : ''}`);
 }
 
 export function getClient(id: string): Promise<ClientDetail> {
-  return apiFetch<ClientDetail>(`/clients/${id}`);
+  return apiFetchWithRetry<ClientDetail>(`/clients/${id}`);
 }
 
 export interface CreateClientPayload {
@@ -339,7 +359,7 @@ export interface CreateClientPayload {
 }
 
 export function createClient(payload: CreateClientPayload): Promise<ClientDetail> {
-  return apiFetch<ClientDetail>('/clients', {
+  return apiFetchWithRetry<ClientDetail>('/clients', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -364,14 +384,14 @@ export interface UpdateClientPayload {
 }
 
 export function updateClient(id: string, payload: UpdateClientPayload): Promise<ClientDetail> {
-  return apiFetch<ClientDetail>(`/clients/${id}`, {
+  return apiFetchWithRetry<ClientDetail>(`/clients/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function deleteClient(id: string): Promise<void> {
-  return apiFetch<void>(`/clients/${id}`, {
+  return apiFetchWithRetry<void>(`/clients/${id}`, {
     method: 'DELETE',
   });
 }
@@ -384,35 +404,35 @@ export interface CompanyPayload {
 }
 
 export function addClientCompany(clientId: string, payload: CompanyPayload): Promise<Company> {
-  return apiFetch<Company>(`/clients/${clientId}/companies`, {
+  return apiFetchWithRetry<Company>(`/clients/${clientId}/companies`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateCompany(companyId: string, payload: CompanyPayload): Promise<Company> {
-  return apiFetch<Company>(`/clients/companies/${companyId}`, {
+  return apiFetchWithRetry<Company>(`/clients/companies/${companyId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function addBrand(companyId: string, payload: { name: string }): Promise<Brand> {
-  return apiFetch<Brand>(`/clients/companies/${companyId}/brands`, {
+  return apiFetchWithRetry<Brand>(`/clients/companies/${companyId}/brands`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateBrand(brandId: string, payload: { name?: string }): Promise<Brand> {
-  return apiFetch<Brand>(`/clients/brands/${brandId}`, {
+  return apiFetchWithRetry<Brand>(`/clients/brands/${brandId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function getClientFinancial(clientId: string): Promise<FinancialData | null> {
-  return apiFetch<FinancialData | null>(`/clients/${clientId}/financial`);
+  return apiFetchWithRetry<FinancialData | null>(`/clients/${clientId}/financial`);
 }
 
 export interface UpdateFinancialPayload {
@@ -436,18 +456,18 @@ export interface UpdateFinancialPayload {
 }
 
 export function updateClientFinancial(clientId: string, payload: UpdateFinancialPayload): Promise<FinancialData> {
-  return apiFetch<FinancialData>(`/clients/${clientId}/financial`, {
+  return apiFetchWithRetry<FinancialData>(`/clients/${clientId}/financial`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function listClientDocuments(clientId: string): Promise<ClientDocumentSummary[]> {
-  return apiFetch<ClientDocumentSummary[]>(`/clients/${clientId}/documents`);
+  return apiFetchWithRetry<ClientDocumentSummary[]>(`/clients/${clientId}/documents`);
 }
 
 export function removeClientDocument(docId: string): Promise<void> {
-  return apiFetch<void>(`/clients/documents/${docId}`, {
+  return apiFetchWithRetry<void>(`/clients/documents/${docId}`, {
     method: 'DELETE',
   });
 }
@@ -471,25 +491,25 @@ export interface CreateContactPayload {
 export type UpdateContactPayload = Partial<CreateContactPayload>;
 
 export function listClientContacts(clientId: string): Promise<Contact[]> {
-  return apiFetch<Contact[]>(`/clients/${clientId}/contacts`);
+  return apiFetchWithRetry<Contact[]>(`/clients/${clientId}/contacts`);
 }
 
 export function addClientContact(clientId: string, payload: CreateContactPayload): Promise<Contact> {
-  return apiFetch<Contact>(`/clients/${clientId}/contacts`, {
+  return apiFetchWithRetry<Contact>(`/clients/${clientId}/contacts`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateClientContact(contactId: string, payload: UpdateContactPayload): Promise<Contact> {
-  return apiFetch<Contact>(`/clients/contacts/${contactId}`, {
+  return apiFetchWithRetry<Contact>(`/clients/contacts/${contactId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function removeClientContact(contactId: string): Promise<void> {
-  return apiFetch<void>(`/clients/contacts/${contactId}`, {
+  return apiFetchWithRetry<void>(`/clients/contacts/${contactId}`, {
     method: 'DELETE',
   });
 }
@@ -625,29 +645,29 @@ export function listEmployees(params: ListEmployeesParams = {}): Promise<Employe
   if (params.search) query.set('search', params.search);
 
   const qs = query.toString();
-  return apiFetch<EmployeesPage>(`/employees${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<EmployeesPage>(`/employees${qs ? `?${qs}` : ''}`);
 }
 
 export function getEmployee(id: string): Promise<EmployeeDetail> {
-  return apiFetch<EmployeeDetail>(`/employees/${id}`);
+  return apiFetchWithRetry<EmployeeDetail>(`/employees/${id}`);
 }
 
 export function createEmployee(payload: CreateEmployeePayload): Promise<EmployeeDetail> {
-  return apiFetch<EmployeeDetail>('/employees', {
+  return apiFetchWithRetry<EmployeeDetail>('/employees', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateEmployee(id: string, payload: UpdateEmployeePayload): Promise<EmployeeDetail> {
-  return apiFetch<EmployeeDetail>(`/employees/${id}`, {
+  return apiFetchWithRetry<EmployeeDetail>(`/employees/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function deleteEmployee(id: string): Promise<void> {
-  return apiFetch<void>(`/employees/${id}`, {
+  return apiFetchWithRetry<void>(`/employees/${id}`, {
     method: 'DELETE',
   });
 }
@@ -699,14 +719,14 @@ export interface UpdatePersonalDataPayload {
 }
 
 export function getEmployeePersonalData(employeeId: string): Promise<EmployeePersonalData | null> {
-  return apiFetch<EmployeePersonalData | null>(`/employees/${employeeId}/personal`);
+  return apiFetchWithRetry<EmployeePersonalData | null>(`/employees/${employeeId}/personal`);
 }
 
 export function updateEmployeePersonalData(
   employeeId: string,
   payload: UpdatePersonalDataPayload,
 ): Promise<EmployeePersonalData> {
-  return apiFetch<EmployeePersonalData>(`/employees/${employeeId}/personal`, {
+  return apiFetchWithRetry<EmployeePersonalData>(`/employees/${employeeId}/personal`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -751,14 +771,14 @@ export interface UpdateCompensationPayload {
 }
 
 export function getEmployeeCompensation(employeeId: string): Promise<EmployeeCompensation | null> {
-  return apiFetch<EmployeeCompensation | null>(`/employees/${employeeId}/compensation`);
+  return apiFetchWithRetry<EmployeeCompensation | null>(`/employees/${employeeId}/compensation`);
 }
 
 export function updateEmployeeCompensation(
   employeeId: string,
   payload: UpdateCompensationPayload,
 ): Promise<EmployeeCompensation> {
-  return apiFetch<EmployeeCompensation>(`/employees/${employeeId}/compensation`, {
+  return apiFetchWithRetry<EmployeeCompensation>(`/employees/${employeeId}/compensation`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -790,18 +810,18 @@ export interface CreateVacationPayload {
 export type UpdateVacationPayload = Partial<CreateVacationPayload>;
 
 export function listEmployeeVacations(employeeId: string): Promise<EmployeeVacation[]> {
-  return apiFetch<EmployeeVacation[]>(`/employees/${employeeId}/vacations`);
+  return apiFetchWithRetry<EmployeeVacation[]>(`/employees/${employeeId}/vacations`);
 }
 
 export function createEmployeeVacation(employeeId: string, payload: CreateVacationPayload): Promise<EmployeeVacation> {
-  return apiFetch<EmployeeVacation>(`/employees/${employeeId}/vacations`, {
+  return apiFetchWithRetry<EmployeeVacation>(`/employees/${employeeId}/vacations`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateEmployeeVacation(vacationId: string, payload: UpdateVacationPayload): Promise<EmployeeVacation> {
-  return apiFetch<EmployeeVacation>(`/employees/vacations/${vacationId}`, {
+  return apiFetchWithRetry<EmployeeVacation>(`/employees/vacations/${vacationId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -829,14 +849,14 @@ export interface CreateEmergencyContactPayload {
 export type UpdateEmergencyContactPayload = Partial<CreateEmergencyContactPayload>;
 
 export function listEmployeeContacts(employeeId: string): Promise<EmployeeEmergencyContact[]> {
-  return apiFetch<EmployeeEmergencyContact[]>(`/employees/${employeeId}/contacts`);
+  return apiFetchWithRetry<EmployeeEmergencyContact[]>(`/employees/${employeeId}/contacts`);
 }
 
 export function addEmployeeContact(
   employeeId: string,
   payload: CreateEmergencyContactPayload,
 ): Promise<EmployeeEmergencyContact> {
-  return apiFetch<EmployeeEmergencyContact>(`/employees/${employeeId}/contacts`, {
+  return apiFetchWithRetry<EmployeeEmergencyContact>(`/employees/${employeeId}/contacts`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -846,14 +866,14 @@ export function updateEmployeeContact(
   contactId: string,
   payload: UpdateEmergencyContactPayload,
 ): Promise<EmployeeEmergencyContact> {
-  return apiFetch<EmployeeEmergencyContact>(`/employees/contacts/${contactId}`, {
+  return apiFetchWithRetry<EmployeeEmergencyContact>(`/employees/contacts/${contactId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function removeEmployeeContact(contactId: string): Promise<void> {
-  return apiFetch<void>(`/employees/contacts/${contactId}`, {
+  return apiFetchWithRetry<void>(`/employees/contacts/${contactId}`, {
     method: 'DELETE',
   });
 }
@@ -883,14 +903,14 @@ export interface UpdateTerminationPayload {
 }
 
 export function getEmployeeTermination(employeeId: string): Promise<EmployeeTermination | null> {
-  return apiFetch<EmployeeTermination | null>(`/employees/${employeeId}/termination`);
+  return apiFetchWithRetry<EmployeeTermination | null>(`/employees/${employeeId}/termination`);
 }
 
 export function updateEmployeeTermination(
   employeeId: string,
   payload: UpdateTerminationPayload,
 ): Promise<EmployeeTermination> {
-  return apiFetch<EmployeeTermination>(`/employees/${employeeId}/termination`, {
+  return apiFetchWithRetry<EmployeeTermination>(`/employees/${employeeId}/termination`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -1002,15 +1022,15 @@ export interface CreateCatalogItemPayload {
 export type UpdateCatalogItemPayload = Partial<CreateCatalogItemPayload>;
 
 export function listCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
-  return apiFetch<CatalogItem[]>(`/catalogs/${entity}`);
+  return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}`);
 }
 
 export function listActiveCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
-  return apiFetch<CatalogItem[]>(`/catalogs/${entity}/active`);
+  return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}/active`);
 }
 
 export function createCatalogItem(entity: CatalogEntity, payload: CreateCatalogItemPayload): Promise<CatalogItem> {
-  return apiFetch<CatalogItem>(`/catalogs/${entity}`, {
+  return apiFetchWithRetry<CatalogItem>(`/catalogs/${entity}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1021,14 +1041,14 @@ export function updateCatalogItem(
   id: string,
   payload: UpdateCatalogItemPayload,
 ): Promise<CatalogItem> {
-  return apiFetch<CatalogItem>(`/catalogs/${entity}/${id}`, {
+  return apiFetchWithRetry<CatalogItem>(`/catalogs/${entity}/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function deactivateCatalogItem(entity: CatalogEntity, id: string): Promise<void> {
-  return apiFetch<void>(`/catalogs/${entity}/${id}`, {
+  return apiFetchWithRetry<void>(`/catalogs/${entity}/${id}`, {
     method: 'DELETE',
   });
 }
@@ -1184,11 +1204,11 @@ export function listVendors(params: ListVendorsParams = {}): Promise<Vendor[]> {
   if (params.search) query.set('search', params.search);
 
   const qs = query.toString();
-  return apiFetch<Vendor[]>(`/vendors${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<Vendor[]>(`/vendors${qs ? `?${qs}` : ''}`);
 }
 
 export function getVendor(id: string): Promise<VendorDetail> {
-  return apiFetch<VendorDetail>(`/vendors/${id}`);
+  return apiFetchWithRetry<VendorDetail>(`/vendors/${id}`);
 }
 
 export interface CreateVendorPayload {
@@ -1205,7 +1225,7 @@ export interface CreateVendorPayload {
 }
 
 export function createVendor(payload: CreateVendorPayload): Promise<VendorDetail> {
-  return apiFetch<VendorDetail>('/vendors', {
+  return apiFetchWithRetry<VendorDetail>('/vendors', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1214,14 +1234,14 @@ export function createVendor(payload: CreateVendorPayload): Promise<VendorDetail
 export type UpdateVendorPayload = Partial<CreateVendorPayload>;
 
 export function updateVendor(id: string, payload: UpdateVendorPayload): Promise<VendorDetail> {
-  return apiFetch<VendorDetail>(`/vendors/${id}`, {
+  return apiFetchWithRetry<VendorDetail>(`/vendors/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function listVendorProducts(vendorId: string): Promise<VendorProduct[]> {
-  return apiFetch<VendorProduct[]>(`/vendors/${vendorId}/products`);
+  return apiFetchWithRetry<VendorProduct[]>(`/vendors/${vendorId}/products`);
 }
 
 export interface CreateProductPayload {
@@ -1234,7 +1254,7 @@ export interface CreateProductPayload {
 }
 
 export function addVendorProduct(vendorId: string, payload: CreateProductPayload): Promise<VendorProduct> {
-  return apiFetch<VendorProduct>(`/vendors/${vendorId}/products`, {
+  return apiFetchWithRetry<VendorProduct>(`/vendors/${vendorId}/products`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1252,7 +1272,7 @@ export function listVendorPurchaseOrders(
   if (params.status) query.set('status', params.status);
 
   const qs = query.toString();
-  return apiFetch<PurchaseOrder[]>(`/vendors/${vendorId}/purchase-orders${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<PurchaseOrder[]>(`/vendors/${vendorId}/purchase-orders${qs ? `?${qs}` : ''}`);
 }
 
 export interface CreatePOLineItemPayload {
@@ -1269,18 +1289,18 @@ export interface CreatePurchaseOrderPayload {
 }
 
 export function createPurchaseOrder(payload: CreatePurchaseOrderPayload): Promise<PurchaseOrder> {
-  return apiFetch<PurchaseOrder>('/purchase-orders', {
+  return apiFetchWithRetry<PurchaseOrder>('/purchase-orders', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function getPurchaseOrder(poId: string): Promise<PurchaseOrder> {
-  return apiFetch<PurchaseOrder>(`/purchase-orders/${poId}`);
+  return apiFetchWithRetry<PurchaseOrder>(`/purchase-orders/${poId}`);
 }
 
 export function updatePOStatus(poId: string, status: POStatus): Promise<PurchaseOrder> {
-  return apiFetch<PurchaseOrder>(`/purchase-orders/${poId}/status`, {
+  return apiFetchWithRetry<PurchaseOrder>(`/purchase-orders/${poId}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
@@ -1299,11 +1319,11 @@ export function listVendorInvoices(vendorId: string, params: ListInvoicesParams 
   if (params.date_to) query.set('date_to', params.date_to);
 
   const qs = query.toString();
-  return apiFetch<Invoice[]>(`/vendors/${vendorId}/invoices${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<Invoice[]>(`/vendors/${vendorId}/invoices${qs ? `?${qs}` : ''}`);
 }
 
 export function getVendorStatement(vendorId: string): Promise<VendorStatement> {
-  return apiFetch<VendorStatement>(`/vendors/${vendorId}/statement`);
+  return apiFetchWithRetry<VendorStatement>(`/vendors/${vendorId}/statement`);
 }
 
 export interface CreateInvoicePayload {
@@ -1319,18 +1339,18 @@ export interface CreateInvoicePayload {
 }
 
 export function createInvoice(payload: CreateInvoicePayload): Promise<Invoice> {
-  return apiFetch<Invoice>('/invoices', {
+  return apiFetchWithRetry<Invoice>('/invoices', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function listVendorDocuments(vendorId: string): Promise<VendorDocument[]> {
-  return apiFetch<VendorDocument[]>(`/vendors/${vendorId}/documents`);
+  return apiFetchWithRetry<VendorDocument[]>(`/vendors/${vendorId}/documents`);
 }
 
 export function removeVendorDocument(docId: string): Promise<void> {
-  return apiFetch<void>(`/vendors/documents/${docId}`, {
+  return apiFetchWithRetry<void>(`/vendors/documents/${docId}`, {
     method: 'DELETE',
   });
 }
@@ -1352,11 +1372,11 @@ export interface EmployeeDocument {
 }
 
 export function listEmployeeDocuments(employeeId: string): Promise<EmployeeDocument[]> {
-  return apiFetch<EmployeeDocument[]>(`/employees/${employeeId}/documents`);
+  return apiFetchWithRetry<EmployeeDocument[]>(`/employees/${employeeId}/documents`);
 }
 
 export function removeEmployeeDocument(docId: string): Promise<void> {
-  return apiFetch<void>(`/employees/documents/${docId}`, { method: 'DELETE' });
+  return apiFetchWithRetry<void>(`/employees/documents/${docId}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------
@@ -1462,23 +1482,23 @@ export interface AdminScopeInfo {
 }
 
 export function getLocationsTree(): Promise<CountryWithCities[]> {
-  return apiFetch<CountryWithCities[]>('/rooms/locations');
+  return apiFetchWithRetry<CountryWithCities[]>('/rooms/locations');
 }
 
 export function listRoomCountries(): Promise<Country[]> {
-  return apiFetch<Country[]>('/rooms/locations/countries');
+  return apiFetchWithRetry<Country[]>('/rooms/locations/countries');
 }
 
 export function listRoomCitiesByCountry(countryId: string): Promise<City[]> {
-  return apiFetch<City[]>(`/rooms/locations/countries/${countryId}/cities`);
+  return apiFetchWithRetry<City[]>(`/rooms/locations/countries/${countryId}/cities`);
 }
 
 export function listRoomOfficesByCity(cityId: string): Promise<Office[]> {
-  return apiFetch<Office[]>(`/rooms/locations/cities/${cityId}/offices`);
+  return apiFetchWithRetry<Office[]>(`/rooms/locations/cities/${cityId}/offices`);
 }
 
 export function getRoomAdminScope(): Promise<AdminScopeInfo> {
-  return apiFetch<AdminScopeInfo>('/rooms/locations/admin-scope');
+  return apiFetchWithRetry<AdminScopeInfo>('/rooms/locations/admin-scope');
 }
 
 export interface SearchRoomsParams {
@@ -1497,15 +1517,15 @@ export function searchRooms(params: SearchRoomsParams): Promise<RoomAvailability
   query.set('duration_hours', String(params.duration_hours));
   if (params.room_type) query.set('room_type', params.room_type);
 
-  return apiFetch<RoomAvailability[]>(`/rooms?${query.toString()}`);
+  return apiFetchWithRetry<RoomAvailability[]>(`/rooms?${query.toString()}`);
 }
 
 export function getRoom(id: string): Promise<Room> {
-  return apiFetch<Room>(`/rooms/${id}`);
+  return apiFetchWithRetry<Room>(`/rooms/${id}`);
 }
 
 export function listRoomsByOffice(officeId: string): Promise<Room[]> {
-  return apiFetch<Room[]>(`/rooms/admin?office_id=${officeId}`);
+  return apiFetchWithRetry<Room[]>(`/rooms/admin?office_id=${officeId}`);
 }
 
 export interface CreateRoomPayload {
@@ -1525,21 +1545,21 @@ export interface CreateRoomPayload {
 export type UpdateRoomPayload = Partial<Omit<CreateRoomPayload, 'office_id'>>;
 
 export function createRoom(payload: CreateRoomPayload): Promise<Room> {
-  return apiFetch<Room>('/rooms', {
+  return apiFetchWithRetry<Room>('/rooms', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
 export function updateRoom(id: string, payload: UpdateRoomPayload): Promise<Room> {
-  return apiFetch<Room>(`/rooms/${id}`, {
+  return apiFetchWithRetry<Room>(`/rooms/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function toggleRoomActive(id: string): Promise<Room> {
-  return apiFetch<Room>(`/rooms/${id}/toggle-active`, {
+  return apiFetchWithRetry<Room>(`/rooms/${id}/toggle-active`, {
     method: 'PATCH',
   });
 }
@@ -1556,7 +1576,7 @@ export interface CreateBookingPayload {
 }
 
 export function createBooking(payload: CreateBookingPayload): Promise<Booking[]> {
-  return apiFetch<Booking[]>('/bookings', {
+  return apiFetchWithRetry<Booking[]>('/bookings', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1567,20 +1587,20 @@ export interface CancelBookingPayload {
 }
 
 export function cancelBooking(id: string, payload: CancelBookingPayload = {}): Promise<Booking[]> {
-  return apiFetch<Booking[]>(`/bookings/${id}`, {
+  return apiFetchWithRetry<Booking[]>(`/bookings/${id}`, {
     method: 'DELETE',
     body: JSON.stringify(payload),
   });
 }
 
 export function approveBooking(id: string): Promise<Booking> {
-  return apiFetch<Booking>(`/bookings/${id}/approve`, {
+  return apiFetchWithRetry<Booking>(`/bookings/${id}/approve`, {
     method: 'PATCH',
   });
 }
 
 export function rejectBooking(id: string): Promise<Booking> {
-  return apiFetch<Booking>(`/bookings/${id}/reject`, {
+  return apiFetchWithRetry<Booking>(`/bookings/${id}/reject`, {
     method: 'PATCH',
   });
 }
@@ -1596,7 +1616,7 @@ export function listMyBookings(params: ListMyBookingsParams = {}): Promise<Booki
   if (params.upcoming !== undefined) query.set('upcoming', String(params.upcoming));
 
   const qs = query.toString();
-  return apiFetch<Booking[]>(`/bookings/my${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<Booking[]>(`/bookings/my${qs ? `?${qs}` : ''}`);
 }
 
 export interface ListAdminBookingsParams {
@@ -1616,11 +1636,11 @@ export function listAdminBookings(params: ListAdminBookingsParams = {}): Promise
   if (params.date_to) query.set('date_to', params.date_to);
 
   const qs = query.toString();
-  return apiFetch<Booking[]>(`/bookings/admin${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<Booking[]>(`/bookings/admin${qs ? `?${qs}` : ''}`);
 }
 
 export function listPendingApprovals(): Promise<Booking[]> {
-  return apiFetch<Booking[]>('/bookings/pending-approval');
+  return apiFetchWithRetry<Booking[]>('/bookings/pending-approval');
 }
 
 export interface CreateRoomCountryPayload {
@@ -1630,7 +1650,7 @@ export interface CreateRoomCountryPayload {
 }
 
 export function createRoomCountry(payload: CreateRoomCountryPayload): Promise<Country> {
-  return apiFetch<Country>('/rooms/locations/countries', {
+  return apiFetchWithRetry<Country>('/rooms/locations/countries', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1644,7 +1664,7 @@ export interface CreateRoomCityPayload {
 }
 
 export function createRoomCity(payload: CreateRoomCityPayload): Promise<City> {
-  return apiFetch<City>('/rooms/locations/cities', {
+  return apiFetchWithRetry<City>('/rooms/locations/cities', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1658,7 +1678,7 @@ export interface CreateRoomOfficePayload {
 }
 
 export function createRoomOffice(payload: CreateRoomOfficePayload): Promise<Office> {
-  return apiFetch<Office>('/rooms/locations/offices', {
+  return apiFetchWithRetry<Office>('/rooms/locations/offices', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1667,7 +1687,7 @@ export function createRoomOffice(payload: CreateRoomOfficePayload): Promise<Offi
 export type UpdateRoomOfficePayload = Partial<CreateRoomOfficePayload> & { is_active?: boolean };
 
 export function updateRoomOffice(id: string, payload: UpdateRoomOfficePayload): Promise<Office> {
-  return apiFetch<Office>(`/rooms/locations/offices/${id}`, {
+  return apiFetchWithRetry<Office>(`/rooms/locations/offices/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -1702,15 +1722,15 @@ export interface UserPermissionOverride {
 }
 
 export function listRolesWithPermissions(): Promise<RoleWithPermissions[]> {
-  return apiFetch<RoleWithPermissions[]>('/auth/roles');
+  return apiFetchWithRetry<RoleWithPermissions[]>('/auth/roles');
 }
 
 export function listAllPermissions(): Promise<PermissionDef[]> {
-  return apiFetch<PermissionDef[]>('/auth/permissions');
+  return apiFetchWithRetry<PermissionDef[]>('/auth/permissions');
 }
 
 export function getUserPermissionOverrides(userId: string): Promise<UserPermissionOverride[]> {
-  return apiFetch<UserPermissionOverride[]>(`/auth/users/${userId}/permissions`);
+  return apiFetchWithRetry<UserPermissionOverride[]>(`/auth/users/${userId}/permissions`);
 }
 
 export function setUserPermission(
@@ -1718,14 +1738,14 @@ export function setUserPermission(
   permissionId: string,
   granted: boolean,
 ): Promise<UserPermissionOverride> {
-  return apiFetch<UserPermissionOverride>(`/auth/users/${userId}/permissions`, {
+  return apiFetchWithRetry<UserPermissionOverride>(`/auth/users/${userId}/permissions`, {
     method: 'POST',
     body: JSON.stringify({ permissionId, granted }),
   });
 }
 
 export function removeUserPermissionOverride(userId: string, permissionId: string): Promise<void> {
-  return apiFetch<void>(`/auth/users/${userId}/permissions/${permissionId}`, {
+  return apiFetchWithRetry<void>(`/auth/users/${userId}/permissions/${permissionId}`, {
     method: 'DELETE',
   });
 }
@@ -1750,5 +1770,69 @@ export function getBirthdayReport(
   month: number,
   orderBy: 'date' | 'name' | 'area' = 'date',
 ): Promise<BirthdayReportItem[]> {
-  return apiFetch<BirthdayReportItem[]>(`/employees/reports/birthdays?month=${month}&orderBy=${orderBy}`);
+  return apiFetchWithRetry<BirthdayReportItem[]>(`/employees/reports/birthdays?month=${month}&orderBy=${orderBy}`);
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
+export interface DashboardBooking {
+  id: string;
+  title: string;
+  roomName: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface DashboardBirthday {
+  id: string;
+  fullName: string;
+  area: string | null;
+  division: string | null;
+}
+
+export interface DashboardUpcomingBirthday extends DashboardBirthday {
+  birthDate: string;
+  daysUntil: number;
+}
+
+export interface DashboardData {
+  todayBookings: DashboardBooking[];
+  todayBirthdays: DashboardBirthday[];
+  upcomingBirthdays: DashboardUpcomingBirthday[];
+}
+
+export function getEmployeeDashboard(): Promise<DashboardData> {
+  return apiFetchWithRetry<DashboardData>('/employees/dashboard');
+}
+
+// ---------------------------------------------------------------------------
+// Comunicados
+// ---------------------------------------------------------------------------
+
+export interface Announcement {
+  id: string;
+  title: string;
+  body: string;
+  authorId: string;
+  author: { id: string; name: string; email: string };
+  isActive: boolean;
+  createdAt: string;
+  eventDate?: string | null;
+}
+
+export function listAnnouncements(): Promise<Announcement[]> {
+  return apiFetchWithRetry<Announcement[]>('/auth/announcements');
+}
+
+export function createAnnouncement(payload: { title: string; body: string; eventDate?: string }): Promise<Announcement> {
+  return apiFetchWithRetry<Announcement>('/auth/announcements', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteAnnouncement(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/auth/announcements/${id}`, { method: 'DELETE' });
 }

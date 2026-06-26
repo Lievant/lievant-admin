@@ -1,6 +1,7 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
+import { Announcement } from '../modules/auth/entities/announcement.entity';
 import { Permission } from '../modules/auth/entities/permission.entity';
 import { Role } from '../modules/auth/entities/role.entity';
 import { User } from '../modules/auth/entities/user.entity';
@@ -26,6 +27,7 @@ import { FinancialData } from '../modules/clients/entities/financial-data.entity
 import { Group } from '../modules/clients/entities/group.entity';
 import { Compensation } from '../modules/employees/entities/compensation.entity';
 import { EmergencyContact } from '../modules/employees/entities/emergency-contact.entity';
+import { EmployeeDocument } from '../modules/employees/entities/employee-document.entity';
 import { EmployeeRecord } from '../modules/employees/entities/employee-record.entity';
 import { PersonalData } from '../modules/employees/entities/personal-data.entity';
 import { TerminationData } from '../modules/employees/entities/termination-data.entity';
@@ -48,6 +50,7 @@ const AppDataSource = new DataSource({
     Role,
     Permission,
     UserPermission,
+    Announcement,
     Group,
     Company,
     Brand,
@@ -61,6 +64,7 @@ const AppDataSource = new DataSource({
     Vacation,
     EmergencyContact,
     TerminationData,
+    EmployeeDocument,
     CatalogCompany,
     CatalogLocation,
     CatalogModality,

@@ -1,3 +1,4 @@
+import { ApiHealthBanner } from '@/components/api-health-banner';
 import { IdleLogout } from '@/components/idle-logout';
 import { Sidebar } from '@/components/sidebar';
 import { UserProvider } from '@/components/user-provider';
@@ -14,6 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="flex min-h-screen bg-surface">
+      <ApiHealthBanner />
       <IdleLogout />
       <UserProvider user={user}>
         <Sidebar user={user} />
