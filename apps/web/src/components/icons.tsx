@@ -493,6 +493,37 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
+export function CakeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 2c.7 0 .7 1.5 0 2" />
+      <path d="M12 4v3" />
+      <rect x="3" y="7" width="18" height="14" rx="2" />
+      <path d="M3 13.5c1.5-2 3-2 4.5 0s3 2 4.5 0 3 2 4.5 0 3 2 4.5 0" />
+    </Svg>
+  );
+}
+
+export function TableIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18M9 9v12" />
+    </Svg>
+  );
+}
+
+export function PrintIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="6" y="2" width="12" height="7" rx="1" />
+      <rect x="6" y="14" width="12" height="8" rx="1" />
+      <path d="M6 18H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1h-2" />
+      <circle cx="17.5" cy="11.5" r=".75" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 export function MicrosoftLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" {...props}>

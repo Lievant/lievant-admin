@@ -24,6 +24,7 @@ import { CreateVacationDto, UpdateVacationDto } from './dto/vacation.dto';
 import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emergency-contact.dto';
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import { GetBirthdayReportDto } from './dto/get-birthday-report.dto';
 import { EmployeesService } from './employees.service';
 import { DocumentsService, DocumentType } from './documents.service';
 
@@ -53,6 +54,14 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados', 'write')
   create(@Body() dto: CreateEmployeeDto) {
     return this.employeesService.create(dto);
+  }
+
+  @Get('reports/birthdays')
+  @RequirePermission('rrhh', 'empleados.personal', 'read')
+  getBirthdayReport(@Query() dto: GetBirthdayReportDto) {
+    const month = dto.month ?? new Date().getMonth() + 1;
+    const orderBy = dto.orderBy ?? 'date';
+    return this.employeesService.getBirthdayReport(month, orderBy);
   }
 
   @Get(':id')

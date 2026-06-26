@@ -18,6 +18,7 @@ import { PersonalData } from './entities/personal-data.entity';
 import { TerminationData } from './entities/termination-data.entity';
 import { Vacation } from './entities/vacation.entity';
 import { EmployeeListItem, EmployeesPaginatedResult, EmployeeStats } from './interfaces/employee-list-item.interface';
+import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
 
 function toFixed(value: number | undefined, fallback = 0): string {
@@ -355,6 +356,36 @@ export class EmployeesService {
     }
 
     return saved;
+  }
+
+  async getBirthdayReport(month: number, orderBy: 'date' | 'name' | 'area'): Promise<BirthdayReportItem[]> {
+    const ORDER_CLAUSES: Record<string, string> = {
+      date: 'EXTRACT(DAY FROM pd.birth_date)',
+      name: 'e.full_name',
+      area: 'e.area NULLS LAST, e.full_name',
+    };
+    const orderClause = ORDER_CLAUSES[orderBy] ?? ORDER_CLAUSES.date;
+
+    const rows = await this.employeesRepository.manager.query(
+      `SELECT
+        e.id,
+        e.full_name AS "fullName",
+        e.area,
+        e.division,
+        e.position,
+        e.company_code AS "companyCode",
+        e.company_name AS "companyName",
+        TO_CHAR(e.seniority_date, 'YYYY-MM-DD') AS "seniorityDate",
+        TO_CHAR(pd.birth_date, 'MM-DD') AS "birthDate"
+      FROM employees.employee_records e
+      INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
+      WHERE e.deleted_at IS NULL
+        AND pd.birth_date IS NOT NULL
+        AND EXTRACT(MONTH FROM pd.birth_date) = $1
+      ORDER BY ${orderClause}`,
+      [month],
+    );
+    return rows as BirthdayReportItem[];
   }
 
   private toListItem(record: EmployeeRecord): EmployeeListItem {

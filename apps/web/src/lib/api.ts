@@ -1704,3 +1704,26 @@ export function removeUserPermissionOverride(userId: string, permissionId: strin
     method: 'DELETE',
   });
 }
+
+// ---------------------------------------------------------------------------
+// Reportes RRHH
+// ---------------------------------------------------------------------------
+
+export interface BirthdayReportItem {
+  id: string;
+  fullName: string;
+  area: string | null;
+  division: string | null;
+  position: string;
+  companyCode: string;
+  companyName: string;
+  seniorityDate: string | null;
+  birthDate: string; // "MM-DD"
+}
+
+export function getBirthdayReport(
+  month: number,
+  orderBy: 'date' | 'name' | 'area' = 'date',
+): Promise<BirthdayReportItem[]> {
+  return apiFetch<BirthdayReportItem[]>(`/employees/reports/birthdays?month=${month}&orderBy=${orderBy}`);
+}
