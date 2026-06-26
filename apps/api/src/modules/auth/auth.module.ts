@@ -5,9 +5,11 @@ import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { RedisModule } from '../redis/redis.module';
+import { AnnouncementsService } from './announcements.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { CognitoService } from './cognito.service';
+import { Announcement } from './entities/announcement.entity';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { User } from './entities/user.entity';
@@ -22,7 +24,7 @@ import { UsersService } from './users.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, Permission, UserPermission]),
+    TypeOrmModule.forFeature([User, Role, Permission, UserPermission, Announcement]),
     NotificationsModule,
     RedisModule,
     PassportModule,
@@ -39,11 +41,12 @@ import { UsersService } from './users.service';
     AuthService,
     UsersService,
     RolesService,
+    AnnouncementsService,
     CognitoService,
     GraphTokenService,
     JwtStrategy,
     JwtRefreshStrategy,
   ],
-  exports: [AuthService, UsersService, RolesService, GraphTokenService],
+  exports: [AuthService, UsersService, RolesService, AnnouncementsService, GraphTokenService],
 })
 export class AuthModule {}

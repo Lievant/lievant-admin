@@ -10,10 +10,13 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { AnnouncementsService } from './announcements.service';
 import { AuthService, AuthTokens, MeResponse, SsoLoginResult } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { SsoCallbackDto } from './dto/sso-callback.dto';
 import { SetUserPermissionDto } from './dto/set-user-permission.dto';
+import { Announcement } from './entities/announcement.entity';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { UserPermission } from './entities/user-permission.entity';
@@ -29,6 +32,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly rolesService: RolesService,
     private readonly usersService: UsersService,
+    private readonly announcementsService: AnnouncementsService,
   ) {}
 
   @Post('sso/callback')
@@ -92,5 +96,30 @@ export class AuthController {
     @Param('permissionId', ParseUUIDPipe) permissionId: string,
   ): Promise<void> {
     return this.usersService.removeUserPermission(id, permissionId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('announcements')
+  listAnnouncements(): Promise<Announcement[]> {
+    return this.announcementsService.list();
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('announcements')
+  createAnnouncement(
+    @Body() dto: CreateAnnouncementDto,
+    @CurrentUser() user: User,
+  ): Promise<Announcement> {
+    return this.announcementsService.create(dto, user);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Delete('announcements/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteAnnouncement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ): Promise<void> {
+    return this.announcementsService.remove(id, user);
   }
 }

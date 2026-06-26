@@ -400,6 +400,69 @@ export class EmployeesService {
     await this.documentsRepository.softDelete(docId);
   }
 
+  async getDashboard(userId: string): Promise<{
+    todayBookings: { id: string; title: string; roomName: string; startTime: string; endTime: string }[];
+    todayBirthdays: { id: string; fullName: string; area: string | null; division: string | null }[];
+    upcomingBirthdays: {
+      id: string;
+      fullName: string;
+      area: string | null;
+      division: string | null;
+      birthDate: string;
+      daysUntil: number;
+    }[];
+  }> {
+    const [todayBookings, todayBirthdays, upcomingBirthdays] = await Promise.all([
+      this.employeesRepository.manager
+        .query(
+          `SELECT b.id, b.title, r.name AS "roomName",
+                  b.start_time AS "startTime", b.end_time AS "endTime"
+           FROM rooms.bookings b
+           INNER JOIN rooms.rooms r ON r.id = b.room_id
+           WHERE b.user_id = $1
+             AND b.status = 'confirmada'
+             AND b.start_time::date = CURRENT_DATE
+           ORDER BY b.start_time`,
+          [userId],
+        )
+        .catch(() => []),
+
+      this.employeesRepository.manager.query(
+        `SELECT e.id, e.full_name AS "fullName", e.area, e.division
+         FROM employees.employee_records e
+         INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
+         WHERE e.deleted_at IS NULL
+           AND pd.birth_date IS NOT NULL
+           AND EXTRACT(MONTH FROM pd.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
+           AND EXTRACT(DAY   FROM pd.birth_date) = EXTRACT(DAY   FROM CURRENT_DATE)
+         ORDER BY e.full_name`,
+      ),
+
+      this.employeesRepository.manager.query(
+        `WITH days AS (
+           SELECT (CURRENT_DATE + (n || ' days')::INTERVAL)::date AS d
+           FROM generate_series(1, 7) AS n
+         )
+         SELECT DISTINCT
+           e.id,
+           e.full_name AS "fullName",
+           e.area,
+           e.division,
+           TO_CHAR(pd.birth_date, 'MM-DD') AS "birthDate",
+           (d.d - CURRENT_DATE)::int AS "daysUntil"
+         FROM employees.employee_records e
+         INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
+         CROSS JOIN days d
+         WHERE e.deleted_at IS NULL
+           AND pd.birth_date IS NOT NULL
+           AND TO_CHAR(pd.birth_date, 'MM-DD') = TO_CHAR(d.d, 'MM-DD')
+         ORDER BY "daysUntil"`,
+      ),
+    ]);
+
+    return { todayBookings, todayBirthdays, upcomingBirthdays };
+  }
+
   async getBirthdayReport(month: number, orderBy: 'date' | 'name' | 'area'): Promise<BirthdayReportItem[]> {
     const ORDER_CLAUSES: Record<string, string> = {
       date: 'EXTRACT(DAY FROM pd.birth_date)',
