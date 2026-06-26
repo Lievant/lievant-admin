@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { listActiveCatalogItems, type CatalogItem } from '@/lib/api';
+import type { CatalogItem } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
 
 export function UploadEmployeeDocumentDialog({
@@ -21,7 +21,8 @@ export function UploadEmployeeDocumentDialog({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    listActiveCatalogItems('employee_document_types')
+    fetch('/api/catalogs/employee-document-types')
+      .then((r) => r.json() as Promise<CatalogItem[]>)
       .then((items) => {
         setDocTypes(items);
         if (items[0]) setDocType(items[0].name);
