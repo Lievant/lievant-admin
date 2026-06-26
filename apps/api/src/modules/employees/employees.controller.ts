@@ -10,11 +10,18 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ALLOWED_DOCUMENT_MIME_TYPES } from './employee-storage.service';
+import { UploadEmployeeDocumentDto } from './dto/upload-employee-document.dto';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -156,6 +163,42 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados.personal', 'write')
   updateTermination(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTerminationDto) {
     return this.employeesService.updateTermination(id, dto);
+  }
+
+  @Get(':id/documents')
+  @RequirePermission('rrhh', 'empleados.documentos', 'read')
+  getDocuments(@Param('id', ParseUUIDPipe) id: string) {
+    return this.employeesService.getDocuments(id);
+  }
+
+  @Post(':id/documents')
+  @RequirePermission('rrhh', 'empleados.documentos', 'write')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 20 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!(ALLOWED_DOCUMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+          callback(new BadRequestException('Tipo de archivo no permitido'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  uploadDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: UploadEmployeeDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    if (!file) throw new BadRequestException('El archivo es obligatorio');
+    return this.employeesService.uploadDocument(id, file, dto, user.id);
+  }
+
+  @Delete('documents/:docId')
+  @RequirePermission('rrhh', 'empleados.documentos', 'write')
+  removeDocument(@Param('docId', ParseUUIDPipe) docId: string) {
+    return this.employeesService.removeDocument(docId);
   }
 
   @Get(':id/documents/:docType')

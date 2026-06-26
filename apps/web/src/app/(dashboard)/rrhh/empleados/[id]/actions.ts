@@ -7,6 +7,7 @@ import {
   createEmployeeVacation,
   generateEmployeeDocument,
   removeEmployeeContact,
+  removeEmployeeDocument,
   updateEmployee,
   updateEmployeeCompensation,
   updateEmployeeContact,
@@ -143,6 +144,16 @@ export async function updateTerminationAction(
 ): Promise<ActionResult> {
   try {
     await updateEmployeeTermination(employeeId, payload);
+    revalidatePath(`/rrhh/empleados/${employeeId}`);
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function removeEmployeeDocumentAction(employeeId: string, docId: string): Promise<ActionResult> {
+  try {
+    await removeEmployeeDocument(docId);
     revalidatePath(`/rrhh/empleados/${employeeId}`);
     return { success: true };
   } catch (err) {

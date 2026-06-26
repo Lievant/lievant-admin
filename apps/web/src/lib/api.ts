@@ -969,7 +969,8 @@ export type CatalogEntity =
   | 'marital_statuses'
   | 'industries'
   | 'document_types'
-  | 'vendor_categories';
+  | 'vendor_categories'
+  | 'employee_document_types';
 
 export interface CatalogItem {
   id: string;
@@ -1332,6 +1333,30 @@ export function removeVendorDocument(docId: string): Promise<void> {
   return apiFetch<void>(`/vendors/documents/${docId}`, {
     method: 'DELETE',
   });
+}
+
+// ---------------------------------------------------------------------------
+// Documentos adjuntos de empleados
+// ---------------------------------------------------------------------------
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  type: string;
+  name: string;
+  s3Key: string;
+  fileSize: number | null;
+  uploadedAt: string;
+  uploadedBy: string;
+  downloadUrl?: string;
+}
+
+export function listEmployeeDocuments(employeeId: string): Promise<EmployeeDocument[]> {
+  return apiFetch<EmployeeDocument[]>(`/employees/${employeeId}/documents`);
+}
+
+export function removeEmployeeDocument(docId: string): Promise<void> {
+  return apiFetch<void>(`/employees/documents/${docId}`, { method: 'DELETE' });
 }
 
 // ---------------------------------------------------------------------------

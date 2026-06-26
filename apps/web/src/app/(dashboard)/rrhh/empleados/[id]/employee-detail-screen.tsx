@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import type {
   EmployeeCompensation,
   EmployeeDetail,
+  EmployeeDocument,
   EmployeeEmergencyContact,
   EmployeePersonalData,
   EmployeeTermination,
@@ -24,6 +25,7 @@ import { PersonalTab } from './personal-tab';
 import { CompensationTab } from './compensation-tab';
 import { VacationTab } from './vacation-tab';
 import { FamilyTab } from './family-tab';
+import { DocumentsTab } from './documents-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
 
@@ -33,6 +35,7 @@ const ALL_TABS = [
   { id: 'compensation', label: 'Compensación',       badge: 'Nómina' },
   { id: 'vacation',     label: 'Vacaciones',         badge: null },
   { id: 'family',       label: 'Familia y baja',     badge: 'RRHH' },
+  { id: 'documents',    label: 'Documentos',         badge: null },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -45,6 +48,7 @@ interface EmployeeDetailScreenProps {
   contacts: EmployeeEmergencyContact[];
   termination: EmployeeTermination | null;
   catalogs: EmployeeFormCatalogs;
+  documents: EmployeeDocument[];
 }
 
 export function EmployeeDetailScreen({
@@ -55,14 +59,17 @@ export function EmployeeDetailScreen({
   contacts,
   termination,
   catalogs,
+  documents,
 }: EmployeeDetailScreenProps) {
   const canViewPersonal      = usePermission('rrhh', 'empleados.personal');
   const canViewCompensation  = usePermission('rrhh', 'empleados.nomina');
   const canGenerateDocuments = usePermission('rrhh', 'empleados.documentos', 'write');
+  const canViewDocuments     = usePermission('rrhh', 'empleados.documentos');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
     if (tab.id === 'personal' || tab.id === 'vacation' || tab.id === 'family') return canViewPersonal;
     if (tab.id === 'compensation') return canViewCompensation;
+    if (tab.id === 'documents') return canViewDocuments;
     return true; // general
   });
 
@@ -190,6 +197,9 @@ export function EmployeeDetailScreen({
             termination={termination}
             canView={canViewPersonal}
           />
+        )}
+        {effectiveTab === 'documents' && (
+          <DocumentsTab employee={employee} documents={documents} />
         )}
       </div>
 

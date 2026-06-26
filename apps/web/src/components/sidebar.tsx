@@ -19,6 +19,7 @@ import {
   ShieldLockIcon,
   ShoppingCartIcon,
   SpeakerphoneIcon,
+  TableIcon,
   TicketIcon,
   TruckIcon,
   UsersGroupIcon,
@@ -76,6 +77,10 @@ export function Sidebar({ user }: SidebarProps) {
             <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
               <IdCardIcon className="h-4 w-4" />
               Empleados
+            </NavSubLink>
+            <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
+              <TableIcon className="h-4 w-4" />
+              Reportes
             </NavSubLink>
           </SubMenu>
         )}

@@ -1,5 +1,5 @@
 import { ModuleCard, StatCard } from '@/components/dashboard-cards';
-import { IdCardIcon, PeopleIcon, ReportsIcon } from '@/components/icons';
+import { PeopleIcon, ReportsIcon } from '@/components/icons';
 
 export default function RrhhPage() {
   return (
@@ -49,13 +49,6 @@ export default function RrhhPage() {
             href="/rrhh/empleados"
             icon={<PeopleIcon className="h-6 w-6" />}
             accentClass="bg-terracota/10 text-terracota"
-          />
-          <ModuleCard
-            title="Documentos RRHH"
-            description="Generación de contratos y convenios"
-            href="/rrhh/empleados"
-            icon={<IdCardIcon className="h-6 w-6" />}
-            accentClass="bg-purple-50 text-purple-600"
           />
           <ModuleCard
             title="Reportes"
