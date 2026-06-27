@@ -64,6 +64,10 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
       }
     }
 
+    if (config.filter) {
+      Object.assign(payload, config.filter);
+    }
+
     startTransition(async () => {
       const result = item
         ? await updateCatalogItemAction(config.entity, item.id, payload as unknown as CreateCatalogItemPayload)
