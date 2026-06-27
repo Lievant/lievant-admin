@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { EmployeeStatus } from '../constants/employee-status.constant';
 
 export class QueryEmployeesDto {
@@ -33,4 +33,8 @@ export class QueryEmployeesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsIn(['complete', 'incomplete', 'no_required'])
+  docStatus?: string;
 }
