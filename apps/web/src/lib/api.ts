@@ -1794,6 +1794,214 @@ export function removeUserPermissionOverride(userId: string, permissionId: strin
 }
 
 // ---------------------------------------------------------------------------
+// HelpDesk / Soporte TI
+// ---------------------------------------------------------------------------
+
+export type TicketStatus = 'abierto' | 'en_atencion' | 'en_revision' | 'resuelto' | 'cerrado' | 'cancelado';
+export type TicketPriority = 'P1' | 'P2' | 'P3' | 'P4';
+export type TicketImpact = 'alto' | 'medio' | 'bajo';
+
+export interface HelpdeskCategorySummary {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface HelpdeskSubcategorySummary {
+  id: string;
+  categorySlug: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface TicketHistoryEntry {
+  id: string;
+  ticketId: string;
+  userId: string | null;
+  userName: string | null;
+  action: string;
+  oldValue: string | null;
+  newValue: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface TicketSummary {
+  id: string;
+  displayId: string;
+  requesterId: string | null;
+  requesterName: string;
+  requesterArea: string | null;
+  category: string;
+  subcategory: string | null;
+  description: string;
+  impact: string;
+  priority: TicketPriority | null;
+  assignedTo: string | null;
+  status: TicketStatus;
+  requestedAt: string;
+  firstResponseAt: string | null;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  resolutionHours: string | null;
+  slaResponseMet: boolean | null;
+  slaResolutionMet: boolean | null;
+  equipmentId: string | null;
+  isHistorical: boolean;
+}
+
+export interface TicketDetail extends TicketSummary {
+  openedByTd: boolean;
+  openedOnBehalfOf: string | null;
+  behalfReason: string | null;
+  diagnosis: string | null;
+  solution: string | null;
+  internalNotes: string | null;
+  problemStatus: string | null;
+  collaboratorConfirmation: boolean | null;
+  escalatedTo: string | null;
+  escalationReason: string | null;
+  timesReopened: number;
+  estimatedDelivery: string | null;
+  history: TicketHistoryEntry[];
+}
+
+export interface TicketPage {
+  data: TicketSummary[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface HelpdeskStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+  slaResolutionRate: number | null;
+  avgResolutionHours: number | null;
+}
+
+export interface ListTicketsParams {
+  status?: string;
+  priority?: string;
+  category?: string;
+  area?: string;
+  assignedTo?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export interface CreateTicketPayload {
+  category: string;
+  subcategory?: string | undefined;
+  equipmentId?: string | undefined;
+  description: string;
+  impact: TicketImpact;
+  openedByTd?: boolean | undefined;
+  openedOnBehalfOf?: string | undefined;
+  behalfReason?: string | undefined;
+  estimatedDelivery?: string | undefined;
+}
+
+export interface UpdateTicketStatusPayload {
+  status: TicketStatus;
+  notes?: string | undefined;
+}
+
+export interface UpdateTicketPayload {
+  priority?: TicketPriority | undefined;
+  assignedTo?: string | undefined;
+  diagnosis?: string | undefined;
+  solution?: string | undefined;
+  internalNotes?: string | undefined;
+  problemStatus?: string | undefined;
+  subcategory?: string | undefined;
+  collaboratorConfirmation?: boolean | undefined;
+  estimatedDelivery?: string | undefined;
+}
+
+export interface EscalateTicketPayload {
+  escalateTo: string;
+  reason: string;
+}
+
+export function getHelpdeskStats(): Promise<HelpdeskStats> {
+  return apiFetchWithRetry<HelpdeskStats>('/helpdesk/tickets/stats');
+}
+
+export function listTickets(params?: ListTicketsParams): Promise<TicketPage> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set('status', params.status);
+  if (params?.priority) sp.set('priority', params.priority);
+  if (params?.category) sp.set('category', params.category);
+  if (params?.area) sp.set('area', params.area);
+  if (params?.assignedTo) sp.set('assignedTo', params.assignedTo);
+  if (params?.search) sp.set('search', params.search);
+  if (params?.dateFrom) sp.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) sp.set('dateTo', params.dateTo);
+  if (params?.cursor) sp.set('cursor', params.cursor);
+  if (params?.limit != null) sp.set('limit', String(params.limit));
+  const qs = sp.toString();
+  return apiFetchWithRetry<TicketPage>(`/helpdesk/tickets${qs ? `?${qs}` : ''}`);
+}
+
+export function getMyTickets(params?: ListTicketsParams): Promise<TicketPage> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set('status', params.status);
+  if (params?.cursor) sp.set('cursor', params.cursor);
+  if (params?.search) sp.set('search', params.search);
+  const qs = sp.toString();
+  return apiFetchWithRetry<TicketPage>(`/helpdesk/tickets/my${qs ? `?${qs}` : ''}`);
+}
+
+export function getTicket(id: string): Promise<TicketDetail> {
+  return apiFetchWithRetry<TicketDetail>(`/helpdesk/tickets/${id}`);
+}
+
+export function createTicket(payload: CreateTicketPayload): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>('/helpdesk/tickets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTicketStatus(id: string, payload: UpdateTicketStatusPayload): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>(`/helpdesk/tickets/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTicket(id: string, payload: UpdateTicketPayload): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>(`/helpdesk/tickets/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function escalateTicket(id: string, payload: EscalateTicketPayload): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>(`/helpdesk/tickets/${id}/escalate`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getHelpdeskCategories(): Promise<HelpdeskCategorySummary[]> {
+  return apiFetchWithRetry<HelpdeskCategorySummary[]>('/helpdesk/categories');
+}
+
+export function getHelpdeskSubcategories(slug: string): Promise<HelpdeskSubcategorySummary[]> {
+  return apiFetchWithRetry<HelpdeskSubcategorySummary[]>(`/helpdesk/categories/${slug}/subcategories`);
+}
+
+// ---------------------------------------------------------------------------
 // Reportes RRHH
 // ---------------------------------------------------------------------------
 

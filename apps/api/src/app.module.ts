@@ -6,6 +6,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { EmployeesModule } from './modules/employees/employees.module';
+import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 
@@ -35,6 +36,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     CatalogsModule,
     VendorsModule,
     RoomsModule,
+    HelpdeskModule,
   ],
 })
 export class AppModule {}
