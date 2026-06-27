@@ -44,7 +44,7 @@ export function MissingDocsReportScreen({ items }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <div className="mb-6">
         <Link
           href="/finanzas/reportes"

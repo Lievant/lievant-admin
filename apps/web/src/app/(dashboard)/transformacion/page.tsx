@@ -20,7 +20,7 @@ export default async function TransformacionPage() {
   const activos = abiertos + enAtencion + enRevision;
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8">
         <p className="text-sm font-medium uppercase tracking-wide text-terracota">
           Transformación Digital

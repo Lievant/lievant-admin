@@ -89,13 +89,29 @@ export class EmployeesService {
     }
 
     const records = await qb.getMany();
-    const stats = await this.computeStats();
 
     if (filterByDocStatus) {
       const allItems = await this.buildListItems(records);
       const filtered = allItems.filter((item) => item.docStatus === query.docStatus);
-      return { data: filtered, nextCursor: null, stats };
+      const filteredActive = filtered.filter((i) => i.status === EmployeeStatus.ACTIVE).length;
+      const filteredStats: EmployeeStats = {
+        total: filtered.length,
+        active: filteredActive,
+        inactive: filtered.length - filteredActive,
+        companies: new Set(filtered.map((i) => i.companyCode)).size,
+        expiringContracts: filtered.filter((i) => {
+          if (!i.contractEndDate) return false;
+          const end = new Date(i.contractEndDate);
+          const now = new Date();
+          const in30 = new Date();
+          in30.setDate(in30.getDate() + 30);
+          return end >= now && end <= in30;
+        }).length,
+      };
+      return { data: filtered, nextCursor: null, stats: filteredStats };
     }
+
+    const stats = await this.computeStats(query);
 
     const hasMore = records.length > limit;
     const page = hasMore ? records.slice(0, limit) : records;
@@ -587,20 +603,34 @@ export class EmployeesService {
     return rows as ExpiringContractItem[];
   }
 
-  private async computeStats(): Promise<EmployeeStats> {
-    const total = await this.employeesRepository.count();
-    const active = await this.employeesRepository.count({ where: { status: EmployeeStatus.ACTIVE } });
+  private async computeStats(query?: QueryEmployeesDto): Promise<EmployeeStats> {
+    const applyFilters = (qb: ReturnType<typeof this.employeesRepository.createQueryBuilder>) => {
+      if (query?.status) qb.andWhere('employee.status = :status', { status: query.status });
+      if (query?.companyCode) qb.andWhere('employee.companyCode = :companyCode', { companyCode: query.companyCode });
+      if (query?.division) qb.andWhere('employee.division = :division', { division: query.division });
+      if (query?.location) qb.andWhere('employee.location = :location', { location: query.location });
+      if (query?.search) {
+        qb.andWhere(
+          '(employee.fullName ILIKE :search OR employee.displayId ILIKE :search OR employee.corporateEmail ILIKE :search)',
+          { search: `%${query.search}%` },
+        );
+      }
+      return qb;
+    };
+
+    const baseQb = () => applyFilters(this.employeesRepository.createQueryBuilder('employee'));
+
+    const total = await baseQb().getCount();
+    const active = await baseQb().andWhere('employee.status = :activeStatus', { activeStatus: EmployeeStatus.ACTIVE }).getCount();
     const inactive = total - active;
 
-    const companyRows = await this.employeesRepository
-      .createQueryBuilder('employee')
+    const companyRows = await baseQb()
       .select('DISTINCT employee.company_code', 'companyCode')
       .getRawMany<{ companyCode: string }>();
     const companies = companyRows.length;
 
-    const expiringContracts = await this.employeesRepository
-      .createQueryBuilder('employee')
-      .where('employee.contractEndDate IS NOT NULL')
+    const expiringContracts = await baseQb()
+      .andWhere('employee.contractEndDate IS NOT NULL')
       .andWhere(`employee.contractEndDate <= (CURRENT_DATE + INTERVAL '30 days')`)
       .andWhere('employee.contractEndDate >= CURRENT_DATE')
       .getCount();

@@ -59,7 +59,7 @@ export default async function SalasPage({ searchParams }: SalasPageProps) {
   const isAdmin = Boolean(adminScope?.isGlobalAdmin || (adminScope?.officeIds.length ?? 0) > 0);
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <RoomsScreen
         countries={countries ?? []}
         cities={cities ?? []}

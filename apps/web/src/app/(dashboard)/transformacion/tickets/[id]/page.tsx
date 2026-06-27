@@ -43,7 +43,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
   const isOwner = currentUser?.id === ticket.requesterId;
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <TicketDetailScreen ticket={ticket} isTd={isTd} isOwner={isOwner} />
     </div>
   );
