@@ -188,6 +188,8 @@ export interface ClientAccountManagerSummary {
   name: string;
 }
 
+export type DocStatus = 'complete' | 'incomplete' | 'no_required';
+
 export interface ClientListItem {
   id: string;
   displayId: string;
@@ -197,7 +199,7 @@ export interface ClientListItem {
   accountManager: ClientAccountManagerSummary | null;
   companiesCount: number;
   brandsCount: number;
-  missingDocumentsCount: number;
+  docStatus: DocStatus;
   country: string | null;
   city: string | null;
   createdAt: string;
@@ -464,6 +466,24 @@ export function updateClientFinancial(clientId: string, payload: UpdateFinancial
 
 export function listClientDocuments(clientId: string): Promise<ClientDocumentSummary[]> {
   return apiFetchWithRetry<ClientDocumentSummary[]>(`/clients/${clientId}/documents`);
+}
+
+export function listClientDocumentTypes(): Promise<CatalogItem[]> {
+  return apiFetchWithRetry<CatalogItem[]>('/catalogs/document-types/active?appliesTo=client');
+}
+
+export interface MissingDocumentReportItem {
+  clientId: string;
+  displayId: string;
+  companyName: string;
+  requiredDocs: string[];
+  uploadedDocs: string[];
+  missingDocs: string[];
+  completionPct: number;
+}
+
+export function getMissingDocumentsReport(): Promise<MissingDocumentReportItem[]> {
+  return apiFetchWithRetry<MissingDocumentReportItem[]>('/clients/reports/missing-documents');
 }
 
 export function removeClientDocument(docId: string): Promise<void> {
@@ -989,12 +1009,27 @@ export type CatalogEntity =
   | 'marital_statuses'
   | 'industries'
   | 'document_types'
+  | 'document_types_client'
+  | 'document_types_vendor'
+  | 'document_types_employee'
   | 'vendor_categories'
   | 'employee_document_types';
+
+// Virtual entities that map to document_types filtered by applies_to
+const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
+  document_types_client: 'client',
+  document_types_vendor: 'vendor',
+  document_types_employee: 'employee',
+};
+
+function backendEntity(entity: CatalogEntity): string {
+  return entity in DOCUMENT_TYPE_FILTERS ? 'document_types' : entity;
+}
 
 export interface CatalogItem {
   id: string;
   name: string;
+  description?: string | null;
   code?: string | null;
   country?: string | null;
   companyCode?: string | null;
@@ -1009,6 +1044,7 @@ export interface CatalogItem {
 
 export interface CreateCatalogItemPayload {
   name: string;
+  description?: string;
   code?: string;
   country?: string;
   companyCode?: string;
@@ -1022,15 +1058,19 @@ export interface CreateCatalogItemPayload {
 export type UpdateCatalogItemPayload = Partial<CreateCatalogItemPayload>;
 
 export function listCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
+  const filter = DOCUMENT_TYPE_FILTERS[entity];
+  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document-types?appliesTo=${filter}`);
   return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}`);
 }
 
 export function listActiveCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
+  const filter = DOCUMENT_TYPE_FILTERS[entity];
+  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document-types/active?appliesTo=${filter}`);
   return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}/active`);
 }
 
 export function createCatalogItem(entity: CatalogEntity, payload: CreateCatalogItemPayload): Promise<CatalogItem> {
-  return apiFetchWithRetry<CatalogItem>(`/catalogs/${entity}`, {
+  return apiFetchWithRetry<CatalogItem>(`/catalogs/${backendEntity(entity)}`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
@@ -1041,14 +1081,14 @@ export function updateCatalogItem(
   id: string,
   payload: UpdateCatalogItemPayload,
 ): Promise<CatalogItem> {
-  return apiFetchWithRetry<CatalogItem>(`/catalogs/${entity}/${id}`, {
+  return apiFetchWithRetry<CatalogItem>(`/catalogs/${backendEntity(entity)}/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
 
 export function deactivateCatalogItem(entity: CatalogEntity, id: string): Promise<void> {
-  return apiFetchWithRetry<void>(`/catalogs/${entity}/${id}`, {
+  return apiFetchWithRetry<void>(`/catalogs/${backendEntity(entity)}/${id}`, {
     method: 'DELETE',
   });
 }

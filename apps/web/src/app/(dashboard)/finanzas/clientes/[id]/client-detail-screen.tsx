@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { ClientDetail, ClientDocumentSummary, FinancialData, UserSummary } from '@/lib/api';
+import type { CatalogItem, ClientDetail, ClientDocumentSummary, FinancialData, UserSummary } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import {
   CLIENT_STATUS_BADGE_STYLES,
@@ -34,6 +34,7 @@ interface ClientDetailScreenProps {
   financial: FinancialData | null;
   canViewFinancial: boolean;
   accountManagers: UserSummary[];
+  documentTypes: CatalogItem[];
 }
 
 export function ClientDetailScreen({
@@ -42,6 +43,7 @@ export function ClientDetailScreen({
   financial,
   canViewFinancial,
   accountManagers,
+  documentTypes,
 }: ClientDetailScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [isEditOpen, setEditOpen] = useState(false);
@@ -140,7 +142,7 @@ export function ClientDetailScreen({
         {activeTab === 'financial' && (
           <FinancialTab client={client} financial={financial} canView={canViewFinancial} />
         )}
-        {activeTab === 'documents' && <DocumentsTab client={client} documents={documents} />}
+        {activeTab === 'documents' && <DocumentsTab client={client} documents={documents} documentTypes={documentTypes} />}
       </div>
 
       {isEditOpen && (

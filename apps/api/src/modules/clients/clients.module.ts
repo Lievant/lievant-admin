@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
+import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { DocumentStorageService } from './document-storage.service';
@@ -14,7 +15,17 @@ import { Group } from './entities/group.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([ClientRecord, Group, Company, Brand, FinancialData, ClientDocument, Contact, User]),
+    TypeOrmModule.forFeature([
+      ClientRecord,
+      Group,
+      Company,
+      Brand,
+      FinancialData,
+      ClientDocument,
+      Contact,
+      User,
+      CatalogDocumentType,
+    ]),
   ],
   controllers: [ClientsController],
   providers: [ClientsService, DocumentStorageService],

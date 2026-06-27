@@ -5,6 +5,7 @@ import {
   getClientFinancial,
   getCurrentUser,
   listClientDocuments,
+  listClientDocumentTypes,
   listUsers,
   type ClientDetail,
 } from '@/lib/api';
@@ -51,10 +52,11 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
   const roleNames = currentUser?.roles.map((role) => role.name) ?? [];
   const canViewFinancial = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_FINANZAS');
 
-  const [documents, financial, accountManagers] = await Promise.all([
+  const [documents, financial, accountManagers, documentTypes] = await Promise.all([
     safe(listClientDocuments(id)),
     canViewFinancial ? safe(getClientFinancial(id)) : Promise.resolve(null),
     safe(listUsers()),
+    safe(listClientDocumentTypes()),
   ]);
 
   return (
@@ -65,6 +67,7 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
         financial={financial}
         canViewFinancial={canViewFinancial}
         accountManagers={accountManagers ?? []}
+        documentTypes={documentTypes ?? []}
       />
     </div>
   );

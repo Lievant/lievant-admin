@@ -15,10 +15,12 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRole } from '../auth/constants/roles.constant';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ClientsService } from './clients.service';
 import { ALLOWED_DOCUMENT_MIME_TYPES } from './document-storage.service';
@@ -44,6 +46,13 @@ export class ClientsController {
   @Post()
   create(@Body() dto: CreateClientDto) {
     return this.clientsService.create(dto);
+  }
+
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes', 'read')
+  @Get('reports/missing-documents')
+  getMissingDocumentsReport() {
+    return this.clientsService.getMissingDocumentsReport();
   }
 
   @Get(':id')

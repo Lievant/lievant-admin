@@ -258,13 +258,24 @@ export function ClientsScreen({
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {client.missingDocumentsCount > 0 ? (
-                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-600">
-                        {client.missingDocumentsCount} faltante{client.missingDocumentsCount === 1 ? '' : 's'}
-                      </span>
-                    ) : (
+                    {client.docStatus === 'complete' && (
                       <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-600">
                         Completo
+                      </span>
+                    )}
+                    {client.docStatus === 'incomplete' && (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-600">
+                        Incompleto
+                      </span>
+                    )}
+                    {client.docStatus === 'no_required' && (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">
+                        Sin requeridos
+                      </span>
+                    )}
+                    {!client.docStatus && (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">
+                        —
                       </span>
                     )}
                   </td>
