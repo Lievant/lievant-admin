@@ -45,7 +45,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   return (
     <div className="mx-auto max-w-7xl px-8 py-10">
       <ClientsScreen
-        page={clientsPage ?? { data: [], nextCursor: null }}
+        page={clientsPage ?? { data: [], nextCursor: null, total: 0 }}
         industries={industries ?? []}
         apiUnavailable={apiUnavailable}
         filters={{ status: status ?? '', docStatus: docStatus ?? '', industry: industry ?? '', search: search ?? '' }}

@@ -20,4 +20,5 @@ export interface ClientListItem {
 export interface PaginatedResult<T> {
   data: T[];
   nextCursor: string | null;
+  total: number;
 }

@@ -4,13 +4,13 @@ import { getMissingDocumentsReport, listClients, listVendors } from '@/lib/api';
 
 export default async function FinanzasPage() {
   const [clientsResult, missingDocsResult, vendorsResult] = await Promise.allSettled([
-    listClients({ status: 'active', limit: 1000 }),
+    listClients({ status: 'active' }),
     getMissingDocumentsReport(),
     listVendors({ status: 'activo' }),
   ]);
 
   const activeClients =
-    clientsResult.status === 'fulfilled' ? clientsResult.value.data.length : null;
+    clientsResult.status === 'fulfilled' ? clientsResult.value.total : null;
   const missingDocs =
     missingDocsResult.status === 'fulfilled' ? missingDocsResult.value.length : null;
   const activeVendors =
@@ -32,10 +32,10 @@ export default async function FinanzasPage() {
           description="Total en cartera"
         />
         <StatCard
-          label="Sin docs completos"
+          label="Sin documentos completos"
           value={missingDocs ?? '—'}
           href="/finanzas/reportes/documentos-faltantes"
-          description="Documentos incompletos"
+          description="Clientes con expediente incompleto"
         />
         <StatCard
           label="Proveedores activos"
