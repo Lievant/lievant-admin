@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import type { ClientDetail, ClientDocumentSummary } from '@/lib/api';
+import type { CatalogItem, ClientDetail, ClientDocumentSummary } from '@/lib/api';
 import { AlertIcon, CheckIcon, ClockIcon, CloseIcon, DownloadIcon, EyeIcon, PlusIcon } from '@/components/icons';
 import { DOCUMENT_STATUS_BADGE_STYLES, DOCUMENT_STATUS_LABELS, DOCUMENT_TYPE_LABELS } from '../constants';
 import { removeDocumentAction } from './actions';
@@ -14,7 +14,15 @@ function StatusIcon({ status, className }: { status: ClientDocumentSummary['stat
   return <AlertIcon className={className} />;
 }
 
-export function DocumentsTab({ client, documents }: { client: ClientDetail; documents: ClientDocumentSummary[] }) {
+export function DocumentsTab({
+  client,
+  documents,
+  documentTypes,
+}: {
+  client: ClientDetail;
+  documents: ClientDocumentSummary[];
+  documentTypes: CatalogItem[];
+}) {
   const [isUploadOpen, setUploadOpen] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +138,9 @@ export function DocumentsTab({ client, documents }: { client: ClientDetail; docu
         </table>
       </div>
 
-      {isUploadOpen && <UploadDocumentDialog clientId={client.id} onClose={() => setUploadOpen(false)} />}
+      {isUploadOpen && (
+        <UploadDocumentDialog clientId={client.id} documentTypes={documentTypes} onClose={() => setUploadOpen(false)} />
+      )}
     </div>
   );
 }

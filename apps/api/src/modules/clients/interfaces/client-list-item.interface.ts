@@ -1,5 +1,7 @@
 import { ClientStatus } from '../constants/client-status.constant';
 
+export type DocStatus = 'complete' | 'incomplete' | 'no_required';
+
 export interface ClientListItem {
   id: string;
   displayId: string;
@@ -9,7 +11,7 @@ export interface ClientListItem {
   accountManager: { id: string; name: string } | null;
   companiesCount: number;
   brandsCount: number;
-  missingDocumentsCount: number;
+  docStatus: DocStatus;
   country: string | null;
   city: string | null;
   createdAt: Date;

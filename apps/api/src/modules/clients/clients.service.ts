@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { ClientStatus } from './constants/client-status.constant';
 import { DocumentStatus } from './constants/document-status.constant';
 import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
@@ -20,8 +21,18 @@ import { Company } from './entities/company.entity';
 import { Contact } from './entities/contact.entity';
 import { FinancialData } from './entities/financial-data.entity';
 import { Group } from './entities/group.entity';
-import { ClientListItem, PaginatedResult } from './interfaces/client-list-item.interface';
+import { ClientListItem, DocStatus, PaginatedResult } from './interfaces/client-list-item.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
+
+export interface MissingDocumentReportItem {
+  clientId: string;
+  displayId: string;
+  companyName: string;
+  requiredDocs: string[];
+  uploadedDocs: string[];
+  missingDocs: string[];
+  completionPct: number;
+}
 
 export interface ClientDetail extends ClientRecord {
   companies: Company[];
@@ -44,6 +55,8 @@ export class ClientsService {
     @InjectRepository(ClientDocument) private readonly documentsRepository: Repository<ClientDocument>,
     @InjectRepository(Contact) private readonly contactsRepository: Repository<Contact>,
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
+    @InjectRepository(CatalogDocumentType)
+    private readonly catalogDocTypesRepository: Repository<CatalogDocumentType>,
     private readonly documentStorageService: DocumentStorageService,
   ) {}
 
@@ -90,7 +103,7 @@ export class ClientsService {
     const hasMore = records.length > limit;
     const page = hasMore ? records.slice(0, limit) : records;
 
-    const data = await Promise.all(page.map((record) => this.toListItem(record)));
+    const data = await this.buildListItems(page);
 
     const last = page[page.length - 1];
     const nextCursor = hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null;
@@ -409,36 +422,161 @@ export class ClientsService {
     await this.contactsRepository.softDelete(contactId);
   }
 
-  private async toListItem(record: ClientRecord): Promise<ClientListItem> {
-    const companyIds = record.groupId
-      ? (await this.companiesRepository.find({ where: { groupId: record.groupId } })).map((company) => company.id)
-      : [record.primaryCompanyId];
+  private async buildListItems(records: ClientRecord[]): Promise<ClientListItem[]> {
+    if (records.length === 0) return [];
 
-    const [brandsCount, missingDocumentsCount] = await Promise.all([
-      companyIds.length ? this.brandsRepository.count({ where: { companyId: In(companyIds) } }) : 0,
-      this.documentsRepository.count({ where: { clientRecordId: record.id, status: DocumentStatus.MISSING } }),
-    ]);
+    // Load required client doc type names once
+    const requiredDocTypes = await this.catalogDocTypesRepository.find({
+      where: { appliesTo: 'client', isRequired: true, isActive: true },
+      select: { name: true },
+    });
+    const requiredNames = new Set(requiredDocTypes.map((dt) => dt.name));
 
-    return {
-      id: record.id,
-      displayId: record.displayId,
-      status: record.status,
-      group: record.group ? { id: record.group.id, name: record.group.name } : null,
-      primaryCompany: {
-        id: record.primaryCompany.id,
-        name: record.primaryCompany.name,
-        industry: record.primaryCompany.industry,
-      },
-      accountManager: record.accountManager
-        ? { id: record.accountManager.id, name: record.accountManager.name }
-        : null,
-      companiesCount: companyIds.length,
-      brandsCount,
-      missingDocumentsCount,
-      country: record.country,
-      city: record.city,
-      createdAt: record.createdAt,
-    };
+    // Load all uploaded doc types for this page of clients in one query
+    const clientIds = records.map((r) => r.id);
+    const allDocs =
+      clientIds.length > 0
+        ? await this.documentsRepository.find({
+            where: { clientRecordId: In(clientIds) },
+            select: { clientRecordId: true, documentType: true },
+          })
+        : [];
+
+    const uploadedByClient = new Map<string, Set<string>>();
+    for (const doc of allDocs) {
+      if (!uploadedByClient.has(doc.clientRecordId)) {
+        uploadedByClient.set(doc.clientRecordId, new Set());
+      }
+      uploadedByClient.get(doc.clientRecordId)!.add(doc.documentType);
+    }
+
+    // Load brands counts per group/company in batch
+    const groupIds = records.filter((r) => r.groupId).map((r) => r.groupId as string);
+    const soloCompanyIds = records.filter((r) => !r.groupId).map((r) => r.primaryCompanyId);
+
+    const groupCompanies =
+      groupIds.length > 0
+        ? await this.companiesRepository.find({ where: { groupId: In(groupIds) }, select: { id: true, groupId: true } })
+        : [];
+    const allCompanyIdsForBrands = [
+      ...groupCompanies.map((c) => c.id),
+      ...soloCompanyIds,
+    ];
+    const brands =
+      allCompanyIdsForBrands.length > 0
+        ? await this.brandsRepository.find({
+            where: { companyId: In(allCompanyIdsForBrands) },
+            select: { id: true, companyId: true },
+          })
+        : [];
+
+    // Group companies and brands by client
+    const companiesByGroupId = new Map<string, string[]>();
+    for (const c of groupCompanies) {
+      if (c.groupId) {
+        if (!companiesByGroupId.has(c.groupId)) companiesByGroupId.set(c.groupId, []);
+        companiesByGroupId.get(c.groupId)!.push(c.id);
+      }
+    }
+    const brandsByCompanyId = new Map<string, number>();
+    for (const b of brands) {
+      brandsByCompanyId.set(b.companyId, (brandsByCompanyId.get(b.companyId) ?? 0) + 1);
+    }
+
+    return records.map((record) => {
+      const companyIds = record.groupId
+        ? (companiesByGroupId.get(record.groupId) ?? [record.primaryCompanyId])
+        : [record.primaryCompanyId];
+
+      const brandsCount = companyIds.reduce((sum, id) => sum + (brandsByCompanyId.get(id) ?? 0), 0);
+
+      const uploaded = uploadedByClient.get(record.id) ?? new Set<string>();
+      const docStatus = this.computeDocStatus(requiredNames, uploaded);
+
+      return {
+        id: record.id,
+        displayId: record.displayId,
+        status: record.status,
+        group: record.group ? { id: record.group.id, name: record.group.name } : null,
+        primaryCompany: {
+          id: record.primaryCompany.id,
+          name: record.primaryCompany.name,
+          industry: record.primaryCompany.industry,
+        },
+        accountManager: record.accountManager
+          ? { id: record.accountManager.id, name: record.accountManager.name }
+          : null,
+        companiesCount: companyIds.length,
+        brandsCount,
+        docStatus,
+        country: record.country,
+        city: record.city,
+        createdAt: record.createdAt,
+      };
+    });
+  }
+
+  private computeDocStatus(requiredNames: Set<string>, uploaded: Set<string>): DocStatus {
+    if (requiredNames.size === 0) return 'no_required';
+    for (const name of requiredNames) {
+      if (!uploaded.has(name)) return 'incomplete';
+    }
+    return 'complete';
+  }
+
+  async getMissingDocumentsReport(): Promise<MissingDocumentReportItem[]> {
+    const requiredDocTypes = await this.catalogDocTypesRepository.find({
+      where: { appliesTo: 'client', isRequired: true, isActive: true },
+      order: { sortOrder: 'ASC', name: 'ASC' },
+    });
+
+    if (requiredDocTypes.length === 0) return [];
+
+    const requiredNames = requiredDocTypes.map((dt) => dt.name);
+
+    const allClients = await this.clientsRepository.find({
+      relations: { primaryCompany: true },
+      order: { displayId: 'ASC' },
+    });
+
+    if (allClients.length === 0) return [];
+
+    const allDocs = await this.documentsRepository.find({
+      where: { clientRecordId: In(allClients.map((c) => c.id)) },
+      select: { clientRecordId: true, documentType: true },
+    });
+
+    const uploadedByClient = new Map<string, Set<string>>();
+    for (const doc of allDocs) {
+      if (!uploadedByClient.has(doc.clientRecordId)) {
+        uploadedByClient.set(doc.clientRecordId, new Set());
+      }
+      uploadedByClient.get(doc.clientRecordId)!.add(doc.documentType);
+    }
+
+    const result: MissingDocumentReportItem[] = [];
+
+    for (const client of allClients) {
+      const uploaded = uploadedByClient.get(client.id) ?? new Set<string>();
+      const uploadedDocs = requiredNames.filter((n) => uploaded.has(n));
+      const missingDocs = requiredNames.filter((n) => !uploaded.has(n));
+
+      if (missingDocs.length === 0) continue;
+
+      const completionPct = Math.round((uploadedDocs.length / requiredNames.length) * 100);
+
+      result.push({
+        clientId: client.id,
+        displayId: client.displayId,
+        companyName: client.primaryCompany.name,
+        requiredDocs: requiredNames,
+        uploadedDocs,
+        missingDocs,
+        completionPct,
+      });
+    }
+
+    return result.sort((a, b) => a.completionPct - b.completionPct);
   }
 
   private async getCompaniesAndBrands(record: ClientRecord): Promise<{ companies: Company[]; brands: Brand[] }> {

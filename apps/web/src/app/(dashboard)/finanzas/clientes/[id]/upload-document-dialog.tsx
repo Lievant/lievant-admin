@@ -2,13 +2,21 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import type { CatalogItem } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
-import { DOCUMENT_TYPES, DOCUMENT_TYPE_LABELS } from '../constants';
 import { TextField } from '../form-field';
 
-export function UploadDocumentDialog({ clientId, onClose }: { clientId: string; onClose: () => void }) {
+export function UploadDocumentDialog({
+  clientId,
+  documentTypes,
+  onClose,
+}: {
+  clientId: string;
+  documentTypes: CatalogItem[];
+  onClose: () => void;
+}) {
   const router = useRouter();
-  const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES[0]);
+  const [documentType, setDocumentType] = useState<string>(documentTypes[0]?.name ?? '');
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -85,9 +93,9 @@ export function UploadDocumentDialog({ clientId, onClose }: { clientId: string; 
                 onChange={(e) => setDocumentType(e.target.value)}
                 className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
               >
-                {DOCUMENT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {DOCUMENT_TYPE_LABELS[type]}
+                {documentTypes.map((dt) => (
+                  <option key={dt.id} value={dt.name}>
+                    {dt.name}
                   </option>
                 ))}
               </select>

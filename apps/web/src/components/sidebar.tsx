@@ -65,6 +65,10 @@ export function Sidebar({ user }: SidebarProps) {
               <TruckIcon className="h-4 w-4" />
               Proveedores
             </NavSubLink>
+            <NavSubLink href="/finanzas/reportes" active={pathname.startsWith('/finanzas/reportes')}>
+              <TableIcon className="h-4 w-4" />
+              Reportes
+            </NavSubLink>
           </SubMenu>
         )}
 
