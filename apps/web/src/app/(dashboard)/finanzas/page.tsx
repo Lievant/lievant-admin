@@ -1,7 +1,21 @@
 import { ModuleCard, StatCard } from '@/components/dashboard-cards';
-import { BuildingIcon, ReportMoneyIcon, TruckIcon } from '@/components/icons';
+import { BuildingIcon, TableIcon, TruckIcon } from '@/components/icons';
+import { getMissingDocumentsReport, listClients, listVendors } from '@/lib/api';
 
-export default function FinanzasPage() {
+export default async function FinanzasPage() {
+  const [clientsResult, missingDocsResult, vendorsResult] = await Promise.allSettled([
+    listClients({ status: 'active', limit: 1000 }),
+    getMissingDocumentsReport(),
+    listVendors({ status: 'activo' }),
+  ]);
+
+  const activeClients =
+    clientsResult.status === 'fulfilled' ? clientsResult.value.data.length : null;
+  const missingDocs =
+    missingDocsResult.status === 'fulfilled' ? missingDocsResult.value.length : null;
+  const activeVendors =
+    vendorsResult.status === 'fulfilled' ? vendorsResult.value.length : null;
+
   return (
     <div className="mx-auto max-w-7xl px-8 py-10">
       <header className="mb-8">
@@ -13,27 +27,27 @@ export default function FinanzasPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="Clientes activos"
-          value="—"
-          href="/finanzas/clientes"
+          value={activeClients ?? '—'}
+          href="/finanzas/clientes?status=active"
           description="Total en cartera"
         />
         <StatCard
-          label="Facturas pendientes"
-          value="—"
-          href="/finanzas/proveedores"
-          description="Por liquidar"
-        />
-        <StatCard
-          label="OC abiertas"
-          value="—"
-          href="/finanzas/proveedores"
-          description="Órdenes de compra"
+          label="Sin docs completos"
+          value={missingDocs ?? '—'}
+          href="/finanzas/reportes/documentos-faltantes"
+          description="Documentos incompletos"
         />
         <StatCard
           label="Proveedores activos"
-          value="—"
+          value={activeVendors ?? '—'}
           href="/finanzas/proveedores"
           description="En padrón"
+        />
+        <StatCard
+          label="OC abiertas"
+          value={0}
+          href="/finanzas/proveedores"
+          description="Próximamente"
         />
       </div>
 
@@ -58,10 +72,10 @@ export default function FinanzasPage() {
             accentClass="bg-amber-50 text-amber-600"
           />
           <ModuleCard
-            title="Reportes financieros"
-            description="Estados de cuenta y resúmenes"
+            title="Reportes"
+            description="Documentos faltantes y análisis de cartera"
             href="/finanzas/reportes"
-            icon={<ReportMoneyIcon className="h-6 w-6" />}
+            icon={<TableIcon className="h-6 w-6" />}
             accentClass="bg-emerald-50 text-emerald-600"
           />
         </div>

@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { ClientStatus } from '../constants/client-status.constant';
+import { DocStatus } from '../interfaces/client-list-item.interface';
 
 export class QueryClientsDto {
   @IsOptional()
@@ -29,4 +30,8 @@ export class QueryClientsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsIn(['complete', 'incomplete', 'no_required'])
+  docStatus?: DocStatus;
 }
