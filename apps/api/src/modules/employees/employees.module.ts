@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
+import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { DocumentsService } from './documents.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
@@ -24,6 +25,7 @@ import { Vacation } from './entities/vacation.entity';
       TerminationData,
       User,
       EmployeeDocument,
+      CatalogDocumentType,
     ]),
   ],
   controllers: [EmployeesController],

@@ -1,4 +1,4 @@
-import { listEmployees, type EmployeeStatus, type ListEmployeesParams } from '@/lib/api';
+import { listEmployees, type DocStatus, type EmployeeStatus, type ListEmployeesParams } from '@/lib/api';
 import { loadEmployeeFilterCatalogs } from './catalog-data';
 import { EmployeesScreen } from './employees-screen';
 
@@ -28,6 +28,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
   const division = asString(params.division);
   const location = asString(params.location);
   const search = asString(params.search);
+  const docStatus = asString(params.docStatus) as DocStatus | undefined;
   const cursors = asString(params.cursors);
 
   const query: ListEmployeesParams = { limit: 10 };
@@ -37,6 +38,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
   if (division) query.division = division;
   if (location) query.location = location;
   if (search) query.search = search;
+  if (docStatus) query.docStatus = docStatus;
 
   const [employeesPage, catalogs] = await Promise.all([safe(listEmployees(query)), loadEmployeeFilterCatalogs()]);
   const apiUnavailable = employeesPage === null;
@@ -58,6 +60,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
           division: division ?? '',
           location: location ?? '',
           search: search ?? '',
+          docStatus: docStatus ?? '',
         }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}

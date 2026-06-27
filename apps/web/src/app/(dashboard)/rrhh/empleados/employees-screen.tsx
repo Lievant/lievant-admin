@@ -25,6 +25,7 @@ interface EmployeesFilters {
   division: string;
   location: string;
   search: string;
+  docStatus: string;
 }
 
 interface EmployeesScreenProps {
@@ -61,6 +62,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
     if (filters.division) sp.set('division', filters.division);
     if (filters.location) sp.set('location', filters.location);
     if (filters.search) sp.set('search', filters.search);
+    if (filters.docStatus) sp.set('docStatus', filters.docStatus);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -98,7 +100,8 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
     router.push(`/rrhh/empleados?${sp.toString()}`);
   }
 
-  const hasFilters = Boolean(filters.status || filters.companyCode || filters.division || filters.location || filters.search);
+  const hasFilters = Boolean(filters.status || filters.companyCode || filters.division || filters.location || filters.search || filters.docStatus);
+  const hasPagination = !filters.docStatus;
   const isFirstPage = cursorsStack.length === 0 && !cursor;
 
   return (
@@ -198,6 +201,17 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
             </option>
           ))}
         </select>
+
+        <select
+          value={filters.docStatus}
+          onChange={(e) => updateParams({ docStatus: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+        >
+          <option value="">Documentos: Todos</option>
+          <option value="complete">Completos</option>
+          <option value="incomplete">Incompletos</option>
+          <option value="no_required">Sin requeridos</option>
+        </select>
       </div>
 
       {/* Table */}
@@ -213,6 +227,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
               <th className="px-4 py-3">Ubicación</th>
               <th className="px-4 py-3">Modalidad</th>
               <th className="px-4 py-3">Antigüedad</th>
+              <th className="px-4 py-3">Documentos</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3">Acciones</th>
             </tr>
@@ -220,7 +235,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
           <tbody>
             {page.data.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-4 py-10 text-center text-sm text-slate-400">
                   {hasFilters
                     ? 'No se encontraron empleados con los filtros seleccionados.'
                     : 'Aún no hay empleados registrados.'}
@@ -294,6 +309,23 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
                     </div>
                   </td>
                   <td className="px-4 py-3">
+                    {employee.docStatus === 'complete' && (
+                      <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">
+                        Completo
+                      </span>
+                    )}
+                    {employee.docStatus === 'incomplete' && (
+                      <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-700">
+                        Incompleto
+                      </span>
+                    )}
+                    {employee.docStatus === 'no_required' && (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">
+                        Sin requeridos
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
                     <span
                       className={cn(
                         'rounded-full px-2 py-1 text-xs font-semibold',
@@ -317,28 +349,30 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
           </tbody>
         </table>
 
-        {/* Pager */}
-        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
-          <span>Página {cursorsStack.length + 1}</span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={isFirstPage}
-              onClick={goPrev}
-              className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
-            >
-              ←
-            </button>
-            <button
-              type="button"
-              disabled={!page.nextCursor}
-              onClick={goNext}
-              className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
-            >
-              →
-            </button>
+        {/* Pager — hidden when docStatus filter is active (all results returned) */}
+        {hasPagination && (
+          <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+            <span>Página {cursorsStack.length + 1}</span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={isFirstPage}
+                onClick={goPrev}
+                className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
+              >
+                ←
+              </button>
+              <button
+                type="button"
+                disabled={!page.nextCursor}
+                onClick={goNext}
+                className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
+              >
+                →
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

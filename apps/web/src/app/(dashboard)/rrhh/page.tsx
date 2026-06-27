@@ -1,7 +1,33 @@
 import { ModuleCard, StatCard } from '@/components/dashboard-cards';
 import { PeopleIcon, ReportsIcon } from '@/components/icons';
+import { getBirthdayReport, getExpiringContracts, listEmployees } from '@/lib/api';
 
-export default function RrhhPage() {
+export default async function RrhhPage() {
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+
+  const [activeEmployeesResult, birthdaysResult, expiringResult, newHiresResult] = await Promise.allSettled([
+    listEmployees({ status: 'active', limit: 1 }),
+    getBirthdayReport(currentMonth, 'date'),
+    getExpiringContracts(30),
+    listEmployees({ limit: 100 }),
+  ]);
+
+  const activeEmployees =
+    activeEmployeesResult.status === 'fulfilled' ? activeEmployeesResult.value.stats.active : null;
+  const birthdaysThisMonth =
+    birthdaysResult.status === 'fulfilled' ? birthdaysResult.value.length : null;
+  const expiringContracts =
+    expiringResult.status === 'fulfilled' ? expiringResult.value.length : null;
+
+  const newHiresThisMonth =
+    newHiresResult.status === 'fulfilled'
+      ? newHiresResult.value.data.filter((e) => {
+          const created = new Date(e.createdAt);
+          return created.getFullYear() === today.getFullYear() && created.getMonth() === today.getMonth();
+        }).length
+      : null;
+
   return (
     <div className="mx-auto max-w-7xl px-8 py-10">
       <header className="mb-8">
@@ -13,25 +39,25 @@ export default function RrhhPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label="Empleados activos"
-          value="—"
-          href="/rrhh/empleados"
+          value={activeEmployees ?? '—'}
+          href="/rrhh/empleados?status=active"
           description="Headcount total"
         />
         <StatCard
           label="Cumpleaños este mes"
-          value="—"
-          href="/rrhh/empleados"
+          value={birthdaysThisMonth ?? '—'}
+          href="/rrhh/reportes/cumpleanos"
           description="Colaboradores"
         />
         <StatCard
           label="Contratos por vencer"
-          value="—"
-          href="/rrhh/empleados"
+          value={expiringContracts ?? '—'}
+          href="/rrhh/reportes/contratos"
           description="Próximos 30 días"
         />
         <StatCard
           label="Nuevos ingresos"
-          value="—"
+          value={newHiresThisMonth ?? '—'}
           href="/rrhh/empleados"
           description="Este mes"
         />

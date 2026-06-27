@@ -1,7 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { EmployeeStatus } from './constants/employee-status.constant';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -19,7 +20,7 @@ import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
 import { TerminationData } from './entities/termination-data.entity';
 import { Vacation } from './entities/vacation.entity';
-import { EmployeeListItem, EmployeesPaginatedResult, EmployeeStats } from './interfaces/employee-list-item.interface';
+import { DocStatus, EmployeeListItem, EmployeesPaginatedResult, EmployeeStats, ExpiringContractItem } from './interfaces/employee-list-item.interface';
 import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
 import { EmployeeStorageService } from './employee-storage.service';
@@ -39,17 +40,18 @@ export class EmployeesService {
     @InjectRepository(TerminationData) private readonly terminationRepository: Repository<TerminationData>,
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
     @InjectRepository(EmployeeDocument) private readonly documentsRepository: Repository<EmployeeDocument>,
+    @InjectRepository(CatalogDocumentType) private readonly catalogDocTypesRepository: Repository<CatalogDocumentType>,
     private readonly storageService: EmployeeStorageService,
   ) {}
 
   async findAll(query: QueryEmployeesDto): Promise<EmployeesPaginatedResult<EmployeeListItem>> {
     const limit = query.limit ?? 10;
+    const filterByDocStatus = !!query.docStatus;
 
     const qb = this.employeesRepository
       .createQueryBuilder('employee')
       .orderBy('employee.createdAt', 'DESC')
-      .addOrderBy('employee.id', 'DESC')
-      .take(limit + 1);
+      .addOrderBy('employee.id', 'DESC');
 
     if (query.status) {
       qb.andWhere('employee.status = :status', { status: query.status });
@@ -74,7 +76,7 @@ export class EmployeesService {
       );
     }
 
-    if (query.cursor) {
+    if (!filterByDocStatus && query.cursor) {
       const cursor = decodeCursor(query.cursor);
       qb.andWhere(
         '(employee.createdAt < :cursorCreatedAt OR (employee.createdAt = :cursorCreatedAt AND employee.id < :cursorId))',
@@ -82,16 +84,26 @@ export class EmployeesService {
       );
     }
 
+    if (!filterByDocStatus) {
+      qb.take(limit + 1);
+    }
+
     const records = await qb.getMany();
+    const stats = await this.computeStats();
+
+    if (filterByDocStatus) {
+      const allItems = await this.buildListItems(records);
+      const filtered = allItems.filter((item) => item.docStatus === query.docStatus);
+      return { data: filtered, nextCursor: null, stats };
+    }
+
     const hasMore = records.length > limit;
     const page = hasMore ? records.slice(0, limit) : records;
 
-    const data = page.map((record) => this.toListItem(record));
+    const data = await this.buildListItems(page);
 
     const last = page[page.length - 1];
     const nextCursor = hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null;
-
-    const stats = await this.computeStats();
 
     return { data, nextCursor, stats };
   }
@@ -493,24 +505,86 @@ export class EmployeesService {
     return rows as BirthdayReportItem[];
   }
 
-  private toListItem(record: EmployeeRecord): EmployeeListItem {
-    return {
-      id: record.id,
-      displayId: record.displayId,
-      status: record.status,
-      fullName: record.fullName,
-      corporateEmail: record.corporateEmail,
-      companyCode: record.companyCode,
-      companyName: record.companyName,
-      division: record.division,
-      area: record.area,
-      position: record.position,
-      location: record.location,
-      modality: record.modality,
-      seniorityDate: record.seniorityDate,
-      contractEndDate: record.contractEndDate,
-      createdAt: record.createdAt,
-    };
+  private async buildListItems(records: EmployeeRecord[]): Promise<EmployeeListItem[]> {
+    if (records.length === 0) return [];
+
+    const requiredDocTypes = await this.catalogDocTypesRepository.find({
+      where: { appliesTo: 'employee', isRequired: true, isActive: true },
+      select: { name: true },
+    });
+    const requiredNames = new Set(requiredDocTypes.map((dt) => dt.name));
+
+    const employeeIds = records.map((r) => r.id);
+    const allDocs =
+      employeeIds.length > 0
+        ? await this.documentsRepository.find({
+            where: { employeeId: In(employeeIds) },
+            select: { employeeId: true, type: true },
+          })
+        : [];
+
+    const uploadedByEmployee = new Map<string, Set<string>>();
+    for (const doc of allDocs) {
+      if (!uploadedByEmployee.has(doc.employeeId)) {
+        uploadedByEmployee.set(doc.employeeId, new Set());
+      }
+      uploadedByEmployee.get(doc.employeeId)!.add(doc.type);
+    }
+
+    return records.map((record) => {
+      const uploaded = uploadedByEmployee.get(record.id) ?? new Set<string>();
+      const docStatus = this.computeDocStatus(requiredNames, uploaded);
+      return {
+        id: record.id,
+        displayId: record.displayId,
+        status: record.status,
+        fullName: record.fullName,
+        corporateEmail: record.corporateEmail,
+        companyCode: record.companyCode,
+        companyName: record.companyName,
+        division: record.division,
+        area: record.area,
+        position: record.position,
+        location: record.location,
+        modality: record.modality,
+        seniorityDate: record.seniorityDate,
+        contractEndDate: record.contractEndDate,
+        docStatus,
+        createdAt: record.createdAt,
+      };
+    });
+  }
+
+  private computeDocStatus(requiredNames: Set<string>, uploaded: Set<string>): DocStatus {
+    if (requiredNames.size === 0) return 'no_required';
+    for (const name of requiredNames) {
+      if (!uploaded.has(name)) return 'incomplete';
+    }
+    return 'complete';
+  }
+
+  async getExpiringContracts(days: number): Promise<ExpiringContractItem[]> {
+    const rows = await this.employeesRepository.manager.query(
+      `SELECT
+        e.id,
+        e.display_id AS "displayId",
+        e.full_name AS "fullName",
+        e.position,
+        e.area,
+        e.division,
+        e.company_name AS "companyName",
+        e.contract_type AS "contractType",
+        TO_CHAR(e.contract_end_date, 'YYYY-MM-DD') AS "contractEndDate",
+        (e.contract_end_date - CURRENT_DATE)::int AS "daysUntilExpiry"
+      FROM employees.employee_records e
+      WHERE e.deleted_at IS NULL
+        AND e.contract_end_date IS NOT NULL
+        AND e.contract_end_date >= CURRENT_DATE
+        AND e.contract_end_date <= (CURRENT_DATE + ($1 || ' days')::INTERVAL)::date
+      ORDER BY e.contract_end_date ASC, e.full_name ASC`,
+      [days],
+    );
+    return rows as ExpiringContractItem[];
   }
 
   private async computeStats(): Promise<EmployeeStats> {

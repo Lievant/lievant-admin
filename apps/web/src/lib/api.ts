@@ -560,7 +560,21 @@ export interface EmployeeListItem {
   modality: Modality | null;
   seniorityDate: string | null;
   contractEndDate: string | null;
+  docStatus: DocStatus;
   createdAt: string;
+}
+
+export interface ExpiringContractItem {
+  id: string;
+  displayId: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  division: string | null;
+  companyName: string;
+  contractType: string | null;
+  contractEndDate: string;
+  daysUntilExpiry: number;
 }
 
 export interface EmployeeStats {
@@ -655,6 +669,7 @@ export interface ListEmployeesParams {
   division?: string;
   location?: string;
   search?: string;
+  docStatus?: DocStatus;
 }
 
 export function listEmployees(params: ListEmployeesParams = {}): Promise<EmployeesPage> {
@@ -666,9 +681,14 @@ export function listEmployees(params: ListEmployeesParams = {}): Promise<Employe
   if (params.division) query.set('division', params.division);
   if (params.location) query.set('location', params.location);
   if (params.search) query.set('search', params.search);
+  if (params.docStatus) query.set('docStatus', params.docStatus);
 
   const qs = query.toString();
   return apiFetchWithRetry<EmployeesPage>(`/employees${qs ? `?${qs}` : ''}`);
+}
+
+export function getExpiringContracts(days = 30): Promise<ExpiringContractItem[]> {
+  return apiFetchWithRetry<ExpiringContractItem[]>(`/employees/reports/expiring-contracts?days=${days}`);
 }
 
 export function getEmployee(id: string): Promise<EmployeeDetail> {

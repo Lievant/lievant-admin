@@ -1,6 +1,8 @@
 import { EmployeeStatus } from '../constants/employee-status.constant';
 import { Modality } from '../constants/modality.constant';
 
+export type DocStatus = 'complete' | 'incomplete' | 'no_required';
+
 export interface EmployeeListItem {
   id: string;
   displayId: string;
@@ -16,7 +18,21 @@ export interface EmployeeListItem {
   modality: Modality | null;
   seniorityDate: string | null;
   contractEndDate: string | null;
+  docStatus: DocStatus;
   createdAt: Date;
+}
+
+export interface ExpiringContractItem {
+  id: string;
+  displayId: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  division: string | null;
+  companyName: string;
+  contractType: string | null;
+  contractEndDate: string;
+  daysUntilExpiry: number;
 }
 
 export interface EmployeeStats {

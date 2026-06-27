@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { CakeIcon } from '@/components/icons';
+import { CakeIcon, ContractIcon } from '@/components/icons';
 
 export default function ReportesRrhhPage() {
   return (
@@ -22,6 +22,21 @@ export default function ReportesRrhhPage() {
             <h2 className="font-semibold text-navy">Cumpleaños del mes</h2>
             <p className="mt-0.5 text-sm text-slate-500">
               Empleados que cumplen años en un mes dado, con filtro y exportación
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          href="/rrhh/reportes/contratos"
+          className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-terracota/40 hover:shadow-md"
+        >
+          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition group-hover:bg-amber-100">
+            <ContractIcon className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="font-semibold text-navy">Contratos por vencer</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Empleados con contrato próximo a vencer, filtro por período y exportación
             </p>
           </div>
         </Link>

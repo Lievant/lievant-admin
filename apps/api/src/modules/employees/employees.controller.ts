@@ -33,6 +33,7 @@ import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emer
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { GetBirthdayReportDto } from './dto/get-birthday-report.dto';
+import { GetExpiringContractsDto } from './dto/get-expiring-contracts.dto';
 import { EmployeesService } from './employees.service';
 import { DocumentsService, DocumentType } from './documents.service';
 
@@ -77,6 +78,11 @@ export class EmployeesController {
     const month = dto.month ?? new Date().getMonth() + 1;
     const orderBy = dto.orderBy ?? 'date';
     return this.employeesService.getBirthdayReport(month, orderBy);
+  }
+
+  @Get('reports/expiring-contracts')
+  getExpiringContracts(@Query() dto: GetExpiringContractsDto) {
+    return this.employeesService.getExpiringContracts(dto.days ?? 30);
   }
 
   @Get(':id')
