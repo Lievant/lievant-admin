@@ -16,7 +16,7 @@ import {
 } from '@/components/icons';
 
 export interface CatalogFieldDef {
-  key: 'code' | 'country' | 'companyCode' | 'divisionName' | 'appliesTo' | 'isRequired';
+  key: 'code' | 'country' | 'companyCode' | 'divisionName' | 'appliesTo' | 'isRequired' | 'description';
   label: string;
   type: 'text' | 'select' | 'checkbox';
   options?: { value: string; label: string }[];
@@ -30,6 +30,7 @@ export interface CatalogConfig {
   label: string;
   itemLabel: string;
   icon: (props: SVGProps<SVGSVGElement>) => React.ReactElement;
+  filter?: Record<string, string>;
   fields: CatalogFieldDef[];
 }
 
@@ -115,20 +116,35 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     fields: [],
   },
   {
-    entity: 'document_types',
-    label: 'Tipos de documento',
+    entity: 'document_types_client',
+    label: 'Tipos de documento — Clientes',
+    itemLabel: 'tipo de documento',
+    icon: FileTextIcon,
+    filter: { appliesTo: 'client' },
+    fields: [
+      { key: 'description', label: 'Descripción', type: 'text' },
+      { key: 'isRequired', label: 'Obligatorio', type: 'checkbox' },
+    ],
+  },
+  {
+    entity: 'document_types_vendor',
+    label: 'Tipos de documento — Proveedores',
+    itemLabel: 'tipo de documento',
+    icon: ContractIcon,
+    filter: { appliesTo: 'vendor' },
+    fields: [
+      { key: 'description', label: 'Descripción', type: 'text' },
+      { key: 'isRequired', label: 'Obligatorio', type: 'checkbox' },
+    ],
+  },
+  {
+    entity: 'document_types_employee',
+    label: 'Tipos de documento — Empleados',
     itemLabel: 'tipo de documento',
     icon: FolderIcon,
+    filter: { appliesTo: 'employee' },
     fields: [
-      {
-        key: 'appliesTo',
-        label: 'Aplica a',
-        type: 'select',
-        options: [
-          { value: 'client', label: 'Cliente' },
-          { value: 'employee', label: 'Empleado' },
-        ],
-      },
+      { key: 'description', label: 'Descripción', type: 'text' },
       { key: 'isRequired', label: 'Obligatorio', type: 'checkbox' },
     ],
   },
