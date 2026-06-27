@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { SystemRole } from '../auth/constants/roles.constant';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -12,15 +12,15 @@ export class CatalogsController {
   constructor(private readonly catalogsService: CatalogsService) {}
 
   @Get(':entity/active')
-  findActive(@Param('entity') entity: string) {
-    return this.catalogsService.findActive(entity);
+  findActive(@Param('entity') entity: string, @Query('appliesTo') appliesTo?: string) {
+    return this.catalogsService.findActive(entity, appliesTo);
   }
 
   @UseGuards(RolesGuard)
   @Roles(SystemRole.SUPER_ADMIN)
   @Get(':entity')
-  findAll(@Param('entity') entity: string) {
-    return this.catalogsService.findAll(entity);
+  findAll(@Param('entity') entity: string, @Query('appliesTo') appliesTo?: string) {
+    return this.catalogsService.findAll(entity, appliesTo);
   }
 
   @UseGuards(RolesGuard)

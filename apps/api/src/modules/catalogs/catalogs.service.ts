@@ -71,14 +71,14 @@ export class CatalogsService {
     };
   }
 
-  async findAll(entity: string): Promise<CatalogRecord[]> {
+  async findAll(entity: string, appliesTo?: string): Promise<CatalogRecord[]> {
     const repo = this.getRepository(entity);
-    return repo.find({ order: { sortOrder: 'ASC', name: 'ASC' } });
+    return repo.find({ where: { ...(appliesTo ? { appliesTo } : {}) }, order: { sortOrder: 'ASC', name: 'ASC' } });
   }
 
-  async findActive(entity: string): Promise<CatalogRecord[]> {
+  async findActive(entity: string, appliesTo?: string): Promise<CatalogRecord[]> {
     const repo = this.getRepository(entity);
-    return repo.find({ where: { isActive: true }, order: { sortOrder: 'ASC', name: 'ASC' } });
+    return repo.find({ where: { isActive: true, ...(appliesTo ? { appliesTo } : {}) }, order: { sortOrder: 'ASC', name: 'ASC' } });
   }
 
   async create(entity: string, dto: CreateCatalogItemDto): Promise<CatalogRecord> {
