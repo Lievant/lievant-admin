@@ -34,13 +34,15 @@ export default async function CatalogosPage() {
         {CATALOG_CONFIGS.map((config, index) => {
           const items = results[index];
           const activeCount = items?.filter((item) => item.isActive).length ?? null;
-          const Icon = config.icon;
-
           return (
             <div key={config.entity} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-terracota-bg text-terracota">
-                  <Icon className="h-5 w-5" />
+                  {typeof config.icon === 'string' ? (
+                    <i className={`ti ${config.icon} text-xl leading-none`} />
+                  ) : (
+                    <config.icon className="h-5 w-5" />
+                  )}
                 </div>
               </div>
               <h2 className="mt-4 text-base font-semibold text-navy">{config.label}</h2>

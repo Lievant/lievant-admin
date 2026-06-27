@@ -6,7 +6,6 @@ import {
   DropletIcon,
   FactoryIcon,
   FileTextIcon,
-  FolderIcon,
   HeartIcon,
   LaptopIcon,
   LayersIcon,
@@ -29,7 +28,7 @@ export interface CatalogConfig {
   entity: CatalogEntity;
   label: string;
   itemLabel: string;
-  icon: (props: SVGProps<SVGSVGElement>) => React.ReactElement;
+  icon: ((props: SVGProps<SVGSVGElement>) => React.ReactElement) | string;
   filter?: Record<string, string>;
   fields: CatalogFieldDef[];
 }
@@ -119,7 +118,7 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     entity: 'document_types_client',
     label: 'Tipos de documento — Clientes',
     itemLabel: 'tipo de documento',
-    icon: FileTextIcon,
+    icon: 'ti-file-text',
     filter: { appliesTo: 'client' },
     fields: [
       { key: 'description', label: 'Descripción', type: 'text' },
@@ -130,7 +129,7 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     entity: 'document_types_vendor',
     label: 'Tipos de documento — Proveedores',
     itemLabel: 'tipo de documento',
-    icon: ContractIcon,
+    icon: 'ti-file-invoice',
     filter: { appliesTo: 'vendor' },
     fields: [
       { key: 'description', label: 'Descripción', type: 'text' },
@@ -141,7 +140,7 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     entity: 'document_types_employee',
     label: 'Tipos de documento — Empleados',
     itemLabel: 'tipo de documento',
-    icon: FolderIcon,
+    icon: 'ti-folder',
     filter: { appliesTo: 'employee' },
     fields: [
       { key: 'description', label: 'Descripción', type: 'text' },
