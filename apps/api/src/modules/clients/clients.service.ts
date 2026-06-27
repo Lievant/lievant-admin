@@ -72,10 +72,6 @@ export class ClientsService {
       .orderBy('client.createdAt', 'DESC')
       .addOrderBy('client.id', 'DESC');
 
-    if (!filterByDocStatus) {
-      qb.take(limit + 1);
-    }
-
     if (query.status) {
       qb.andWhere('client.status = :status', { status: query.status });
     }
@@ -103,12 +99,18 @@ export class ClientsService {
       );
     }
 
+    const total = await qb.getCount();
+
+    if (!filterByDocStatus) {
+      qb.take(limit + 1);
+    }
+
     const records = await qb.getMany();
 
     if (filterByDocStatus) {
       const allItems = await this.buildListItems(records);
       const filtered = allItems.filter((item) => item.docStatus === query.docStatus);
-      return { data: filtered, nextCursor: null };
+      return { data: filtered, nextCursor: null, total: filtered.length };
     }
 
     const hasMore = records.length > limit;
@@ -119,7 +121,7 @@ export class ClientsService {
     const last = page[page.length - 1];
     const nextCursor = hasMore && last ? encodeCursor({ createdAt: last.createdAt.toISOString(), id: last.id }) : null;
 
-    return { data, nextCursor };
+    return { data, nextCursor, total };
   }
 
   async create(dto: CreateClientDto): Promise<ClientDetail> {
@@ -546,6 +548,7 @@ export class ClientsService {
     const requiredNames = requiredDocTypes.map((dt) => dt.name);
 
     const allClients = await this.clientsRepository.find({
+      where: { status: ClientStatus.ACTIVE },
       relations: { primaryCompany: true },
       order: { displayId: 'ASC' },
     });

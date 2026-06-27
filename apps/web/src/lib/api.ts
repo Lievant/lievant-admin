@@ -208,6 +208,7 @@ export interface ClientListItem {
 export interface ClientsPage {
   data: ClientListItem[];
   nextCursor: string | null;
+  total: number;
 }
 
 export interface Company {
