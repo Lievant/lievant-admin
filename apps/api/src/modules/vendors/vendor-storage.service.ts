@@ -28,7 +28,7 @@ export class VendorStorageService {
   private readonly bucket: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.bucket = this.configService.get<string>('AWS_S3_BUCKET', 'lievant-admin-dev-datalake');
+    this.bucket = this.configService.getOrThrow<string>('S3_BUCKET');
     this.client = new S3Client({
       region: this.configService.get<string>('AWS_REGION', 'us-east-1'),
     });
