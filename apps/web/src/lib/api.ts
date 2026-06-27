@@ -472,7 +472,7 @@ export function listClientDocuments(clientId: string): Promise<ClientDocumentSum
 }
 
 export function listClientDocumentTypes(): Promise<CatalogItem[]> {
-  return apiFetchWithRetry<CatalogItem[]>('/catalogs/document-types/active?appliesTo=client');
+  return apiFetchWithRetry<CatalogItem[]>('/catalogs/document_types/active?appliesTo=client');
 }
 
 export interface MissingDocumentReportItem {
@@ -1062,13 +1062,13 @@ export type UpdateCatalogItemPayload = Partial<CreateCatalogItemPayload>;
 
 export function listCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
   const filter = DOCUMENT_TYPE_FILTERS[entity];
-  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document-types?appliesTo=${filter}`);
+  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document_types?appliesTo=${filter}`);
   return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}`);
 }
 
 export function listActiveCatalogItems(entity: CatalogEntity): Promise<CatalogItem[]> {
   const filter = DOCUMENT_TYPE_FILTERS[entity];
-  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document-types/active?appliesTo=${filter}`);
+  if (filter) return apiFetchWithRetry<CatalogItem[]>(`/catalogs/document_types/active?appliesTo=${filter}`);
   return apiFetchWithRetry<CatalogItem[]>(`/catalogs/${entity}/active`);
 }
 
