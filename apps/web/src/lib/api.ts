@@ -324,6 +324,7 @@ export interface ListClientsParams {
   accountManagerId?: string;
   industry?: string;
   search?: string;
+  docStatus?: DocStatus;
 }
 
 export function listClients(params: ListClientsParams = {}): Promise<ClientsPage> {
@@ -334,6 +335,7 @@ export function listClients(params: ListClientsParams = {}): Promise<ClientsPage
   if (params.accountManagerId) query.set('accountManagerId', params.accountManagerId);
   if (params.industry) query.set('industry', params.industry);
   if (params.search) query.set('search', params.search);
+  if (params.docStatus) query.set('docStatus', params.docStatus);
 
   const qs = query.toString();
   return apiFetchWithRetry<ClientsPage>(`/clients${qs ? `?${qs}` : ''}`);

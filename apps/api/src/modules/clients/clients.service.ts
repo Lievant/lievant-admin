@@ -62,6 +62,7 @@ export class ClientsService {
 
   async findAll(query: QueryClientsDto): Promise<PaginatedResult<ClientListItem>> {
     const limit = query.limit ?? 10;
+    const filterByDocStatus = !!query.docStatus;
 
     const qb = this.clientsRepository
       .createQueryBuilder('client')
@@ -69,8 +70,11 @@ export class ClientsService {
       .leftJoinAndSelect('client.primaryCompany', 'primaryCompany')
       .leftJoinAndSelect('client.accountManager', 'accountManager')
       .orderBy('client.createdAt', 'DESC')
-      .addOrderBy('client.id', 'DESC')
-      .take(limit + 1);
+      .addOrderBy('client.id', 'DESC');
+
+    if (!filterByDocStatus) {
+      qb.take(limit + 1);
+    }
 
     if (query.status) {
       qb.andWhere('client.status = :status', { status: query.status });
@@ -91,7 +95,7 @@ export class ClientsService {
       );
     }
 
-    if (query.cursor) {
+    if (!filterByDocStatus && query.cursor) {
       const cursor = decodeCursor(query.cursor);
       qb.andWhere(
         '(client.createdAt < :cursorCreatedAt OR (client.createdAt = :cursorCreatedAt AND client.id < :cursorId))',
@@ -100,6 +104,13 @@ export class ClientsService {
     }
 
     const records = await qb.getMany();
+
+    if (filterByDocStatus) {
+      const allItems = await this.buildListItems(records);
+      const filtered = allItems.filter((item) => item.docStatus === query.docStatus);
+      return { data: filtered, nextCursor: null };
+    }
+
     const hasMore = records.length > limit;
     const page = hasMore ? records.slice(0, limit) : records;
 

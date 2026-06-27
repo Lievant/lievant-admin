@@ -1,4 +1,4 @@
-import { listActiveCatalogItems, listClients, listUsers, type ClientStatus, type ListClientsParams } from '@/lib/api';
+import { listActiveCatalogItems, listClients, type ClientStatus, type DocStatus, type ListClientsParams } from '@/lib/api';
 import { ClientsScreen } from './clients-screen';
 
 async function safe<T>(promise: Promise<T>): Promise<T | null> {
@@ -23,7 +23,7 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
 
   const cursor = asString(params.cursor);
   const status = asString(params.status) as ClientStatus | undefined;
-  const accountManagerId = asString(params.accountManagerId);
+  const docStatus = asString(params.docStatus) as DocStatus | undefined;
   const industry = asString(params.industry);
   const search = asString(params.search);
   const cursors = asString(params.cursors);
@@ -31,13 +31,12 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   const query: ListClientsParams = { limit: 10 };
   if (cursor) query.cursor = cursor;
   if (status) query.status = status;
-  if (accountManagerId) query.accountManagerId = accountManagerId;
+  if (docStatus) query.docStatus = docStatus;
   if (industry) query.industry = industry;
   if (search) query.search = search;
 
-  const [clientsPage, accountManagers, industries] = await Promise.all([
+  const [clientsPage, industries] = await Promise.all([
     safe(listClients(query)),
-    safe(listUsers()),
     safe(listActiveCatalogItems('industries')),
   ]);
 
@@ -47,10 +46,9 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
     <div className="mx-auto max-w-7xl px-8 py-10">
       <ClientsScreen
         page={clientsPage ?? { data: [], nextCursor: null }}
-        accountManagers={accountManagers ?? []}
         industries={industries ?? []}
         apiUnavailable={apiUnavailable}
-        filters={{ status: status ?? '', accountManagerId: accountManagerId ?? '', industry: industry ?? '', search: search ?? '' }}
+        filters={{ status: status ?? '', docStatus: docStatus ?? '', industry: industry ?? '', search: search ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
       />
