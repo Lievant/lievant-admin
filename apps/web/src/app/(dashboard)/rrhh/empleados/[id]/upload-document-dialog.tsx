@@ -21,7 +21,7 @@ export function UploadEmployeeDocumentDialog({
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    fetch('/api/catalogs/employee-document-types')
+    fetch('/api/catalogs/document-types?appliesTo=employee')
       .then((r) => r.json() as Promise<CatalogItem[]>)
       .then((items) => {
         setDocTypes(items);

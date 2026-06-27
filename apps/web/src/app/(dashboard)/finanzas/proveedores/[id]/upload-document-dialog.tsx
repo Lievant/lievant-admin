@@ -1,18 +1,29 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import type { CatalogItem } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
-import { VENDOR_DOCUMENT_TYPES, VENDOR_DOCUMENT_TYPE_LABELS } from '../constants';
 import { TextField } from '../form-field';
 
 export function UploadVendorDocumentDialog({ vendorId, onClose }: { vendorId: string; onClose: () => void }) {
   const router = useRouter();
-  const [documentType, setDocumentType] = useState<string>(VENDOR_DOCUMENT_TYPES[0]);
+  const [docTypes, setDocTypes] = useState<CatalogItem[]>([]);
+  const [documentType, setDocumentType] = useState('');
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  useEffect(() => {
+    fetch('/api/catalogs/document-types?appliesTo=vendor')
+      .then((r) => r.json() as Promise<CatalogItem[]>)
+      .then((items) => {
+        setDocTypes(items);
+        if (items[0]) setDocumentType(items[0].name);
+      })
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,11 +93,12 @@ export function UploadVendorDocumentDialog({ vendorId, onClose }: { vendorId: st
               id="vendor-doc-type"
               value={documentType}
               onChange={(e) => setDocumentType(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              disabled={docTypes.length === 0}
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota disabled:opacity-50"
             >
-              {VENDOR_DOCUMENT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {VENDOR_DOCUMENT_TYPE_LABELS[type]}
+              {docTypes.map((t) => (
+                <option key={t.id} value={t.name}>
+                  {t.name}
                 </option>
               ))}
             </select>
@@ -125,7 +137,7 @@ export function UploadVendorDocumentDialog({ vendorId, onClose }: { vendorId: st
             </button>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || docTypes.length === 0}
               className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
             >
               {isPending ? 'Cargando…' : 'Subir documento'}
