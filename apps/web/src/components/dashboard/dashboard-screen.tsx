@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { Announcement, CurrentUser, DashboardData } from '@/lib/api';
 import Link from 'next/link';
 import { AnnouncementsCard } from './announcements-card';
@@ -56,14 +57,38 @@ const SUPER_ADMIN_CHIPS: SectionChip[] = [
 
 // ── photo placeholder ─────────────────────────────────────────────────────────
 
-function PhotoPlaceholder({ name }: { name: string }) {
-  const initials = name
+function PhotoPlaceholder({ name, email }: { name: string; email?: string | null }) {
+  const abbr = name
     .split(' ')
     .slice(0, 2)
     .map((n) => n[0])
     .join('')
     .toUpperCase();
 
+  if (email) {
+    return (
+      <DashboardPhoto name={name} email={email} abbr={abbr} />
+    );
+  }
+
+  return <WireframePhoto abbr={abbr} />;
+}
+
+function DashboardPhoto({ name, email, abbr }: { name: string; email: string; abbr: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <WireframePhoto abbr={abbr} />;
+  return (
+    <img
+      src={`/api/users/${encodeURIComponent(email)}/photo`}
+      alt={name}
+      className="flex-shrink-0 rounded-xl object-cover"
+      style={{ width: 100, minHeight: 120, height: 120 }}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+function WireframePhoto({ abbr }: { abbr: string }) {
   return (
     <div
       className="flex-shrink-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-terracota/40 bg-terracota-bg text-terracota select-none"
@@ -86,7 +111,7 @@ function PhotoPlaceholder({ name }: { name: string }) {
           strokeLinecap="round"
         />
       </svg>
-      <span className="text-xs font-bold mt-1 tracking-wide">{initials}</span>
+      <span className="text-xs font-bold mt-1 tracking-wide">{abbr}</span>
     </div>
   );
 }
@@ -128,7 +153,7 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
 
         {/* Tercio izquierdo — foto + identidad */}
         <div className="flex items-center gap-4">
-          <PhotoPlaceholder name={user?.name ?? 'Invitado'} />
+          <PhotoPlaceholder name={user?.name ?? 'Invitado'} email={user?.email ?? null} />
           <div className="min-w-0">
             <p className="text-xs text-slate-400 capitalize">{formatDate()}</p>
             <p className="text-xl font-medium text-navy leading-snug mt-0.5">

@@ -26,6 +26,7 @@ import { CompensationTab } from './compensation-tab';
 import { VacationTab } from './vacation-tab';
 import { FamilyTab } from './family-tab';
 import { DocumentsTab } from './documents-tab';
+import { PhotosTab } from './photos-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
 
@@ -36,6 +37,7 @@ const ALL_TABS = [
   { id: 'vacation',     label: 'Vacaciones',         badge: null },
   { id: 'family',       label: 'Familia y baja',     badge: 'RRHH' },
   { id: 'documents',    label: 'Documentos',         badge: null },
+  { id: 'photos',       label: 'Fotos',              badge: null },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -49,6 +51,28 @@ interface EmployeeDetailScreenProps {
   termination: EmployeeTermination | null;
   catalogs: EmployeeFormCatalogs;
   documents: EmployeeDocument[];
+}
+
+function EmployeeHeaderPhoto({ name, corporateEmail }: { name: string; corporateEmail: string | null }) {
+  const [photoFailed, setPhotoFailed] = useState(false);
+  if (!corporateEmail || photoFailed) {
+    return (
+      <div
+        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white"
+        style={{ backgroundColor: avatarColor(name) }}
+      >
+        {initials(name)}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`/api/users/${encodeURIComponent(corporateEmail)}/photo`}
+      alt={name}
+      className="h-16 w-16 shrink-0 rounded-full object-cover"
+      onError={() => setPhotoFailed(true)}
+    />
+  );
 }
 
 export function EmployeeDetailScreen({
@@ -65,12 +89,13 @@ export function EmployeeDetailScreen({
   const canViewCompensation  = usePermission('rrhh', 'empleados.nomina');
   const canGenerateDocuments = usePermission('rrhh', 'empleados.documentos', 'write');
   const canViewDocuments     = usePermission('rrhh', 'empleados.documentos');
+  const canWriteEmployees    = usePermission('rrhh', 'empleados', 'write');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
     if (tab.id === 'personal' || tab.id === 'vacation' || tab.id === 'family') return canViewPersonal;
     if (tab.id === 'compensation') return canViewCompensation;
     if (tab.id === 'documents') return canViewDocuments;
-    return true; // general
+    return true; // general, photos
   });
 
   const [activeTab, setActiveTab] = useState<TabId>('general');
@@ -97,12 +122,7 @@ export function EmployeeDetailScreen({
       {/* Header */}
       <header className="mt-4 flex items-start justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div
-            className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-semibold text-white"
-            style={{ backgroundColor: avatarColor(employee.fullName) }}
-          >
-            {initials(employee.fullName)}
-          </div>
+          <EmployeeHeaderPhoto name={employee.fullName} corporateEmail={employee.corporateEmail} />
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold text-navy">{employee.fullName}</h1>
@@ -200,6 +220,9 @@ export function EmployeeDetailScreen({
         )}
         {effectiveTab === 'documents' && (
           <DocumentsTab employee={employee} documents={documents} />
+        )}
+        {effectiveTab === 'photos' && (
+          <PhotosTab employeeId={employee.id} canWrite={canWriteEmployees} />
         )}
       </div>
 

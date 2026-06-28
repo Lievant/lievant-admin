@@ -4,6 +4,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -35,6 +37,7 @@ import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { GetBirthdayReportDto } from './dto/get-birthday-report.dto';
 import { GetExpiringContractsDto } from './dto/get-expiring-contracts.dto';
 import { EmployeesService } from './employees.service';
+import { EmployeePhotosService } from './employee-photos.service';
 import { DocumentsService, DocumentType } from './documents.service';
 
 const VALID_DOCUMENT_TYPES: DocumentType[] = [
@@ -52,6 +55,7 @@ export class EmployeesController {
   constructor(
     private readonly employeesService: EmployeesService,
     private readonly documentsService: DocumentsService,
+    private readonly photosService: EmployeePhotosService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -177,6 +181,53 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados.personal', 'write')
   updateTermination(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateTerminationDto) {
     return this.employeesService.updateTermination(id, dto);
+  }
+
+  @Get(':id/photos')
+  getPhotos(@Param('id', ParseUUIDPipe) id: string) {
+    return this.photosService.getPhotos(id);
+  }
+
+  @Post(':id/photos')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+          callback(new BadRequestException('Solo se permiten imágenes JPEG, PNG o WEBP'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  uploadPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User,
+  ) {
+    if (!file) throw new BadRequestException('El archivo es obligatorio');
+    return this.photosService.uploadPhoto(id, file, user.id);
+  }
+
+  @Patch(':id/photos/:photoId/profile')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  setProfilePhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+  ) {
+    return this.photosService.setProfilePhoto(id, photoId);
+  }
+
+  @Delete(':id/photos/:photoId')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deletePhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+  ) {
+    return this.photosService.deletePhoto(id, photoId);
   }
 
   @Get(':id/documents')

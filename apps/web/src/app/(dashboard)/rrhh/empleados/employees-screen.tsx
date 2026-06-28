@@ -254,12 +254,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <div
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-                        style={{ backgroundColor: avatarColor(employee.fullName) }}
-                      >
-                        {initials(employee.fullName)}
-                      </div>
+                      <EmployeeAvatar name={employee.fullName} email={employee.corporateEmail} size={8} />
                       <div>
                         <p className="font-medium text-navy">{employee.fullName}</p>
                         <p className="text-xs text-slate-400">{employee.corporateEmail ?? '—'}</p>
@@ -373,6 +368,45 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function EmployeeAvatar({ name, email, size }: { name: string; email: string | null; size: number }) {
+  const fallbackStyle = { backgroundColor: avatarColor(name) };
+  const fallbackContent = initials(name);
+  const sizeClass = `h-${size} w-${size}`;
+
+  if (!email) {
+    return (
+      <div
+        className={`flex ${sizeClass} shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white`}
+        style={fallbackStyle}
+      >
+        {fallbackContent}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} shrink-0 relative`}>
+      <img
+        src={`/api/users/${encodeURIComponent(email)}/photo`}
+        alt={name}
+        className={`${sizeClass} rounded-full object-cover`}
+        onError={(e) => {
+          const target = e.currentTarget;
+          target.style.display = 'none';
+          const fallback = target.nextElementSibling as HTMLElement | null;
+          if (fallback) fallback.style.display = 'flex';
+        }}
+      />
+      <div
+        className={`hidden ${sizeClass} shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white`}
+        style={fallbackStyle}
+      >
+        {fallbackContent}
       </div>
     </div>
   );
