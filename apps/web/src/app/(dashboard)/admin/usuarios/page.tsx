@@ -15,7 +15,7 @@ export default async function UsersPage() {
   const apiUnavailable = users === null;
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <UsersScreen users={users ?? []} roles={roles ?? []} apiUnavailable={apiUnavailable} />
     </div>
   );

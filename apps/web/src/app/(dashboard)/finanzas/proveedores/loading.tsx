@@ -1,6 +1,6 @@
 export default function ProveedoresLoading() {
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="flex items-start justify-between gap-4">
         <div>
           <div className="h-7 w-36 animate-pulse rounded bg-slate-200" />

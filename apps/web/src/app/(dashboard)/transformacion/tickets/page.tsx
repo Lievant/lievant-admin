@@ -47,7 +47,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
     false;
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <TicketsScreen
         page={ticketPage ?? { data: [], nextCursor: null, total: 0 }}
         categories={categories ?? []}

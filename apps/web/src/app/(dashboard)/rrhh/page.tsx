@@ -29,7 +29,7 @@ export default async function RrhhPage() {
       : null;
 
   return (
-    <div className="mx-auto max-w-7xl px-8 py-10">
+    <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8">
         <p className="text-sm font-medium uppercase tracking-wide text-terracota">RRHH</p>
         <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
