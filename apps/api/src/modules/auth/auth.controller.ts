@@ -1,14 +1,17 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
   NotFoundException,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -28,7 +31,7 @@ import { GraphTokenService } from './graph-token.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { RolesService } from './roles.service';
-import { UsersService } from './users.service';
+import { EffectivePermissionsResult, UsersService } from './users.service';
 import { RedisService } from '../redis/redis.service';
 
 const PHOTO_CACHE_TTL = 3600;
@@ -103,6 +106,21 @@ export class AuthController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get('users/search')
+  searchUsers(
+    @Query('q', new DefaultValuePipe('')) q: string,
+    @Query('limit', new DefaultValuePipe(10), ParseIntPipe) limit: number,
+  ): Promise<User[]> {
+    return this.usersService.searchUsers(q, limit);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('users/:id/effective-permissions')
+  getEffectivePermissions(@Param('id', ParseUUIDPipe) id: string): Promise<EffectivePermissionsResult> {
+    return this.usersService.getEffectivePermissions(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get('users/:id/permissions')
   getUserPermissions(@Param('id', ParseUUIDPipe) id: string): Promise<UserPermission[]> {
     return this.usersService.getUserPermissionOverrides(id);
@@ -110,11 +128,15 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Post('users/:id/permissions')
-  setUserPermission(
+  async setUserPermission(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetUserPermissionDto,
     @CurrentUser() actor: User,
-  ): Promise<UserPermission> {
+  ): Promise<UserPermission | null> {
+    if (dto.granted === null) {
+      await this.usersService.removeUserPermission(id, dto.permissionId);
+      return null;
+    }
     return this.usersService.setUserPermission(id, dto.permissionId, dto.granted, actor.id);
   }
 
