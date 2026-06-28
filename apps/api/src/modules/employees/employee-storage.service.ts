@@ -39,6 +39,18 @@ export class EmployeeStorageService {
     return key;
   }
 
+  async uploadBuffer(buffer: Buffer, key: string, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+        ServerSideEncryption: 'aws:kms',
+      }),
+    );
+  }
+
   async getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
     return getSignedUrl(this.client, command, { expiresIn });

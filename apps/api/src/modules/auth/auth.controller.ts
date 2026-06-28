@@ -5,11 +5,14 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Post,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AnnouncementsService } from './announcements.service';
 import { AuthService, AuthTokens, MeResponse, SsoLoginResult } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
@@ -21,10 +24,14 @@ import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
 import { UserPermission } from './entities/user-permission.entity';
 import { User } from './entities/user.entity';
+import { GraphTokenService } from './graph-token.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { RolesService } from './roles.service';
 import { UsersService } from './users.service';
+import { RedisService } from '../redis/redis.service';
+
+const PHOTO_CACHE_TTL = 3600;
 
 @Controller('auth')
 export class AuthController {
@@ -33,7 +40,30 @@ export class AuthController {
     private readonly rolesService: RolesService,
     private readonly usersService: UsersService,
     private readonly announcementsService: AnnouncementsService,
+    private readonly graphTokenService: GraphTokenService,
+    private readonly redisService: RedisService,
   ) {}
+
+  @Get('users/:email/photo')
+  async getUserPhoto(@Param('email') email: string, @Res() res: Response): Promise<void> {
+    const cacheKey = `graph:photo:${email}`;
+    const cached = await this.redisService.get(cacheKey);
+    if (cached) {
+      const buf = Buffer.from(cached, 'base64');
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.send(buf);
+      return;
+    }
+
+    const photo = await this.graphTokenService.getUserPhoto(email);
+    if (!photo) throw new NotFoundException('Foto no encontrada');
+
+    await this.redisService.set(cacheKey, photo.toString('base64'), PHOTO_CACHE_TTL);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(photo);
+  }
 
   @Post('sso/callback')
   @HttpCode(HttpStatus.OK)

@@ -161,9 +161,7 @@ export function Sidebar({ user }: SidebarProps) {
 
       <div className="border-t border-white/10 p-3">
         <div className="flex items-center gap-3 rounded-lg px-3 py-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-terracota text-sm font-semibold text-white">
-            {(user?.name ?? '?').slice(0, 1).toUpperCase()}
-          </div>
+          <SidebarAvatar name={user?.name ?? '?'} email={user?.email ?? null} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-white">{user?.name ?? 'Invitado'}</p>
             <p className="truncate text-xs text-slate-400">{user?.email ?? 'Sesión no iniciada'}</p>
@@ -178,6 +176,35 @@ export function Sidebar({ user }: SidebarProps) {
         </a>
       </div>
     </aside>
+  );
+}
+
+function SidebarAvatar({ name, email }: { name: string; email: string | null }) {
+  const initial = name.slice(0, 1).toUpperCase();
+  if (!email) {
+    return (
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-terracota text-sm font-semibold text-white">
+        {initial}
+      </div>
+    );
+  }
+  return (
+    <div className="relative h-9 w-9 shrink-0">
+      <img
+        src={`/api/users/${encodeURIComponent(email)}/photo`}
+        alt={name}
+        className="h-9 w-9 rounded-full object-cover"
+        onError={(e) => {
+          const target = e.currentTarget;
+          target.style.display = 'none';
+          const fallback = target.nextElementSibling as HTMLElement | null;
+          if (fallback) fallback.style.display = 'flex';
+        }}
+      />
+      <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-terracota text-sm font-semibold text-white">
+        {initial}
+      </div>
+    </div>
   );
 }
 

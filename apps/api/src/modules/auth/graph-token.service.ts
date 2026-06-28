@@ -107,6 +107,26 @@ export class GraphTokenService {
     return data.id;
   }
 
+  async getUserPhoto(userEmail: string): Promise<Buffer | null> {
+    try {
+      const token = await this.getAppToken();
+      const response = await fetch(
+        `https://graph.microsoft.com/v1.0/users/${userEmail}/photo/$value`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        const errText = await response.text().catch(() => '');
+        console.error(`[Graph] getUserPhoto ${userEmail} → ${response.status}: ${errText}`);
+        return null;
+      }
+      const arrayBuffer = await response.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } catch (err) {
+      console.error(`[Graph] getUserPhoto error:`, err);
+      return null;
+    }
+  }
+
   async deleteCalendarEvent(userEmail: string, eventId: string): Promise<void> {
     const token = await this.getAppToken();
 
