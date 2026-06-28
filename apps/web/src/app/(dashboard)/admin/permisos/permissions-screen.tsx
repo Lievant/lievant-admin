@@ -1,70 +1,185 @@
 'use client';
 
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import type { PermissionDef, RoleWithPermissions, UserSummary } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { ChevronDownIcon, SearchIcon } from '@/components/icons';
 import { DEFAULT_ROLE_BADGE, ROLE_BADGE_STYLES } from '../usuarios/constants';
-import {
-  fetchUserOverridesAction,
-  removeUserPermissionAction,
-  setUserPermissionAction,
-} from './actions';
+
+function UserAvatar({ name, email }: { name: string; email: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!email || failed) {
+    return (
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+        style={{ backgroundColor: avatarColor(name) }}
+      >
+        {initials(name)}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`/api/users/${encodeURIComponent(email)}/photo`}
+      alt={name}
+      className="h-8 w-8 shrink-0 rounded-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface UserRole { id: string; name: string }
+
+interface SearchUser {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  roles: UserRole[];
+}
+
+interface EffectivePermItem {
+  id: string;
+  action: string;
+  description: string | null;
+  granted: boolean;
+  fromRole: boolean;
+  overrideGranted: boolean | null;
+}
+
+interface EffectivePermModule {
+  module: string;
+  permissions: EffectivePermItem[];
+}
+
+interface EffectivePermSection {
+  section: string;
+  totalPermissions: number;
+  activePermissions: number;
+  modules: EffectivePermModule[];
+}
+
+interface EffectivePermissionsResult {
+  sections: EffectivePermSection[];
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const SECTION_ORDER = ['finanzas', 'rrhh', 'herramientas', 'transformacion', 'admin'];
 
 const SECTION_LABELS: Record<string, string> = {
   finanzas: 'Finanzas',
   rrhh: 'RRHH',
   herramientas: 'Herramientas',
+  transformacion: 'Transformación Digital',
   admin: 'Administración',
 };
 
 const MODULE_LABELS: Record<string, string> = {
-  'clientes': 'Clientes',
-  'clientes.financiero': 'Clientes › Financiero',
-  'clientes.documentos': 'Clientes › Documentos',
-  'proveedores': 'Proveedores',
-  'proveedores.ordenes': 'Proveedores › Órdenes',
-  'proveedores.facturas': 'Proveedores › Facturas',
-  'proveedores.bancario': 'Proveedores › Bancario',
-  'empleados': 'Empleados',
-  'empleados.personal': 'Empleados › Personal',
-  'empleados.nomina': 'Empleados › Nómina',
-  'empleados.documentos': 'Empleados › Documentos',
-  'salas': 'Salas',
-  'usuarios': 'Usuarios',
-  'roles': 'Roles',
-  'catalogos': 'Catálogos',
+  'clientes':              'Clientes',
+  'clientes.financiero':   'Financiero',
+  'clientes.documentos':   'Documentos',
+  'proveedores':           'Proveedores',
+  'proveedores.ordenes':   'Órdenes',
+  'proveedores.facturas':  'Facturas',
+  'proveedores.bancario':  'Bancario',
+  'reportes':              'Reportes',
+  'empleados':             'Empleados',
+  'empleados.personal':    'Personal',
+  'empleados.nomina':      'Nómina',
+  'empleados.documentos':  'Documentos',
+  'tickets':               'Tickets',
+  'salas':                 'Salas',
+  'usuarios':              'Usuarios',
+  'roles':                 'Roles',
+  'catalogos':             'Catálogos',
+  'permisos':              'Permisos',
 };
 
 const ACTION_LABELS: Record<string, string> = {
-  read: 'Lectura',
-  write: 'Escritura',
+  read:  'Leer',
+  write: 'Editar',
   admin: 'Admin',
 };
 
-const ACTION_BADGE: Record<string, string> = {
-  read: 'bg-slate-100 text-slate-500',
-  write: 'bg-amber-50 text-amber-600',
-  admin: 'bg-purple-50 text-purple-600',
+const ACTION_COLORS: Record<string, string> = {
+  read:  'text-slate-500',
+  write: 'text-amber-600',
+  admin: 'text-purple-600',
 };
 
-const SECTION_ORDER = ['finanzas', 'rrhh', 'herramientas', 'admin'];
-
-function groupBySection<T extends { section: string | null }>(items: T[]): Record<string, T[]> {
-  const map: Record<string, T[]> = {};
-  for (const item of items) {
-    const key = item.section ?? 'otros';
-    (map[key] ??= []).push(item);
-  }
-  return map;
+// next override state: null → true → false → null
+function nextOverride(current: boolean | null): boolean | null {
+  if (current === null) return true;
+  if (current === true) return false;
+  return null;
 }
 
-// ─── Section 1: Role accordion card ──────────────────────────────────────────
+// ─── Permission Chip ──────────────────────────────────────────────────────────
 
-function RoleCard({ role }: { role: RoleWithPermissions }) {
-  const [open, setOpen] = useState(false);
-  const bySection = useMemo(() => groupBySection(role.permissions), [role.permissions]);
+function PermChip({
+  perm,
+  pendingOverride,
+  onToggle,
+}: {
+  perm: EffectivePermItem;
+  pendingOverride: boolean | null | undefined;
+  onToggle: () => void;
+}) {
+  const hasPending = pendingOverride !== undefined;
+  const displayOverride = hasPending ? pendingOverride : perm.overrideGranted;
+  const displayGranted = displayOverride !== null ? (displayOverride ?? false) : perm.fromRole;
+  const hasOverride = displayOverride !== null;
+
+  return (
+    <button
+      type="button"
+      title={perm.description ?? undefined}
+      onClick={onToggle}
+      className={cn(
+        'inline-flex flex-col items-start rounded-lg px-3 py-2 text-left text-xs transition-all',
+        displayGranted
+          ? 'bg-emerald-50 text-emerald-800'
+          : 'bg-slate-50 text-slate-400',
+        hasOverride
+          ? displayGranted
+            ? 'ring-2 ring-emerald-400'
+            : 'ring-2 ring-red-400'
+          : 'border border-dashed ' + (displayGranted ? 'border-emerald-300' : 'border-slate-200'),
+        hasPending && 'opacity-80',
+      )}
+    >
+      <span className={cn('font-semibold', ACTION_COLORS[perm.action] ?? 'text-slate-500')}>
+        {ACTION_LABELS[perm.action] ?? perm.action}
+      </span>
+    </button>
+  );
+}
+
+// ─── Section Accordion ────────────────────────────────────────────────────────
+
+function SectionAccordion({
+  section,
+  pendingChanges,
+  onTogglePerm,
+}: {
+  section: EffectivePermSection;
+  pendingChanges: Map<string, boolean | null>;
+  onTogglePerm: (permId: string, currentOverride: boolean | null) => void;
+}) {
+  const [open, setOpen] = useState(true);
+
+  const effectiveActive = section.modules.flatMap((m) => m.permissions).reduce((count, perm) => {
+    const pending = pendingChanges.get(perm.id);
+    const hasPending = pending !== undefined;
+    const override = hasPending ? pending : perm.overrideGranted;
+    const granted = override !== null ? (override ?? false) : perm.fromRole;
+    return granted ? count + 1 : count;
+  }, 0);
+
+  const total = section.modules.flatMap((m) => m.permissions).length;
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -74,275 +189,231 @@ function RoleCard({ role }: { role: RoleWithPermissions }) {
         className="flex w-full items-center justify-between px-4 py-3 hover:bg-slate-50"
       >
         <div className="flex items-center gap-3">
+          <span className="text-sm font-semibold text-navy">
+            {SECTION_LABELS[section.section] ?? section.section}
+          </span>
           <span
             className={cn(
-              'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-              ROLE_BADGE_STYLES[role.name] ?? DEFAULT_ROLE_BADGE,
+              'rounded-full px-2 py-0.5 text-[10px] font-semibold',
+              effectiveActive === total
+                ? 'bg-emerald-50 text-emerald-700'
+                : effectiveActive > 0
+                ? 'bg-amber-50 text-amber-700'
+                : 'bg-slate-100 text-slate-500',
             )}
           >
-            {role.name}
-          </span>
-          {role.description && (
-            <span className="text-sm text-slate-500">{role.description}</span>
-          )}
-          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">
-            {role.permissions.length} permisos
+            {effectiveActive}/{total}
           </span>
         </div>
         <ChevronDownIcon
-          className={cn(
-            'h-4 w-4 shrink-0 text-slate-400 transition-transform',
-            open && 'rotate-180',
-          )}
+          className={cn('h-4 w-4 shrink-0 text-slate-400 transition-transform', open && 'rotate-180')}
         />
       </button>
 
       {open && (
         <div className="border-t border-slate-100 px-4 pb-4">
-          {SECTION_ORDER.filter((s) => bySection[s]?.length).map((section) => (
-            <div key={section} className="mt-4">
+          {section.modules.map((mod) => (
+            <div key={mod.module} className="mt-4">
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {SECTION_LABELS[section] ?? section}
+                {MODULE_LABELS[mod.module] ?? mod.module}
               </p>
-              <div className="flex flex-wrap gap-1.5">
-                {(bySection[section] ?? []).map((p) => (
-                  <span
-                    key={p.id}
-                    title={p.description ?? undefined}
-                    className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1 text-xs text-slate-600"
-                  >
-                    {MODULE_LABELS[p.module] ?? p.module}
-                    <span
-                      className={cn(
-                        'rounded px-1 py-0.5 text-[10px] font-medium',
-                        ACTION_BADGE[p.action] ?? 'bg-slate-100 text-slate-500',
-                      )}
-                    >
-                      {ACTION_LABELS[p.action] ?? p.action}
-                    </span>
-                  </span>
+              <div className="flex flex-wrap gap-2">
+                {mod.permissions.map((perm) => (
+                  <PermChip
+                    key={perm.id}
+                    perm={perm}
+                    pendingOverride={pendingChanges.get(perm.id)}
+                    onToggle={() => {
+                      const current = pendingChanges.has(perm.id)
+                        ? pendingChanges.get(perm.id)!
+                        : perm.overrideGranted;
+                      onTogglePerm(perm.id, current);
+                    }}
+                  />
                 ))}
               </div>
             </div>
           ))}
-          {role.permissions.length === 0 && (
-            <p className="mt-4 text-sm text-slate-400">Sin permisos asignados.</p>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-// ─── Override 3-state control ─────────────────────────────────────────────────
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 
-type OverrideState = 'inherited' | 'granted' | 'revoked';
+export function PermissionsScreen() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-function OverrideControl({
-  state,
-  disabled,
-  onChange,
-}: {
-  state: OverrideState;
-  disabled: boolean;
-  onChange: (s: OverrideState) => void;
-}) {
-  const options: { value: OverrideState; label: string }[] = [
-    { value: 'inherited', label: 'Heredar' },
-    { value: 'granted', label: 'Conceder' },
-    { value: 'revoked', label: 'Revocar' },
-  ];
+  const [selectedUser, setSelectedUser] = useState<SearchUser | null>(null);
+  const [effectivePerms, setEffectivePerms] = useState<EffectivePermissionsResult | null>(null);
+  const [permsLoading, setPermsLoading] = useState(false);
 
-  return (
-    <div className="inline-flex overflow-hidden rounded-md border border-slate-200 text-xs">
-      {options.map(({ value, label }) => (
-        <button
-          key={value}
-          type="button"
-          disabled={disabled}
-          onClick={() => state !== value && onChange(value)}
-          className={cn(
-            'border-r px-2.5 py-1 last:border-r-0 transition-colors',
-            state === value
-              ? value === 'granted'
-                ? 'bg-emerald-500 text-white font-medium'
-                : value === 'revoked'
-                  ? 'bg-red-500 text-white font-medium'
-                  : 'bg-slate-100 text-slate-600 font-medium'
-              : 'border-slate-200 text-slate-400 hover:text-slate-600',
-            disabled && 'cursor-not-allowed opacity-50',
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
+  const [pendingChanges, setPendingChanges] = useState<Map<string, boolean | null>>(new Map());
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
-
-interface PermissionsScreenProps {
-  roles: RoleWithPermissions[];
-  permissions: PermissionDef[];
-  users: UserSummary[];
-}
-
-export function PermissionsScreen({ roles, permissions, users }: PermissionsScreenProps) {
-  const [search, setSearch] = useState('');
-  const [selectedUser, setSelectedUser] = useState<UserSummary | null>(null);
-  const [overrideMap, setOverrideMap] = useState<Map<string, boolean>>(new Map());
-  const [loadingOverrides, setLoadingOverrides] = useState(false);
-  const [pendingPermId, setPendingPermId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [, startTransition] = useTransition();
-
-  const filteredUsers = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return users;
-    return users.filter(
-      (u) => u.name.toLowerCase().includes(term) || u.email.toLowerCase().includes(term),
-    );
-  }, [users, search]);
-
-  // Load overrides when selected user changes
+  // Search with 300ms debounce
   useEffect(() => {
-    if (!selectedUser) {
-      setOverrideMap(new Map());
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
       return;
     }
-    setLoadingOverrides(true);
-    setActionError(null);
-    fetchUserOverridesAction(selectedUser.id)
-      .then((overrides) => {
-        const map = new Map<string, boolean>();
-        for (const o of overrides) map.set(o.permissionId, o.granted);
-        setOverrideMap(map);
-      })
-      .catch(() => setActionError('No se pudieron cargar los permisos del usuario.'))
-      .finally(() => setLoadingOverrides(false));
+    debounceRef.current = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const res = await fetch(`/api/auth/users/search?q=${encodeURIComponent(searchQuery)}&limit=10`);
+        const data = (await res.json()) as SearchUser[];
+        setSearchResults(data);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchQuery]);
+
+  // Load effective permissions when user is selected
+  useEffect(() => {
+    if (!selectedUser) {
+      setEffectivePerms(null);
+      setPendingChanges(new Map());
+      setSaveError(null);
+      setSaveSuccess(false);
+      return;
+    }
+    setPermsLoading(true);
+    setEffectivePerms(null);
+    setPendingChanges(new Map());
+    setSaveError(null);
+    setSaveSuccess(false);
+    fetch(`/api/auth/users/${selectedUser.id}/effective-permissions`)
+      .then((r) => r.json() as Promise<EffectivePermissionsResult>)
+      .then((data) => setEffectivePerms(data))
+      .catch(() => setEffectivePerms({ sections: [] }))
+      .finally(() => setPermsLoading(false));
   }, [selectedUser]);
 
-  // Permissions inherited by the selected user via their roles
-  const inheritedPermIds = useMemo(() => {
-    if (!selectedUser) return new Set<string>();
-    const userRoleIds = new Set(selectedUser.roles.map((r) => r.id));
-    const ids = new Set<string>();
-    for (const role of roles) {
-      if (userRoleIds.has(role.id)) {
-        for (const p of role.permissions) ids.add(p.id);
+  const handleSelectUser = useCallback((user: SearchUser) => {
+    setSelectedUser((prev) => (prev?.id === user.id ? null : user));
+  }, []);
+
+  const handleTogglePerm = useCallback((permId: string, currentOverride: boolean | null) => {
+    const next = nextOverride(currentOverride);
+    setPendingChanges((prev) => {
+      const updated = new Map(prev);
+      // Find original override from effectivePerms
+      updated.set(permId, next);
+      return updated;
+    });
+    setSaveSuccess(false);
+  }, []);
+
+  const handleSave = async () => {
+    if (!selectedUser || pendingChanges.size === 0) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    const errors: string[] = [];
+    for (const [permissionId, granted] of pendingChanges) {
+      try {
+        const res = await fetch(`/api/auth/users/${selectedUser.id}/permissions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ permissionId, granted }),
+        });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => ({}))) as { error?: string };
+          errors.push(body.error ?? `Error al actualizar permiso`);
+        }
+      } catch {
+        errors.push('Error de red al guardar permiso');
       }
     }
-    return ids;
-  }, [selectedUser, roles]);
 
-  const handleOverrideChange = (permId: string, newState: OverrideState) => {
-    if (!selectedUser) return;
-    setPendingPermId(permId);
-    setActionError(null);
-    startTransition(async () => {
-      if (newState === 'inherited') {
-        const result = await removeUserPermissionAction(selectedUser.id, permId);
-        if (result.success) {
-          setOverrideMap((prev) => {
-            const next = new Map(prev);
-            next.delete(permId);
-            return next;
-          });
-        } else {
-          setActionError(result.error ?? 'Error al actualizar permiso.');
-        }
-      } else {
-        const granted = newState === 'granted';
-        const result = await setUserPermissionAction(selectedUser.id, permId, granted);
-        if (result.success) {
-          setOverrideMap((prev) => new Map(prev).set(permId, granted));
-        } else {
-          setActionError(result.error ?? 'Error al actualizar permiso.');
-        }
-      }
-      setPendingPermId(null);
-    });
+    if (errors.length > 0) {
+      setSaveError(errors[0] ?? 'Error al guardar cambios');
+      setSaving(false);
+      return;
+    }
+
+    // Reload effective permissions to reflect saved state
+    try {
+      const res = await fetch(`/api/auth/users/${selectedUser.id}/effective-permissions`);
+      const data = (await res.json()) as EffectivePermissionsResult;
+      setEffectivePerms(data);
+    } catch {
+      // keep current state
+    }
+    setPendingChanges(new Map());
+    setSaveSuccess(true);
+    setSaving(false);
   };
 
-  const permsBySection = useMemo(() => groupBySection(permissions), [permissions]);
+  const orderedSections = effectivePerms
+    ? [
+        ...SECTION_ORDER.filter((s) => effectivePerms.sections.some((sec) => sec.section === s)).map(
+          (s) => effectivePerms.sections.find((sec) => sec.section === s)!,
+        ),
+        ...effectivePerms.sections.filter((sec) => !SECTION_ORDER.includes(sec.section)),
+      ]
+    : [];
+
+  const displayedUsers = searchQuery.trim() ? searchResults : [];
 
   return (
-    <div className="space-y-10">
-      <header>
-        <h1 className="text-2xl font-bold text-navy">Permisos</h1>
-        <p className="mt-1 text-sm text-slate-500">
-          Gestión de permisos por rol y overrides individuales por usuario.
-        </p>
-      </header>
-
-      {/* ── Sección 1: Permisos por rol ── */}
-      <section>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-navy">Permisos por rol</h2>
-          <p className="text-sm text-slate-500">
-            Solo lectura — los permisos de cada rol se definen en el seed de la base de datos.
-          </p>
+    <div className="flex h-[calc(100vh-64px)] overflow-hidden">
+      {/* ── Left panel: search + user list ── */}
+      <aside className="flex w-72 shrink-0 flex-col border-r border-slate-200 bg-white">
+        <div className="border-b border-slate-100 p-4">
+          <h1 className="mb-3 text-lg font-bold text-navy">Permisos</h1>
+          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <SearchIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar usuario…"
+              className="w-full bg-transparent text-sm text-navy placeholder:text-slate-400 focus:outline-none"
+            />
+          </div>
         </div>
-        <div className="space-y-2">
-          {roles.map((role) => (
-            <RoleCard key={role.id} role={role} />
-          ))}
-          {roles.length === 0 && (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
-              No se cargaron los roles. Verifica que la API esté disponible.
-            </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {searchLoading && (
+            <p className="px-4 py-6 text-center text-sm text-slate-400">Buscando…</p>
           )}
-        </div>
-      </section>
-
-      {/* ── Sección 2: Permisos por usuario ── */}
-      <section>
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold text-navy">Permisos por usuario</h2>
-          <p className="text-sm text-slate-500">
-            Selecciona un usuario para ver sus permisos heredados y agregar overrides individuales.
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="flex max-w-sm items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
-          <SearchIcon className="h-4 w-4 shrink-0 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre o email…"
-            className="w-full text-sm text-navy placeholder:text-slate-400 focus:outline-none"
-          />
-        </div>
-
-        {/* User list */}
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          {filteredUsers.length === 0 && (
-            <p className="px-4 py-6 text-center text-sm text-slate-400">
-              No se encontraron usuarios.
+          {!searchLoading && searchQuery.trim() && displayedUsers.length === 0 && (
+            <p className="px-4 py-6 text-center text-sm text-slate-400">Sin resultados</p>
+          )}
+          {!searchQuery.trim() && (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">
+              Escribe para buscar un usuario
             </p>
           )}
-          {filteredUsers.slice(0, 20).map((user) => {
-            const role = user.roles[0];
+          {displayedUsers.map((user) => {
             const isSelected = selectedUser?.id === user.id;
+            const role = user.roles[0];
             return (
               <button
                 key={user.id}
                 type="button"
-                onClick={() => setSelectedUser(isSelected ? null : user)}
+                onClick={() => handleSelectUser(user)}
                 className={cn(
                   'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-slate-50',
                   isSelected && 'border-l-2 border-l-terracota bg-terracota/5',
                 )}
               >
-                <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-                  style={{ backgroundColor: avatarColor(user.name) }}
-                >
-                  {initials(user.name)}
-                </div>
+                <UserAvatar name={user.name} email={user.email} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-navy">{user.name}</p>
                   <p className="truncate text-xs text-slate-500">{user.email}</p>
@@ -350,7 +421,7 @@ export function PermissionsScreen({ roles, permissions, users }: PermissionsScre
                 {role && (
                   <span
                     className={cn(
-                      'shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold',
+                      'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
                       ROLE_BADGE_STYLES[role.name] ?? DEFAULT_ROLE_BADGE,
                     )}
                   >
@@ -360,140 +431,129 @@ export function PermissionsScreen({ roles, permissions, users }: PermissionsScre
               </button>
             );
           })}
-          {filteredUsers.length > 20 && (
-            <p className="px-4 py-2 text-center text-xs text-slate-400">
-              Mostrando 20 de {filteredUsers.length}. Refina la búsqueda.
-            </p>
-          )}
         </div>
+      </aside>
 
-        {/* Permission matrix */}
-        {selectedUser && (
-          <div className="mt-6">
+      {/* ── Right panel: permissions ── */}
+      <main className="flex flex-1 flex-col overflow-hidden bg-slate-50">
+        {!selectedUser ? (
+          <div className="flex flex-1 items-center justify-center text-slate-400">
+            <div className="text-center">
+              <p className="text-lg font-medium">Selecciona un usuario</p>
+              <p className="mt-1 text-sm">Busca y selecciona un usuario para ver sus permisos</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col overflow-hidden">
             {/* User header */}
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <div
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-semibold text-white"
-                  style={{ backgroundColor: avatarColor(selectedUser.name) }}
-                >
-                  {initials(selectedUser.name)}
+            <div className="border-b border-slate-200 bg-white px-6 py-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                    style={{ backgroundColor: avatarColor(selectedUser.name) }}
+                  >
+                    {initials(selectedUser.name)}
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-navy">{selectedUser.name}</p>
+                      {selectedUser.roles.map((r) => (
+                        <span
+                          key={r.id}
+                          className={cn(
+                            'rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                            ROLE_BADGE_STYLES[r.name] ?? DEFAULT_ROLE_BADGE,
+                          )}
+                        >
+                          {r.name}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-500">{selectedUser.email}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-navy">{selectedUser.name}</p>
-                  <p className="text-xs text-slate-500">{selectedUser.email}</p>
-                </div>
-                {selectedUser.roles.map((r) => (
-                  <span
-                    key={r.id}
+
+                <div className="flex items-center gap-3">
+                  {saveSuccess && (
+                    <span className="text-sm text-emerald-600">Cambios guardados</span>
+                  )}
+                  {pendingChanges.size > 0 && (
+                    <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+                      {pendingChanges.size} cambio{pendingChanges.size !== 1 ? 's' : ''} pendiente{pendingChanges.size !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving || pendingChanges.size === 0}
                     className={cn(
-                      'rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                      ROLE_BADGE_STYLES[r.name] ?? DEFAULT_ROLE_BADGE,
+                      'rounded-md px-4 py-2 text-sm font-medium transition-colors',
+                      pendingChanges.size > 0 && !saving
+                        ? 'bg-terracota text-white hover:bg-terracota/90'
+                        : 'cursor-not-allowed bg-slate-100 text-slate-400',
                     )}
                   >
-                    {r.name}
-                  </span>
-                ))}
+                    {saving ? 'Guardando…' : 'Guardar cambios'}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedUser(null)}
-                className="text-xs text-slate-400 hover:text-slate-600"
-              >
-                Limpiar selección
-              </button>
+
+              {saveError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
+                  {saveError}
+                </div>
+              )}
+
+              {/* Legend */}
+              <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-emerald-300 bg-emerald-50" />
+                  Activo (del rol)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm bg-emerald-50 ring-2 ring-emerald-400" />
+                  Activo (override)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm border border-dashed border-slate-200 bg-slate-50" />
+                  Inactivo (del rol)
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block h-3 w-3 rounded-sm bg-slate-50 ring-2 ring-red-400" />
+                  Revocado (override)
+                </div>
+                <span className="text-slate-400">— Clic en chip para cambiar</span>
+              </div>
             </div>
 
-            {actionError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
-                {actionError}
-              </div>
-            )}
-
-            {loadingOverrides ? (
-              <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400">
-                Cargando permisos…
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {SECTION_ORDER.filter((s) => permsBySection[s]?.length).map((section) => (
-                  <div
-                    key={section}
-                    className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
-                  >
-                    <div className="border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        {SECTION_LABELS[section] ?? section}
-                      </p>
+            {/* Permission sections */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {permsLoading ? (
+                <div className="flex h-32 items-center justify-center text-sm text-slate-400">
+                  Cargando permisos…
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {orderedSections.map((section) => (
+                    <SectionAccordion
+                      key={section.section}
+                      section={section}
+                      pendingChanges={pendingChanges}
+                      onTogglePerm={handleTogglePerm}
+                    />
+                  ))}
+                  {orderedSections.length === 0 && (
+                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
+                      No se encontraron permisos.
                     </div>
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-100 text-xs text-slate-400">
-                          <th className="px-4 py-2 text-left font-medium">Permiso</th>
-                          <th className="hidden px-4 py-2 text-left font-medium sm:table-cell">
-                            Descripción
-                          </th>
-                          <th className="px-4 py-2 text-center font-medium">Del rol</th>
-                          <th className="px-4 py-2 text-left font-medium">Override</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(permsBySection[section] ?? []).map((perm) => {
-                          const fromRole = inheritedPermIds.has(perm.id);
-                          const overrideVal = overrideMap.has(perm.id)
-                            ? (overrideMap.get(perm.id)! ? 'granted' : 'revoked')
-                            : 'inherited';
-                          const isPending = pendingPermId === perm.id;
-
-                          return (
-                            <tr
-                              key={perm.id}
-                              className="border-b border-slate-100 last:border-none"
-                            >
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-medium text-slate-700">
-                                    {MODULE_LABELS[perm.module] ?? perm.module}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      'rounded px-1.5 py-0.5 text-[10px] font-medium',
-                                      ACTION_BADGE[perm.action] ?? 'bg-slate-100 text-slate-500',
-                                    )}
-                                  >
-                                    {ACTION_LABELS[perm.action] ?? perm.action}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="hidden px-4 py-3 text-xs text-slate-500 sm:table-cell">
-                                {perm.description}
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                {fromRole ? (
-                                  <span className="text-emerald-500">✓</span>
-                                ) : (
-                                  <span className="text-slate-300">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                <OverrideControl
-                                  state={overrideVal as OverrideState}
-                                  disabled={isPending}
-                                  onChange={(s) => handleOverrideChange(perm.id, s)}
-                                />
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                ))}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
-      </section>
+      </main>
     </div>
   );
 }

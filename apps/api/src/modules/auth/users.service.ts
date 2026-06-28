@@ -1,6 +1,31 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
+
+export interface EffectivePermItem {
+  id: string;
+  action: string;
+  description: string | null;
+  granted: boolean;
+  fromRole: boolean;
+  overrideGranted: boolean | null;
+}
+
+export interface EffectivePermModule {
+  module: string;
+  permissions: EffectivePermItem[];
+}
+
+export interface EffectivePermSection {
+  section: string;
+  totalPermissions: number;
+  activePermissions: number;
+  modules: EffectivePermModule[];
+}
+
+export interface EffectivePermissionsResult {
+  sections: EffectivePermSection[];
+}
 import { EmailService } from '../notifications/email.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -173,5 +198,62 @@ export class UsersService {
 
   async removeUserPermission(userId: string, permissionId: string): Promise<void> {
     await this.userPermissionsRepository.delete({ userId, permissionId });
+  }
+
+  async searchUsers(q: string, limit: number): Promise<User[]> {
+    if (!q.trim()) return [];
+    const term = `%${q}%`;
+    return this.usersRepository
+      .createQueryBuilder('u')
+      .leftJoinAndSelect('u.roles', 'r')
+      .where('(u.name ILIKE :term OR u.email ILIKE :term)', { term })
+      .andWhere('u.deletedAt IS NULL')
+      .orderBy('u.name', 'ASC')
+      .take(Math.min(limit, 10))
+      .getMany();
+  }
+
+  async getEffectivePermissions(userId: string): Promise<EffectivePermissionsResult> {
+    const user = await this.findById(userId);
+    const allPermissions = await this.permissionsRepository.find({
+      order: { section: 'ASC', module: 'ASC', action: 'ASC' },
+    });
+
+    const rolePermIds = new Set<string>();
+    for (const role of user.roles ?? []) {
+      for (const p of role.permissions ?? []) rolePermIds.add(p.id);
+    }
+
+    const overrideMap = new Map<string, boolean>();
+    for (const up of user.userPermissions ?? []) overrideMap.set(up.permissionId, up.granted);
+
+    const sectionMap = new Map<string, Map<string, EffectivePermItem[]>>();
+
+    for (const perm of allPermissions) {
+      const section = perm.section ?? 'otros';
+      const fromRole = rolePermIds.has(perm.id);
+      const overrideGranted = overrideMap.has(perm.id) ? (overrideMap.get(perm.id) ?? null) : null;
+      const granted = overrideGranted !== null ? overrideGranted : fromRole;
+
+      if (!sectionMap.has(section)) sectionMap.set(section, new Map());
+      const moduleMap = sectionMap.get(section)!;
+      if (!moduleMap.has(perm.module)) moduleMap.set(perm.module, []);
+      moduleMap.get(perm.module)!.push({ id: perm.id, action: perm.action, description: perm.description, granted, fromRole, overrideGranted });
+    }
+
+    const sections: EffectivePermSection[] = [];
+    for (const [section, moduleMap] of sectionMap) {
+      const modules: EffectivePermModule[] = [];
+      let totalPermissions = 0;
+      let activePermissions = 0;
+      for (const [module, permissions] of moduleMap) {
+        modules.push({ module, permissions });
+        totalPermissions += permissions.length;
+        activePermissions += permissions.filter((p) => p.granted).length;
+      }
+      sections.push({ section, totalPermissions, activePermissions, modules });
+    }
+
+    return { sections };
   }
 }
