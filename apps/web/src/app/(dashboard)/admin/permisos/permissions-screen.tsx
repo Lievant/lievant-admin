@@ -6,6 +6,28 @@ import { avatarColor, initials } from '@/lib/avatar';
 import { ChevronDownIcon, SearchIcon } from '@/components/icons';
 import { DEFAULT_ROLE_BADGE, ROLE_BADGE_STYLES } from '../usuarios/constants';
 
+function UserAvatar({ name, email }: { name: string; email: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!email || failed) {
+    return (
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+        style={{ backgroundColor: avatarColor(name) }}
+      >
+        {initials(name)}
+      </div>
+    );
+  }
+  return (
+    <img
+      src={`/api/users/${encodeURIComponent(email)}/photo`}
+      alt={name}
+      className="h-8 w-8 shrink-0 rounded-full object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface UserRole { id: string; name: string }
@@ -391,12 +413,7 @@ export function PermissionsScreen() {
                   isSelected && 'border-l-2 border-l-terracota bg-terracota/5',
                 )}
               >
-                <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-                  style={{ backgroundColor: avatarColor(user.name) }}
-                >
-                  {initials(user.name)}
-                </div>
+                <UserAvatar name={user.name} email={user.email} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-navy">{user.name}</p>
                   <p className="truncate text-xs text-slate-500">{user.email}</p>
