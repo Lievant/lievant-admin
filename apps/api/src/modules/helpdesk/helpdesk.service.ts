@@ -11,6 +11,7 @@ import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { HelpdeskCategory } from './entities/category.entity';
 import { HelpdeskSubcategory } from './entities/subcategory.entity';
 import { Ticket } from './entities/ticket.entity';
+import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
 
 const CATEGORY_PRIORITY: Record<string, string> = {
@@ -24,10 +25,14 @@ const CATEGORY_PRIORITY: Record<string, string> = {
   mejora: 'P4',
 };
 
+// Seconds per SLA hour-limit (for inline CASE expression)
+const SLA_SECONDS: Record<string, number> = { P1: 14400, P2: 28800, P3: 86400, P4: 259200 };
+
 @Injectable()
 export class HelpdeskService {
   constructor(
     @InjectRepository(Ticket) private readonly ticketsRepo: Repository<Ticket>,
+    @InjectRepository(TicketAssignee) private readonly assigneesRepo: Repository<TicketAssignee>,
     @InjectRepository(TicketHistory) private readonly historyRepo: Repository<TicketHistory>,
     @InjectRepository(HelpdeskCategory) private readonly categoriesRepo: Repository<HelpdeskCategory>,
     @InjectRepository(HelpdeskSubcategory) private readonly subcategoriesRepo: Repository<HelpdeskSubcategory>,
@@ -63,6 +68,22 @@ export class HelpdeskService {
     }
     if (query.dateFrom) qb.andWhere('t.requested_at >= :dateFrom', { dateFrom: query.dateFrom });
     if (query.dateTo) qb.andWhere('t.requested_at <= :dateTo', { dateTo: query.dateTo });
+    if (query.slaStatus) {
+      const slaRatio = `CASE
+        WHEN t.priority = 'P1' THEN EXTRACT(EPOCH FROM (NOW() - t.requested_at)) / ${SLA_SECONDS['P1']}.0
+        WHEN t.priority = 'P2' THEN EXTRACT(EPOCH FROM (NOW() - t.requested_at)) / ${SLA_SECONDS['P2']}.0
+        WHEN t.priority = 'P3' THEN EXTRACT(EPOCH FROM (NOW() - t.requested_at)) / ${SLA_SECONDS['P3']}.0
+        WHEN t.priority = 'P4' THEN EXTRACT(EPOCH FROM (NOW() - t.requested_at)) / ${SLA_SECONDS['P4']}.0
+        ELSE NULL END`;
+      qb.andWhere(`t.status NOT IN ('cerrado', 'cancelado')`);
+      if (query.slaStatus === 'overdue') {
+        qb.andWhere(`(${slaRatio}) >= 1.0`);
+      } else if (query.slaStatus === 'warning') {
+        qb.andWhere(`(${slaRatio}) >= 0.75`).andWhere(`(${slaRatio}) < 1.0`);
+      } else {
+        qb.andWhere(`(${slaRatio}) < 0.75`);
+      }
+    }
     if (query.cursor) {
       const [cursorDate = '', cursorId = ''] = Buffer.from(query.cursor, 'base64').toString().split('|');
       qb.andWhere(
@@ -86,11 +107,13 @@ export class HelpdeskService {
   async findById(id: string) {
     const ticket = await this.ticketsRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
-    const history = await this.historyRepo.find({
-      where: { ticketId: id },
-      order: { createdAt: 'ASC' },
-    });
-    return { ...ticket, history };
+    const [history, assignee] = await Promise.all([
+      this.historyRepo.find({ where: { ticketId: id }, order: { createdAt: 'ASC' } }),
+      ticket.assignedTo
+        ? this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } })
+        : Promise.resolve(null),
+    ]);
+    return { ...ticket, history, assigneeName: assignee?.name ?? null };
   }
 
   async findMyTickets(userId: string, query: QueryTicketsDto) {
@@ -204,34 +227,104 @@ export class HelpdeskService {
   // Stats & Dashboard
   // -----------------------------------------------------------------------
 
-  async getStats() {
-    const [byStatus, byPriority, slaData, avgRes] = await Promise.all([
-      this.ticketsRepo.manager.query<Array<{ status: string; count: string }>>(
-        `SELECT status, COUNT(*)::int AS count FROM helpdesk.tickets WHERE deleted_at IS NULL GROUP BY status`,
+  async getStats(from?: string, to?: string) {
+    const hasFilter = Boolean(from && to);
+    const base = `WHERE deleted_at IS NULL`;
+    const dateClause = hasFilter ? `AND requested_at >= $1 AND requested_at <= $2` : '';
+    const params: string[] = hasFilter ? [from!, to!] : [];
+
+    // Previous period params (same duration before `from`)
+    let prevClause = `AND 1=0`;
+    let prevParams: string[] = [];
+    if (hasFilter) {
+      const f = new Date(from!);
+      const t = new Date(to!);
+      const span = t.getTime() - f.getTime();
+      const pFrom = new Date(f.getTime() - span).toISOString();
+      const pTo = new Date(f.getTime() - 1).toISOString();
+      prevClause = `AND requested_at >= $1 AND requested_at <= $2`;
+      prevParams = [pFrom, pTo];
+    }
+
+    const [
+      byStatus, byPriority, slaData, avgRes, openRows, byCategory, byMonth, top10,
+      prevTotal, prevSlaData, prevAvgRes,
+    ] = await Promise.all([
+      this.ticketsRepo.manager.query<Array<{ status: string; count: number }>>(
+        `SELECT status, COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${dateClause} GROUP BY status`,
+        params,
       ),
-      this.ticketsRepo.manager.query<Array<{ priority: string; count: string }>>(
-        `SELECT priority, COUNT(*)::int AS count FROM helpdesk.tickets WHERE deleted_at IS NULL AND priority IS NOT NULL GROUP BY priority`,
+      this.ticketsRepo.manager.query<Array<{ priority: string; count: number }>>(
+        `SELECT priority, COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${dateClause} AND priority IS NOT NULL GROUP BY priority`,
+        params,
       ),
       this.ticketsRepo.manager.query<Array<{ total: string; resolution_met: string }>>(
-        `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE sla_resolution_met = true)::int AS resolution_met FROM helpdesk.tickets WHERE deleted_at IS NULL AND sla_resolution_met IS NOT NULL`,
+        `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE sla_resolution_met = true)::int AS resolution_met FROM helpdesk.tickets ${base} ${dateClause} AND sla_resolution_met IS NOT NULL`,
+        params,
       ),
       this.ticketsRepo.manager.query<Array<{ avg_hours: string }>>(
-        `SELECT ROUND(AVG(resolution_hours)::numeric, 2) AS avg_hours FROM helpdesk.tickets WHERE deleted_at IS NULL AND resolution_hours IS NOT NULL`,
+        `SELECT ROUND(AVG(resolution_hours)::numeric, 2) AS avg_hours FROM helpdesk.tickets ${base} ${dateClause} AND resolution_hours IS NOT NULL`,
+        params,
+      ),
+      this.ticketsRepo.manager.query<Array<{ count: string }>>(
+        `SELECT COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${dateClause} AND status IN ('abierto', 'en_atencion', 'en_revision')`,
+        params,
+      ),
+      this.ticketsRepo.manager.query<Array<{ category: string; count: number }>>(
+        `SELECT category, COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${dateClause} GROUP BY category ORDER BY count DESC`,
+        params,
+      ),
+      this.ticketsRepo.manager.query<Array<{ month: string; count: number }>>(
+        `SELECT TO_CHAR(DATE_TRUNC('month', requested_at), 'YYYY-MM') AS month, COUNT(*)::int AS count FROM helpdesk.tickets WHERE deleted_at IS NULL AND requested_at >= DATE_TRUNC('month', NOW()) - INTERVAL '6 months' GROUP BY month ORDER BY month`,
+      ),
+      this.ticketsRepo.manager.query<Array<{ requester_name: string; count: number }>>(
+        `SELECT requester_name, COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${dateClause} GROUP BY requester_name ORDER BY count DESC LIMIT 10`,
+        params,
+      ),
+      this.ticketsRepo.manager.query<Array<{ count: string }>>(
+        `SELECT COUNT(*)::int AS count FROM helpdesk.tickets ${base} ${prevClause}`,
+        prevParams,
+      ),
+      this.ticketsRepo.manager.query<Array<{ total: string; resolution_met: string }>>(
+        `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE sla_resolution_met = true)::int AS resolution_met FROM helpdesk.tickets ${base} ${prevClause} AND sla_resolution_met IS NOT NULL`,
+        prevParams,
+      ),
+      this.ticketsRepo.manager.query<Array<{ avg_hours: string }>>(
+        `SELECT ROUND(AVG(resolution_hours)::numeric, 2) AS avg_hours FROM helpdesk.tickets ${base} ${prevClause} AND resolution_hours IS NOT NULL`,
+        prevParams,
       ),
     ]);
 
     const total = byStatus.reduce((s, r) => s + Number(r.count), 0);
     const sla = slaData[0];
-    const slaRate = sla && Number(sla.total) > 0
-      ? Math.round((Number(sla.resolution_met) / Number(sla.total)) * 100)
-      : null;
+    const slaRate =
+      sla && Number(sla.total) > 0
+        ? Math.round((Number(sla.resolution_met) / Number(sla.total)) * 100)
+        : null;
+
+    const prevSla = prevSlaData[0];
+    const prevSlaRate =
+      prevSla && Number(prevSla.total) > 0
+        ? Math.round((Number(prevSla.resolution_met) / Number(prevSla.total)) * 100)
+        : null;
 
     return {
       total,
+      openTickets: Number(openRows[0]?.count ?? 0),
       byStatus: Object.fromEntries(byStatus.map((r) => [r.status, Number(r.count)])),
       byPriority: Object.fromEntries(byPriority.map((r) => [r.priority, Number(r.count)])),
+      byCategory: Object.fromEntries(byCategory.map((r) => [r.category, Number(r.count)])),
+      byMonth: byMonth.map((r) => ({ month: r.month, count: Number(r.count) })),
+      top10Requesters: top10.map((r) => ({ name: r.requester_name, count: Number(r.count) })),
       slaResolutionRate: slaRate,
       avgResolutionHours: avgRes[0]?.avg_hours ? Number(avgRes[0].avg_hours) : null,
+      prev: hasFilter
+        ? {
+            total: Number(prevTotal[0]?.count ?? 0),
+            slaResolutionRate: prevSlaRate,
+            avgResolutionHours: prevAvgRes[0]?.avg_hours ? Number(prevAvgRes[0].avg_hours) : null,
+          }
+        : null,
     };
   }
 
@@ -256,6 +349,10 @@ export class HelpdeskService {
       where: { categorySlug: slug, isActive: true },
       order: { sortOrder: 'ASC' },
     });
+  }
+
+  findAssignees() {
+    return this.assigneesRepo.find({ where: { isActive: true }, order: { name: 'ASC' } });
   }
 
   // -----------------------------------------------------------------------

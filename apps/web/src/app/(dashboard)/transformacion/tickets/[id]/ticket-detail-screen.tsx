@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { TicketDetail, TicketPriority, TicketStatus } from '@/lib/api';
+import type { TicketAssignee, TicketDetail, TicketPriority, TicketStatus } from '@/lib/api';
 import { ChevronLeftIcon } from '@/components/icons';
 import {
   escalateAction,
@@ -75,6 +75,16 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [assignees, setAssignees] = useState<TicketAssignee[]>([]);
+  const [selectedAssignee, setSelectedAssignee] = useState(ticket.assignedTo ?? '');
+
+  useEffect(() => {
+    if (!isTd) return;
+    fetch('/api/helpdesk/assignees')
+      .then((r) => r.json() as Promise<TicketAssignee[]>)
+      .then(setAssignees)
+      .catch(() => {});
+  }, [isTd]);
 
   // TD panel state
   const [newStatus, setNewStatus] = useState<TicketStatus>(ticket.status);
@@ -292,15 +302,46 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
           {/* Asignación */}
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Asignación</h2>
-            <dl className="space-y-2 text-sm">
-              <Row label="Técnico" value={ticket.assignedTo ?? '—'} />
-              {ticket.estimatedDelivery && (
+            {isTd && assignees.length > 0 ? (
+              <div className="space-y-2">
+                <label className="text-xs text-slate-500">Técnico asignado</label>
+                <select
+                  value={selectedAssignee}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedAssignee(val);
+                    startTransition(async () => {
+                      const r = await (await import('./actions')).updateTicketAction(ticket.id, {
+                        assignedTo: val || undefined,
+                      });
+                      if (r.success) router.refresh();
+                      else setError(r.error ?? 'Error al asignar técnico.');
+                    });
+                  }}
+                  className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm focus:outline-none"
+                >
+                  <option value="">— Sin asignar —</option>
+                  {assignees.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}{a.role ? ` (${a.role})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <dl className="space-y-2 text-sm">
+                <Row
+                  label="Técnico"
+                  value={ticket.assigneeName ?? (ticket.assignedTo ? `ID: ${ticket.assignedTo.substring(0, 8)}…` : '—')}
+                />
+              </dl>
+            )}
+            {ticket.estimatedDelivery && (
+              <dl className="mt-2 space-y-2 text-sm">
                 <Row
                   label="Entrega estimada"
                   value={new Date(ticket.estimatedDelivery).toLocaleDateString('es-MX', { dateStyle: 'medium' })}
                 />
-              )}
-            </dl>
+              </dl>
+            )}
           </div>
 
           {/* SLA */}

@@ -1888,6 +1888,7 @@ export interface TicketDetail extends TicketSummary {
   escalationReason: string | null;
   timesReopened: number;
   estimatedDelivery: string | null;
+  assigneeName: string | null;
   history: TicketHistoryEntry[];
 }
 
@@ -1899,10 +1900,27 @@ export interface TicketPage {
 
 export interface HelpdeskStats {
   total: number;
+  openTickets: number;
   byStatus: Record<string, number>;
   byPriority: Record<string, number>;
+  byCategory: Record<string, number>;
+  byMonth: { month: string; count: number }[];
+  top10Requesters: { name: string; count: number }[];
   slaResolutionRate: number | null;
   avgResolutionHours: number | null;
+  prev: {
+    total: number;
+    slaResolutionRate: number | null;
+    avgResolutionHours: number | null;
+  } | null;
+}
+
+export interface TicketAssignee {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  isActive: boolean;
 }
 
 export interface ListTicketsParams {
@@ -1914,6 +1932,7 @@ export interface ListTicketsParams {
   search?: string;
   dateFrom?: string;
   dateTo?: string;
+  slaStatus?: 'ok' | 'warning' | 'overdue';
   cursor?: string;
   limit?: number;
 }
@@ -1966,6 +1985,7 @@ export function listTickets(params?: ListTicketsParams): Promise<TicketPage> {
   if (params?.search) sp.set('search', params.search);
   if (params?.dateFrom) sp.set('dateFrom', params.dateFrom);
   if (params?.dateTo) sp.set('dateTo', params.dateTo);
+  if (params?.slaStatus) sp.set('slaStatus', params.slaStatus);
   if (params?.cursor) sp.set('cursor', params.cursor);
   if (params?.limit != null) sp.set('limit', String(params.limit));
   const qs = sp.toString();

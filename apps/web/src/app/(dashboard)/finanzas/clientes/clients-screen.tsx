@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import type { CatalogItem, ClientsPage, DocStatus } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
+import { SortableHeader } from '@/components/ui/sortable-header';
+import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import {
   CLIENT_STATUSES,
   CLIENT_STATUS_BADGE_STYLES,
@@ -106,9 +108,9 @@ export function ClientsScreen({
     router.push(`/finanzas/clientes?${sp.toString()}`);
   }
 
+  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
   const hasFilters = Boolean(filters.status || filters.docStatus || filters.industry || filters.search);
   const isFirstPage = cursorsStack.length === 0 && !cursor;
-  // When docStatus filter is active, server returns all matches (no cursor pagination)
   const hasPagination = !filters.docStatus;
 
   return (
@@ -192,14 +194,14 @@ export function ClientsScreen({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3">ID</th>
+              <SortableHeader label="ID" sortKey="displayId" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Cliente / Grupo</th>
               <th className="px-4 py-3">Empresas</th>
               <th className="px-4 py-3">Marcas</th>
               <th className="px-4 py-3">Industria</th>
               <th className="px-4 py-3">Ciudad / País</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3">Documentos</th>
+              <SortableHeader label="Estado" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Documentos" sortKey="docStatus" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
@@ -213,7 +215,7 @@ export function ClientsScreen({
                 </td>
               </tr>
             )}
-            {page.data.map((client) => {
+            {sorted.map((client) => {
               const name = clientDisplayName(client);
 
               return (

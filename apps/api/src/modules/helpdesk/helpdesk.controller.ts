@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, DefaultValuePipe, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -39,13 +39,21 @@ export class HelpdeskController {
     return this.service.findSubcategories(slug);
   }
 
+  @Get('assignees')
+  getAssignees() {
+    return this.service.findAssignees();
+  }
+
   // ------- Tickets --------------------------------------------------------
 
   @Get('tickets/stats')
   @UseGuards(PermissionsGuard)
   @RequirePermission('transformacion', 'tickets.reportes', 'read')
-  getStats() {
-    return this.service.getStats();
+  getStats(
+    @Query('from', new DefaultValuePipe('')) from: string,
+    @Query('to', new DefaultValuePipe('')) to: string,
+  ) {
+    return this.service.getStats(from || undefined, to || undefined);
   }
 
   @Get('tickets/my')

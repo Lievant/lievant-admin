@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import type { EmployeesPage } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
+import { SortableHeader } from '@/components/ui/sortable-header';
+import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import type { EmployeeFilterCatalogs } from './catalog-data';
 import {
   EMPLOYEE_STATUSES,
@@ -100,6 +102,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
     router.push(`/rrhh/empleados?${sp.toString()}`);
   }
 
+  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
   const hasFilters = Boolean(filters.status || filters.companyCode || filters.division || filters.location || filters.search || filters.docStatus);
   const hasPagination = !filters.docStatus;
   const isFirstPage = cursorsStack.length === 0 && !cursor;
@@ -219,16 +222,16 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Empleado</th>
-              <th className="px-4 py-3">Empresa</th>
-              <th className="px-4 py-3">División / Área</th>
+              <SortableHeader label="ID" sortKey="displayId" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Empleado" sortKey="fullName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Empresa" sortKey="companyName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="División / Área" sortKey="division" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Puesto</th>
               <th className="px-4 py-3">Ubicación</th>
               <th className="px-4 py-3">Modalidad</th>
-              <th className="px-4 py-3">Antigüedad</th>
+              <SortableHeader label="Antigüedad" sortKey="seniorityDate" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Documentos</th>
-              <th className="px-4 py-3">Estado</th>
+              <SortableHeader label="Estado" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Acciones</th>
             </tr>
           </thead>
@@ -242,7 +245,7 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
                 </td>
               </tr>
             )}
-            {page.data.map((employee) => {
+            {sorted.map((employee) => {
               const expiringSoon = isContractExpiringSoon(employee.contractEndDate);
 
               return (
