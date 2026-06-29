@@ -44,7 +44,7 @@ export class Ticket {
   @Column({ type: 'varchar', length: 5, nullable: true })
   priority!: string | null;
 
-  @Column({ name: 'assigned_to', type: 'uuid', nullable: true })
+  @Column({ name: 'assignee_id', type: 'uuid', nullable: true })
   assignedTo!: string | null;
 
   @Column({ type: 'text', nullable: true })

@@ -326,7 +326,7 @@ export function TicketsScreen({
                   </td>
                   {isTd && (
                     <td className="px-4 py-3 text-xs text-slate-500">
-                      {ticket.assignedTo ?? <span className="text-slate-300">—</span>}
+                      {ticket.assigneeName ?? <span className="text-slate-300">—</span>}
                     </td>
                   )}
                 </tr>

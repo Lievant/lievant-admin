@@ -17,6 +17,7 @@ import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
 import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
+import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 
 export interface CatalogRecord {
   id: string;
@@ -25,6 +26,8 @@ export interface CatalogRecord {
   country?: string;
   companyCode?: string | null;
   divisionName?: string | null;
+  email?: string | null;
+  role?: string | null;
   appliesTo?: string;
   isRequired?: boolean;
   isActive: boolean;
@@ -52,6 +55,7 @@ export class CatalogsService {
     @InjectRepository(CatalogDocumentType) documentTypes: Repository<CatalogDocumentType>,
     @InjectRepository(CatalogVendorCategory) vendorCategories: Repository<CatalogVendorCategory>,
     @InjectRepository(CatalogEmployeeDocumentType) employeeDocumentTypes: Repository<CatalogEmployeeDocumentType>,
+    @InjectRepository(TicketAssignee) ticketAssignees: Repository<TicketAssignee>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -68,6 +72,7 @@ export class CatalogsService {
       document_types: documentTypes as unknown as Repository<CatalogRecord>,
       vendor_categories: vendorCategories as unknown as Repository<CatalogRecord>,
       employee_document_types: employeeDocumentTypes as unknown as Repository<CatalogRecord>,
+      ticket_assignees: ticketAssignees as unknown as Repository<CatalogRecord>,
     };
   }
 
@@ -89,6 +94,8 @@ export class CatalogsService {
     if (dto.country !== undefined) data.country = dto.country;
     if (dto.companyCode !== undefined) data.companyCode = dto.companyCode;
     if (dto.divisionName !== undefined) data.divisionName = dto.divisionName;
+    if (dto.email !== undefined) data.email = dto.email;
+    if (dto.role !== undefined) data.role = dto.role;
     if (dto.appliesTo !== undefined) data.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) data.isRequired = dto.isRequired;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
@@ -106,6 +113,8 @@ export class CatalogsService {
     if (dto.country !== undefined) record.country = dto.country;
     if (dto.companyCode !== undefined) record.companyCode = dto.companyCode;
     if (dto.divisionName !== undefined) record.divisionName = dto.divisionName;
+    if (dto.email !== undefined) record.email = dto.email;
+    if (dto.role !== undefined) record.role = dto.role;
     if (dto.appliesTo !== undefined) record.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) record.isRequired = dto.isRequired;
     if (dto.isActive !== undefined) record.isActive = dto.isActive;
