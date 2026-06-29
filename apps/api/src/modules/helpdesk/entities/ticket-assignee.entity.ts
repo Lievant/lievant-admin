@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeorm';
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
 @Entity({ name: 'ticket_assignees', schema: 'helpdesk' })
 export class TicketAssignee {
@@ -19,7 +19,4 @@ export class TicketAssignee {
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder!: number;
-
-  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt!: Date;
 }
