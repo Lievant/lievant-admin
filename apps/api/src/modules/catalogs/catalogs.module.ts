@@ -16,6 +16,7 @@ import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
 import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
+import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { CatalogEmployeeDocumentType } from './entities/catalog-employee-documen
       CatalogDocumentType,
       CatalogVendorCategory,
       CatalogEmployeeDocumentType,
+      TicketAssignee,
     ]),
   ],
   controllers: [CatalogsController],

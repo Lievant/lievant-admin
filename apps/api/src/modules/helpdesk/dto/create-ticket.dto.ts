@@ -1,4 +1,4 @@
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateTicketDto {
   @IsOptional()
@@ -36,4 +36,8 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   estimatedDelivery?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assignedTo?: string;
 }

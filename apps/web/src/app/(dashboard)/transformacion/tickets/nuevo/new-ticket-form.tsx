@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { HelpdeskCategorySummary, HelpdeskSubcategorySummary, TicketImpact } from '@/lib/api';
+import type { HelpdeskCategorySummary, HelpdeskSubcategorySummary, TicketAssignee, TicketImpact } from '@/lib/api';
 import { createTicketAction } from './actions';
 
 const CATEGORY_PLACEHOLDERS: Record<string, string> = {
@@ -29,7 +29,7 @@ function EmployeeSearch({
   placeholder,
 }: {
   value: string;
-  onSelect: (name: string) => void;
+  onSelect: (emp: EmployeeSuggestion) => void;
   placeholder: string;
 }) {
   const [query, setQuery] = useState(value);
@@ -39,7 +39,6 @@ function EmployeeSearch({
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
@@ -76,7 +75,7 @@ function EmployeeSearch({
 
   function handleSelect(emp: EmployeeSuggestion) {
     setQuery(emp.fullName);
-    onSelect(emp.fullName);
+    onSelect(emp);
     setSuggestions([]);
     setOpen(false);
   }
@@ -130,6 +129,7 @@ interface FormState {
   impact: TicketImpact;
   openedOnBehalfOf: string;
   behalfReason: string;
+  assignedTo: string;
 }
 
 type SubmitResult = { displayId: string; id: string } | null;
@@ -143,11 +143,22 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
     impact: 'medio',
     openedOnBehalfOf: '',
     behalfReason: '',
+    assignedTo: '',
   });
   const [subcategories, setSubcategories] = useState<HelpdeskSubcategorySummary[]>([]);
+  const [assignees, setAssignees] = useState<TicketAssignee[]>([]);
+  const [openTicketsCount, setOpenTicketsCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitResult>(null);
+
+  useEffect(() => {
+    if (!isTd) return;
+    fetch('/api/helpdesk/assignees')
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: TicketAssignee[]) => setAssignees(data))
+      .catch(() => {});
+  }, [isTd]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -166,14 +177,26 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
     }
   }
 
+  async function onEmployeeSelect(emp: EmployeeSuggestion) {
+    set('openedOnBehalfOf', emp.fullName);
+    setOpenTicketsCount(null);
+    try {
+      const res = await fetch(
+        `/api/helpdesk/tickets?status=abierto&search=${encodeURIComponent(emp.fullName)}&limit=5`,
+      );
+      if (res.ok) {
+        const page = (await res.json()) as { data: unknown[] };
+        setOpenTicketsCount(page.data?.length ?? 0);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (form.description.trim().length < 20) {
       setError('La descripción debe tener al menos 20 caracteres.');
-      return;
-    }
-    if (form.category === 'equipos' && !form.equipmentId.trim()) {
-      setError('El ID del equipo es obligatorio para la categoría Equipos.');
       return;
     }
     if (isTd && form.openedOnBehalfOf && !form.behalfReason.trim()) {
@@ -193,6 +216,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
       ...(isTd && form.openedOnBehalfOf
         ? { openedByTd: true, openedOnBehalfOf: form.openedOnBehalfOf, behalfReason: form.behalfReason }
         : {}),
+      assignedTo: form.assignedTo || undefined,
     });
 
     setLoading(false);
@@ -228,8 +252,9 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
             type="button"
             onClick={() => {
               setResult(null);
-              setForm({ category: '', subcategory: '', equipmentId: '', description: '', impact: 'medio', openedOnBehalfOf: '', behalfReason: '' });
+              setForm({ category: '', subcategory: '', equipmentId: '', description: '', impact: 'medio', openedOnBehalfOf: '', behalfReason: '', assignedTo: '' });
               setSubcategories([]);
+              setOpenTicketsCount(null);
             }}
             className="rounded-md border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
           >
@@ -245,6 +270,49 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Sección TD — apertura en nombre de otro colaborador (siempre primero) */}
+      {isTd && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+            Apertura por TD
+          </p>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Abrir en nombre de
+            </label>
+            <EmployeeSearch
+              value={form.openedOnBehalfOf}
+              onSelect={onEmployeeSelect}
+              placeholder="Escribe el nombre del colaborador…"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Escribe al menos 2 caracteres para buscar.
+            </p>
+            {form.openedOnBehalfOf && openTicketsCount !== null && openTicketsCount > 0 && (
+              <div className="mt-2 flex items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                <i className="ti ti-alert-triangle text-sm" />
+                Este colaborador tiene {openTicketsCount} ticket{openTicketsCount !== 1 ? 's' : ''} abierto{openTicketsCount !== 1 ? 's' : ''}.
+              </div>
+            )}
+          </div>
+          {form.openedOnBehalfOf && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Motivo de apertura por TD <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.behalfReason}
+                onChange={(e) => set('behalfReason', e.target.value)}
+                placeholder="Ej: Colaborador sin acceso al sistema…"
+                required={Boolean(form.openedOnBehalfOf)}
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Categoría */}
       <div>
         <label className="mb-1.5 block text-sm font-medium text-slate-700">
@@ -280,20 +348,21 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
         </div>
       )}
 
-      {/* ID Equipo */}
+      {/* ID Equipo (siempre opcional) */}
       <div>
         <label className="mb-1.5 block text-sm font-medium text-slate-700">
-          ID del equipo{form.category === 'equipos' && <span className="text-red-500"> *</span>}
+          ID del equipo
         </label>
         <input
           type="text"
           value={form.equipmentId}
           onChange={(e) => set('equipmentId', e.target.value)}
           placeholder="Ej: M080, E009…"
-          required={form.category === 'equipos'}
           className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
         />
-        <p className="mt-1 text-xs text-slate-400">Puedes encontrarlo en la etiqueta de tu equipo.</p>
+        <p className="mt-1 text-xs text-slate-400">
+          Puedes encontrarlo en la etiqueta de tu equipo. Próximamente podrás seleccionarlo desde el inventario.
+        </p>
       </div>
 
       {/* Descripción */}
@@ -344,40 +413,20 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
         </div>
       </div>
 
-      {/* Sección TD — apertura en nombre de otro colaborador */}
-      {isTd && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-            Apertura por TD
-          </p>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">
-              Abrir en nombre de
-            </label>
-            <EmployeeSearch
-              value={form.openedOnBehalfOf}
-              onSelect={(name) => set('openedOnBehalfOf', name)}
-              placeholder="Escribe el nombre del colaborador…"
-            />
-            <p className="mt-1 text-xs text-slate-400">
-              Escribe al menos 2 caracteres para buscar.
-            </p>
-          </div>
-          {form.openedOnBehalfOf && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                Motivo de apertura por TD <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={form.behalfReason}
-                onChange={(e) => set('behalfReason', e.target.value)}
-                placeholder="Ej: Colaborador sin acceso al sistema…"
-                required={Boolean(form.openedOnBehalfOf)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
-              />
-            </div>
-          )}
+      {/* Asignado a (solo TD) */}
+      {isTd && assignees.length > 0 && (
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-slate-700">Asignado a</label>
+          <select
+            value={form.assignedTo}
+            onChange={(e) => set('assignedTo', e.target.value)}
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+          >
+            <option value="">Sin asignar</option>
+            {assignees.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}{a.role ? ` — ${a.role}` : ''}</option>
+            ))}
+          </select>
         </div>
       )}
 

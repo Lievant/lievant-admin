@@ -17,6 +17,9 @@ export class TicketAssignee {
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
 
+  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  sortOrder!: number;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 }

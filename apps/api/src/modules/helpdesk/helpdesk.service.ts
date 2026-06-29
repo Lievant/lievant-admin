@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -101,7 +101,15 @@ export class HelpdeskService {
         ? Buffer.from(`${last.requestedAt.toISOString()}|${last.id}`).toString('base64')
         : null;
 
-    return { data, nextCursor, total: data.length };
+    const assigneeIds = [...new Set(data.filter((t) => t.assignedTo).map((t) => t.assignedTo!))];
+    const assigneeMap: Record<string, string> = {};
+    if (assigneeIds.length > 0) {
+      const assignees = await this.assigneesRepo.findBy({ id: In(assigneeIds) });
+      for (const a of assignees) assigneeMap[a.id] = a.name;
+    }
+    const enriched = data.map((t) => ({ ...t, assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null }));
+
+    return { data: enriched, nextCursor, total: enriched.length };
   }
 
   async findById(id: string) {
@@ -154,6 +162,7 @@ export class HelpdeskService {
       description: dto.description,
       impact: dto.impact,
       priority,
+      assignedTo: dto.assignedTo ?? null,
       status: 'abierto',
       estimatedDelivery: dto.estimatedDelivery ? new Date(dto.estimatedDelivery) : null,
     });

@@ -31,6 +31,14 @@ export class CreateCatalogItemDto {
   isRequired?: boolean;
 
   @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  role?: string;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 

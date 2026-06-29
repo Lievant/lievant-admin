@@ -15,7 +15,7 @@ import {
 } from '@/components/icons';
 
 export interface CatalogFieldDef {
-  key: 'code' | 'country' | 'companyCode' | 'divisionName' | 'appliesTo' | 'isRequired' | 'description';
+  key: 'code' | 'country' | 'companyCode' | 'divisionName' | 'appliesTo' | 'isRequired' | 'description' | 'email' | 'role';
   label: string;
   type: 'text' | 'select' | 'checkbox';
   options?: { value: string; label: string }[];
@@ -145,6 +145,16 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     fields: [
       { key: 'description', label: 'Descripción', type: 'text' },
       { key: 'isRequired', label: 'Obligatorio', type: 'checkbox' },
+    ],
+  },
+  {
+    entity: 'ticket_assignees',
+    label: 'Técnicos de soporte TI',
+    itemLabel: 'técnico',
+    icon: 'ti-headset',
+    fields: [
+      { key: 'email', label: 'Correo electrónico', type: 'text', placeholder: 'tecnico@lievant.com' },
+      { key: 'role', label: 'Rol', type: 'text', placeholder: 'Técnico TI' },
     ],
   },
 ];

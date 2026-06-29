@@ -1036,7 +1036,8 @@ export type CatalogEntity =
   | 'document_types_vendor'
   | 'document_types_employee'
   | 'vendor_categories'
-  | 'employee_document_types';
+  | 'employee_document_types'
+  | 'ticket_assignees';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -1057,6 +1058,8 @@ export interface CatalogItem {
   country?: string | null;
   companyCode?: string | null;
   divisionName?: string | null;
+  email?: string | null;
+  role?: string | null;
   appliesTo?: string | null;
   isRequired?: boolean;
   isActive: boolean;
@@ -1072,6 +1075,8 @@ export interface CreateCatalogItemPayload {
   country?: string;
   companyCode?: string;
   divisionName?: string;
+  email?: string;
+  role?: string;
   appliesTo?: string;
   isRequired?: boolean;
   isActive?: boolean;
@@ -1873,6 +1878,7 @@ export interface TicketSummary {
   slaResolutionMet: boolean | null;
   equipmentId: string | null;
   isHistorical: boolean;
+  assigneeName: string | null;
 }
 
 export interface TicketDetail extends TicketSummary {
@@ -1947,6 +1953,7 @@ export interface CreateTicketPayload {
   openedOnBehalfOf?: string | undefined;
   behalfReason?: string | undefined;
   estimatedDelivery?: string | undefined;
+  assignedTo?: string | undefined;
 }
 
 export interface UpdateTicketStatusPayload {
