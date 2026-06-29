@@ -21,8 +21,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   const priority = asString(sp.priority);
   const category = asString(sp.category);
   const search = asString(sp.search);
-  const dateFrom = asString(sp.dateFrom);
-  const dateTo = asString(sp.dateTo);
+  const slaStatus = asString(sp.slaStatus) as 'ok' | 'warning' | 'overdue' | undefined;
   const cursor = asString(sp.cursor);
   const cursors = asString(sp.cursors);
 
@@ -31,8 +30,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   if (priority) query.priority = priority;
   if (category) query.category = category;
   if (search) query.search = search;
-  if (dateFrom) query.dateFrom = dateFrom;
-  if (dateTo) query.dateTo = dateTo;
+  if (slaStatus) query.slaStatus = slaStatus;
   if (cursor) query.cursor = cursor;
 
   const [ticketPage, categories, currentUser] = await Promise.all([
@@ -52,7 +50,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
         page={ticketPage ?? { data: [], nextCursor: null, total: 0 }}
         categories={categories ?? []}
         isTd={isTd}
-        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', dateFrom: dateFrom ?? '', dateTo: dateTo ?? '' }}
+        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', slaStatus: slaStatus ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
         apiUnavailable={ticketPage === null}

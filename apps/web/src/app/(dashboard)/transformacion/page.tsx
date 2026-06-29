@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getHelpdeskStats, type HelpdeskStats } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { DashboardCharts } from '@/components/helpdesk/dashboard-charts';
 
 async function safeStats(): Promise<HelpdeskStats | null> {
   try {
@@ -99,6 +100,9 @@ export default async function TransformacionPage() {
           </Link>
         </div>
       </div>
+
+      {/* Dashboard ejecutivo — gráficos interactivos */}
+      <DashboardCharts />
 
       {/* Distribución por prioridad */}
       {stats && (

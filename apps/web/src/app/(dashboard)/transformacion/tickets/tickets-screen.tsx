@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { HelpdeskCategorySummary, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
 import { PlusIcon, SearchIcon } from '@/components/icons';
+import { SortableHeader } from '@/components/ui/sortable-header';
+import { useSortableColumns } from '@/hooks/use-sortable-columns';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -62,8 +64,7 @@ interface Filters {
   priority: string;
   category: string;
   search: string;
-  dateFrom: string;
-  dateTo: string;
+  slaStatus: string;
 }
 
 interface TicketsScreenProps {
@@ -104,8 +105,7 @@ export function TicketsScreen({
     if (filters.priority) sp.set('priority', filters.priority);
     if (filters.category) sp.set('category', filters.category);
     if (filters.search) sp.set('search', filters.search);
-    if (filters.dateFrom) sp.set('dateFrom', filters.dateFrom);
-    if (filters.dateTo) sp.set('dateTo', filters.dateTo);
+    if (filters.slaStatus) sp.set('slaStatus', filters.slaStatus);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -141,6 +141,7 @@ export function TicketsScreen({
     router.push(`/transformacion/tickets?${sp.toString()}`);
   }
 
+  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
   const isFirstPage = cursorsStack.length === 0 && !cursor;
 
   return (
@@ -217,20 +218,16 @@ export function TicketsScreen({
           ))}
         </select>
 
-        <input
-          type="date"
-          value={filters.dateFrom}
-          onChange={(e) => updateParams({ dateFrom: e.target.value || null })}
+        <select
+          value={filters.slaStatus}
+          onChange={(e) => updateParams({ slaStatus: e.target.value || null })}
           className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
-          title="Fecha desde"
-        />
-        <input
-          type="date"
-          value={filters.dateTo}
-          onChange={(e) => updateParams({ dateTo: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
-          title="Fecha hasta"
-        />
+        >
+          <option value="">SLA: Todos</option>
+          <option value="ok">En tiempo (&lt;75%)</option>
+          <option value="warning">Por vencer (75–100%)</option>
+          <option value="overdue">Vencido (&gt;100%)</option>
+        </select>
       </div>
 
       {/* Tabla */}
@@ -238,25 +235,25 @@ export function TicketsScreen({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              <th className="px-4 py-3">ID</th>
-              <th className="px-4 py-3">Solicitante</th>
-              <th className="px-4 py-3">Categoría</th>
-              <th className="px-4 py-3">Prioridad</th>
-              <th className="px-4 py-3">Estado</th>
+              <SortableHeader label="ID" sortKey="displayId" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Solicitante" sortKey="requesterName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Categoría" sortKey="category" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Prioridad" sortKey="priority" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Estado" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">SLA</th>
-              <th className="px-4 py-3">Fecha</th>
+              <SortableHeader label="Fecha" sortKey="requestedAt" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               {isTd && <th className="px-4 py-3">Asignado a</th>}
             </tr>
           </thead>
           <tbody>
-            {page.data.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
                 <td colSpan={isTd ? 8 : 7} className="px-4 py-10 text-center text-sm text-slate-400">
                   No se encontraron tickets con los filtros seleccionados.
                 </td>
               </tr>
             )}
-            {page.data.map((ticket) => {
+            {sorted.map((ticket) => {
               const sla = slaLight(ticket);
               const catIcon = CATEGORY_ICONS[ticket.category] ?? 'ti-help';
               return (

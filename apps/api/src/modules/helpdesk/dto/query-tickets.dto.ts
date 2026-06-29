@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class QueryTicketsDto {
   @IsOptional()
@@ -44,4 +44,8 @@ export class QueryTicketsDto {
   @IsOptional()
   @IsString()
   dateTo?: string;
+
+  @IsOptional()
+  @IsIn(['ok', 'warning', 'overdue'])
+  slaStatus?: 'ok' | 'warning' | 'overdue';
 }
