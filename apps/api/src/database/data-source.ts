@@ -33,6 +33,11 @@ import { EmployeeRecord } from '../modules/employees/entities/employee-record.en
 import { PersonalData } from '../modules/employees/entities/personal-data.entity';
 import { TerminationData } from '../modules/employees/entities/termination-data.entity';
 import { Vacation } from '../modules/employees/entities/vacation.entity';
+import { Equipment } from '../modules/inventory/entities/equipment.entity';
+import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.entity';
+import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
+import { EquipmentStatus } from '../modules/inventory/entities/equipment-status.entity';
+import { EquipmentType } from '../modules/inventory/entities/equipment-type.entity';
 
 for (const envFile of ['.env.local', '.env', '../../.env.local', '../../.env']) {
   dotenv.config({ path: path.resolve(process.cwd(), envFile) });
@@ -79,6 +84,11 @@ const AppDataSource = new DataSource({
     CatalogMaritalStatus,
     CatalogIndustry,
     CatalogDocumentType,
+    Equipment,
+    EquipmentHistory,
+    EquipmentType,
+    EquipmentBrand,
+    EquipmentStatus,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
