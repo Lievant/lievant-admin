@@ -47,16 +47,11 @@ export class InventoryService {
     const limit = query.limit ?? 20;
     const qb = this.equipmentRepo
       .createQueryBuilder('e')
-      .leftJoin(EmployeeRecord, 'emp', 'emp.id = e.assigned_to_employee_id')
-      .addSelect('"emp"."id" AS "emp_id"')
-      .addSelect('"emp"."full_name" AS "emp_full_name"')
-      .addSelect('"emp"."corporate_email" AS "emp_corporate_email"')
-      .addSelect('"emp"."position" AS "emp_position"')
-      .addSelect('"emp"."area" AS "emp_area"')
+      .leftJoinAndSelect('e.assignedEmployee', 'emp')
       .where('e.deleted_at IS NULL')
-      .orderBy('e.created_at', 'DESC')
+      .orderBy('e.createdAt', 'DESC')
       .addOrderBy('e.id', 'DESC')
-      .take(limit + 1);
+      .limit(limit + 1);
 
     if (query.equipmentType) qb.andWhere('e.equipment_type = :et', { et: query.equipmentType });
     if (query.brand) qb.andWhere('e.brand = :brand', { brand: query.brand });
@@ -80,13 +75,9 @@ export class InventoryService {
       );
     }
 
-    const rows = await qb.getRawAndEntities();
-    const entities = rows.entities;
-    const raw = rows.raw as Record<string, unknown>[];
-
-    const hasMore = entities.length > limit;
-    const data = hasMore ? entities.slice(0, limit) : entities;
-    const rawData = hasMore ? raw.slice(0, limit) : raw;
+    const items = await qb.getMany();
+    const hasMore = items.length > limit;
+    const data = hasMore ? items.slice(0, limit) : items;
 
     const last = data.at(-1);
     const nextCursor =
@@ -94,11 +85,11 @@ export class InventoryService {
         ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString('base64url')
         : null;
 
-    const enriched = data.map((item, i) => ({
+    const enriched = data.map((item) => ({
       ...item,
-      assignedEmployeeName: rawData[i]?.['emp_full_name'] as string | null ?? null,
-      assignedEmployeeEmail: rawData[i]?.['emp_corporate_email'] as string | null ?? null,
-      assignedEmployeePosition: rawData[i]?.['emp_position'] as string | null ?? null,
+      assignedEmployeeName: item.assignedEmployee?.fullName ?? null,
+      assignedEmployeeEmail: item.assignedEmployee?.corporateEmail ?? null,
+      assignedEmployeePosition: item.assignedEmployee?.position ?? null,
     }));
 
     return { data: enriched, nextCursor, total: enriched.length };
