@@ -2134,3 +2134,203 @@ export function createAnnouncement(payload: { title: string; body: string; event
 export function deleteAnnouncement(id: string): Promise<void> {
   return apiFetchWithRetry<void>(`/auth/announcements/${id}`, { method: 'DELETE' });
 }
+
+// ---------------------------------------------------------------------------
+// Inventario Tecnológico
+// ---------------------------------------------------------------------------
+
+export interface EquipmentTypeCatalog {
+  id: string;
+  name: string;
+  icon: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EquipmentBrandCatalog {
+  id: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EquipmentStatusCatalog {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface EquipmentHistoryEntry {
+  id: string;
+  equipmentId: string;
+  changedById: string | null;
+  changedByName: string;
+  action: string;
+  fieldChanged: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface EquipmentSummary {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  operatingSystem: string | null;
+  adName: string | null;
+  specifications: string | null;
+  assignedToEmployeeId: string | null;
+  assignedEmployeeName: string | null;
+  assignedEmployeeEmail: string | null;
+  assignedEmployeePosition: string | null;
+  assignmentDate: string | null;
+  responsiva: string | null;
+  chargerIncluded: boolean;
+  status: string;
+  location: string | null;
+  area: string | null;
+  purchaseDate: string | null;
+  purchaseValue: string;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquipmentDetail extends EquipmentSummary {
+  history: EquipmentHistoryEntry[];
+  assignedEmployee: {
+    id: string;
+    fullName: string;
+    corporateEmail: string | null;
+    position: string;
+    area: string | null;
+    location: string | null;
+  } | null;
+}
+
+export interface EquipmentPage {
+  data: EquipmentSummary[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface EquipmentStats {
+  total: number;
+  assigned: number;
+  available: number;
+  assignedPercent: number;
+  byType: { type: string; count: number }[];
+  byStatus: { status: string; count: number }[];
+}
+
+export interface ListEquipmentParams {
+  cursor?: string;
+  limit?: number;
+  equipmentType?: string;
+  brand?: string;
+  status?: string;
+  location?: string;
+  area?: string;
+  assignedToEmployeeId?: string;
+  search?: string;
+}
+
+export interface CreateEquipmentPayload {
+  equipmentType: string;
+  legacyId?: string;
+  brand?: string;
+  model?: string;
+  serialNumber?: string;
+  operatingSystem?: string;
+  adName?: string;
+  specifications?: string;
+  assignedToEmployeeId?: string;
+  assignmentDate?: string;
+  responsiva?: string;
+  chargerIncluded?: boolean;
+  status?: string;
+  location?: string;
+  area?: string;
+  purchaseDate?: string;
+  purchaseValue?: number;
+  notes?: string;
+}
+
+export type UpdateEquipmentPayload = Partial<CreateEquipmentPayload>;
+
+export interface AssignEmployeePayload {
+  employeeId: string;
+  assignmentDate?: string;
+  responsiva?: string;
+  notes?: string;
+}
+
+export function listEquipment(params: ListEquipmentParams = {}): Promise<EquipmentPage> {
+  const q = new URLSearchParams();
+  if (params.cursor) q.set('cursor', params.cursor);
+  if (params.limit) q.set('limit', String(params.limit));
+  if (params.equipmentType) q.set('equipmentType', params.equipmentType);
+  if (params.brand) q.set('brand', params.brand);
+  if (params.status) q.set('status', params.status);
+  if (params.location) q.set('location', params.location);
+  if (params.area) q.set('area', params.area);
+  if (params.assignedToEmployeeId) q.set('assignedToEmployeeId', params.assignedToEmployeeId);
+  if (params.search) q.set('search', params.search);
+  const qs = q.toString();
+  return apiFetchWithRetry<EquipmentPage>(`/inventory/equipment${qs ? `?${qs}` : ''}`);
+}
+
+export function getEquipment(id: string): Promise<EquipmentDetail> {
+  return apiFetchWithRetry<EquipmentDetail>(`/inventory/equipment/${id}`);
+}
+
+export function getEquipmentStats(): Promise<EquipmentStats> {
+  return apiFetchWithRetry<EquipmentStats>('/inventory/equipment/stats');
+}
+
+export function createEquipment(payload: CreateEquipmentPayload): Promise<EquipmentDetail> {
+  return apiFetchWithRetry<EquipmentDetail>('/inventory/equipment', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateEquipment(id: string, payload: UpdateEquipmentPayload): Promise<EquipmentDetail> {
+  return apiFetchWithRetry<EquipmentDetail>(`/inventory/equipment/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function assignEquipmentEmployee(id: string, payload: AssignEmployeePayload): Promise<EquipmentDetail> {
+  return apiFetchWithRetry<EquipmentDetail>(`/inventory/equipment/${id}/assign`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function unassignEquipmentEmployee(id: string, notes?: string): Promise<EquipmentDetail> {
+  return apiFetchWithRetry<EquipmentDetail>(`/inventory/equipment/${id}/unassign`, {
+    method: 'PATCH',
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export function listEquipmentTypes(): Promise<EquipmentTypeCatalog[]> {
+  return apiFetchWithRetry<EquipmentTypeCatalog[]>('/inventory/equipment-types');
+}
+
+export function listEquipmentBrands(): Promise<EquipmentBrandCatalog[]> {
+  return apiFetchWithRetry<EquipmentBrandCatalog[]>('/inventory/equipment-brands');
+}
+
+export function listEquipmentStatuses(): Promise<EquipmentStatusCatalog[]> {
+  return apiFetchWithRetry<EquipmentStatusCatalog[]>('/inventory/equipment-statuses');
+}
