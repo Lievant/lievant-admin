@@ -48,7 +48,11 @@ export class InventoryService {
     const qb = this.equipmentRepo
       .createQueryBuilder('e')
       .leftJoin(EmployeeRecord, 'emp', 'emp.id = e.assigned_to_employee_id')
-      .addSelect(['emp.id', 'emp.fullName', 'emp.corporateEmail', 'emp.position', 'emp.area'])
+      .addSelect('"emp"."id" AS "emp_id"')
+      .addSelect('"emp"."full_name" AS "emp_full_name"')
+      .addSelect('"emp"."corporate_email" AS "emp_corporate_email"')
+      .addSelect('"emp"."position" AS "emp_position"')
+      .addSelect('"emp"."area" AS "emp_area"')
       .where('e.deleted_at IS NULL')
       .orderBy('e.created_at', 'DESC')
       .addOrderBy('e.id', 'DESC')
@@ -310,19 +314,19 @@ export class InventoryService {
     const [byType, byStatus, total, assigned] = await Promise.all([
       this.equipmentRepo
         .createQueryBuilder('e')
-        .select('e.equipment_type', 'type')
+        .select('"e"."equipment_type"', 'type')
         .addSelect('COUNT(*)', 'count')
         .where('e.deleted_at IS NULL')
-        .groupBy('e.equipment_type')
+        .groupBy('"e"."equipment_type"')
         .orderBy('count', 'DESC')
         .getRawMany<{ type: string; count: string }>(),
 
       this.equipmentRepo
         .createQueryBuilder('e')
-        .select('e.status', 'status')
+        .select('"e"."status"', 'status')
         .addSelect('COUNT(*)', 'count')
         .where('e.deleted_at IS NULL')
-        .groupBy('e.status')
+        .groupBy('"e"."status"')
         .orderBy('count', 'DESC')
         .getRawMany<{ status: string; count: string }>(),
 
@@ -349,9 +353,9 @@ export class InventoryService {
     const prefix = `TEC-${year}-`;
     const last = await this.equipmentRepo
       .createQueryBuilder('e')
-      .select('e.display_id', 'displayId')
-      .where('e.display_id LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('e.display_id', 'DESC')
+      .select('"e"."display_id"', 'displayId')
+      .where('"e"."display_id" LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('"e"."display_id"', 'DESC')
       .limit(1)
       .getRawOne<{ displayId: string }>();
 
