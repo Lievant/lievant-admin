@@ -5,9 +5,11 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { HelpdeskCategorySummary, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import { deleteTicketAction } from './actions';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
+import { useCurrentUser } from '@/components/user-provider';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -87,6 +89,10 @@ export function TicketsScreen({
   apiUnavailable,
 }: TicketsScreenProps) {
   const router = useRouter();
+  const currentUser = useCurrentUser();
+  const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [search, setSearch] = useState(filters.search);
 
   useEffect(() => { setSearch(filters.search); }, [filters.search]);
@@ -243,12 +249,13 @@ export function TicketsScreen({
               <th className="px-4 py-3">SLA</th>
               <SortableHeader label="Fecha" sortKey="requestedAt" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               {isTd && <th className="px-4 py-3">Asignado a</th>}
+              {isSuperAdmin && <th className="px-4 py-3">Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={isTd ? 8 : 7} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={(isTd ? 8 : 7) + (isSuperAdmin ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-400">
                   No se encontraron tickets con los filtros seleccionados.
                 </td>
               </tr>
@@ -329,6 +336,17 @@ export function TicketsScreen({
                       {ticket.assigneeName ?? <span className="text-slate-300">—</span>}
                     </td>
                   )}
+                  {isSuperAdmin && (
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => { setDeleteError(null); setDeleteTarget({ id: ticket.id, displayId: ticket.displayId }); }}
+                        className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-500 hover:border-red-300 hover:bg-red-50"
+                      >
+                        Eliminar
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -357,6 +375,45 @@ export function TicketsScreen({
           </div>
         </div>
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-navy">¿Eliminar ticket?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              ¿Estás seguro de eliminar el ticket{' '}
+              <strong>{deleteTarget.displayId}</strong>? Esta acción no se puede deshacer.
+            </p>
+            {deleteError && (
+              <p className="mt-2 text-sm text-red-600">{deleteError}</p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const result = await deleteTicketAction(deleteTarget.id);
+                  if (result.success) {
+                    setDeleteTarget(null);
+                    router.refresh();
+                  } else {
+                    setDeleteError(result.error ?? 'No se pudo eliminar el ticket.');
+                  }
+                }}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

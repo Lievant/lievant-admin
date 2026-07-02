@@ -2054,6 +2054,10 @@ export function getHelpdeskSubcategories(slug: string): Promise<HelpdeskSubcateg
   return apiFetchWithRetry<HelpdeskSubcategorySummary[]>(`/helpdesk/categories/${slug}/subcategories`);
 }
 
+export function deleteTicket(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/helpdesk/tickets/${id}`, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------------------
 // Reportes RRHH
 // ---------------------------------------------------------------------------

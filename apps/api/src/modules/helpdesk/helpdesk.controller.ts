@@ -1,4 +1,4 @@
-import { Body, Controller, DefaultValuePipe, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, DefaultValuePipe, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -105,5 +105,12 @@ export class HelpdeskController {
     @CurrentUser() user: User,
   ) {
     return this.service.escalate(id, dto, user);
+  }
+
+  @Delete('tickets/:id')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('transformacion', 'tickets.gestion', 'write')
+  deleteTicket(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deleteTicket(id);
   }
 }
