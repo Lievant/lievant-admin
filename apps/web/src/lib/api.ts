@@ -2282,6 +2282,39 @@ export interface AssignEmployeePayload {
   notes?: string;
 }
 
+export interface InventoryReportEquipment {
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  status: string;
+  chargerIncluded: boolean;
+}
+
+export interface InventoryReportEmployee {
+  employeeId: string;
+  fullName: string;
+  area: string;
+  division: string;
+  location: string;
+  equipment: InventoryReportEquipment[];
+}
+
+export interface InventoryReportArea {
+  area: string;
+  employees: InventoryReportEmployee[];
+}
+
+export interface InventoryAreaReport {
+  areas: InventoryReportArea[];
+}
+
+export function getInventoryReportByArea(): Promise<InventoryAreaReport> {
+  return apiFetchWithRetry<InventoryAreaReport>('/inventory/equipment/report/by-area');
+}
+
 export function listEquipment(params: ListEquipmentParams = {}): Promise<EquipmentPage> {
   const q = new URLSearchParams();
   if (params.cursor) q.set('cursor', params.cursor);

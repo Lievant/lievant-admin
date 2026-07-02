@@ -96,6 +96,78 @@ export class InventoryService {
   }
 
   // -------------------------------------------------------------------------
+  // Reporte agrupado por área / empleado
+  // -------------------------------------------------------------------------
+
+  async getReportByArea() {
+    const items = await this.equipmentRepo
+      .createQueryBuilder('e')
+      .leftJoinAndSelect('e.assignedEmployee', 'emp')
+      .where('e.deleted_at IS NULL')
+      .andWhere('e.status != :baja', { baja: 'Baja' })
+      .andWhere('e.assigned_to_employee_id IS NOT NULL')
+      .orderBy('emp.area', 'ASC', 'NULLS LAST')
+      .addOrderBy('emp.full_name', 'ASC')
+      .addOrderBy('e.equipment_type', 'ASC')
+      .getMany();
+
+    const areaMap = new Map<string, Map<string, {
+      employeeId: string;
+      fullName: string;
+      area: string;
+      division: string;
+      location: string;
+      equipment: {
+        displayId: string;
+        legacyId: string | null;
+        equipmentType: string;
+        brand: string | null;
+        model: string | null;
+        serialNumber: string | null;
+        status: string;
+        chargerIncluded: boolean;
+      }[];
+    }>>();
+
+    for (const item of items) {
+      const emp = item.assignedEmployee;
+      if (!emp) continue;
+      const areaKey = emp.area ?? 'SIN ÁREA';
+
+      if (!areaMap.has(areaKey)) areaMap.set(areaKey, new Map());
+      const empMap = areaMap.get(areaKey)!;
+
+      if (!empMap.has(emp.id)) {
+        empMap.set(emp.id, {
+          employeeId: emp.id,
+          fullName: emp.fullName,
+          area: emp.area ?? '',
+          division: emp.division ?? '',
+          location: emp.location ?? '',
+          equipment: [],
+        });
+      }
+
+      empMap.get(emp.id)!.equipment.push({
+        displayId: item.displayId,
+        legacyId: item.legacyId,
+        equipmentType: item.equipmentType,
+        brand: item.brand,
+        model: item.model,
+        serialNumber: item.serialNumber,
+        status: item.status,
+        chargerIncluded: item.chargerIncluded,
+      });
+    }
+
+    const areas = Array.from(areaMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b, 'es'))
+      .map(([area, empMap]) => ({ area, employees: Array.from(empMap.values()) }));
+
+    return { areas };
+  }
+
+  // -------------------------------------------------------------------------
   // Detalle por id
   // -------------------------------------------------------------------------
 

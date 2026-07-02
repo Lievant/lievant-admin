@@ -50,6 +50,11 @@ export class InventoryController {
     return this.service.getStats();
   }
 
+  @Get('equipment/report/by-area')
+  getReportByArea() {
+    return this.service.getReportByArea();
+  }
+
   @Get('equipment')
   findAll(@Query() query: QueryEquipmentDto) {
     return this.service.findAll(query);
