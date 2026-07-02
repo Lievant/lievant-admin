@@ -365,6 +365,11 @@ export class HelpdeskService {
   }
 
   // -----------------------------------------------------------------------
+  async deleteTicket(id: string): Promise<void> {
+    await this.getOrFail(id);
+    await this.ticketsRepo.softDelete(id);
+  }
+
   // Helpers
   // -----------------------------------------------------------------------
 

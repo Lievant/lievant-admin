@@ -2054,6 +2054,10 @@ export function getHelpdeskSubcategories(slug: string): Promise<HelpdeskSubcateg
   return apiFetchWithRetry<HelpdeskSubcategorySummary[]>(`/helpdesk/categories/${slug}/subcategories`);
 }
 
+export function deleteTicket(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/helpdesk/tickets/${id}`, { method: 'DELETE' });
+}
+
 // ---------------------------------------------------------------------------
 // Reportes RRHH
 // ---------------------------------------------------------------------------
@@ -2276,6 +2280,39 @@ export interface AssignEmployeePayload {
   assignmentDate?: string;
   responsiva?: string;
   notes?: string;
+}
+
+export interface InventoryReportEquipment {
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  status: string;
+  chargerIncluded: boolean;
+}
+
+export interface InventoryReportEmployee {
+  employeeId: string;
+  fullName: string;
+  area: string;
+  division: string;
+  location: string;
+  equipment: InventoryReportEquipment[];
+}
+
+export interface InventoryReportArea {
+  area: string;
+  employees: InventoryReportEmployee[];
+}
+
+export interface InventoryAreaReport {
+  areas: InventoryReportArea[];
+}
+
+export function getInventoryReportByArea(): Promise<InventoryAreaReport> {
+  return apiFetchWithRetry<InventoryAreaReport>('/inventory/equipment/report/by-area');
 }
 
 export function listEquipment(params: ListEquipmentParams = {}): Promise<EquipmentPage> {

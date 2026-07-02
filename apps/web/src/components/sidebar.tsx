@@ -131,6 +131,13 @@ export function Sidebar({ user }: SidebarProps) {
               <TicketIcon className="h-4 w-4" />
               Tickets de Soporte
             </NavSubLink>
+            <NavSubLink
+              href="/transformacion/reportes"
+              active={pathname.startsWith('/transformacion/reportes')}
+            >
+              <TableIcon className="h-4 w-4" />
+              Reportes
+            </NavSubLink>
           </SubMenu>
         )}
 
