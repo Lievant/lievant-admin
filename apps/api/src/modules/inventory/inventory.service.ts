@@ -341,21 +341,10 @@ export class InventoryService {
 
   async generateDisplayId(purchaseDate?: string): Promise<string> {
     const year = purchaseDate ? new Date(purchaseDate).getFullYear() : new Date().getFullYear();
-    const prefix = `TEC-${year}-`;
-    const last = await this.equipmentRepo
-      .createQueryBuilder('e')
-      .select('"e"."display_id"', 'displayId')
-      .where('"e"."display_id" LIKE :prefix', { prefix: `${prefix}%` })
-      .orderBy('"e"."display_id"', 'DESC')
-      .limit(1)
-      .getRawOne<{ displayId: string }>();
-
-    let seq = 1;
-    if (last?.displayId) {
-      const parts = last.displayId.split('-');
-      const n = parseInt(parts[2] ?? '0', 10);
-      if (!isNaN(n)) seq = n + 1;
-    }
-    return `${prefix}${String(seq).padStart(3, '0')}`;
+    const result = await this.equipmentRepo.query(
+      `SELECT nextval('inventory.equipment_display_id_seq') AS next_id`,
+    );
+    const nextId = parseInt(result[0].next_id, 10);
+    return `TEC-${year}-${String(nextId).padStart(3, '0')}`;
   }
 }

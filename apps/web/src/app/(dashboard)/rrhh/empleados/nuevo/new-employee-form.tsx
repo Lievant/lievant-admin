@@ -499,7 +499,8 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
             <button
               type="button"
               onClick={handleNext}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+              disabled={isPending}
+              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
             >
               Siguiente
             </button>
