@@ -218,7 +218,8 @@ function parseDisplayId(raw: string | null): string | null {
   const s = raw.trim();
   if (s.length < 2 || s.length > 15) return null;
   if (/\s/.test(s)) return null; // contiene espacio → es una frase
-  return s;
+  if (!/^EMP-\d+$/i.test(s)) return null; // debe tener formato EMP-NNNN
+  return s.toUpperCase();
 }
 
 // ── Seed principal ───────────────────────────────────────────────────────────

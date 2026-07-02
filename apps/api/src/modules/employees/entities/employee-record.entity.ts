@@ -62,6 +62,9 @@ export class EmployeeRecord {
   @Column({ name: 'direct_report_to', type: 'varchar', length: 300, nullable: true })
   directReportTo!: string | null;
 
+  @Column({ name: 'direct_report_to_id', type: 'uuid', nullable: true })
+  directReportToId!: string | null;
+
   @Column({ name: 'corporate_email', type: 'varchar', length: 200, nullable: true, unique: true })
   corporateEmail!: string | null;
 

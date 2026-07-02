@@ -139,8 +139,16 @@ export class EmployeesService {
       this.employeesRepository.create({
         ...dto,
         displayId,
+        fullName: dto.fullName.toUpperCase().trim(),
+        position: dto.position.toUpperCase().trim(),
+        companyName: dto.companyName?.toUpperCase().trim() ?? dto.companyName,
+        area: dto.area?.toUpperCase().trim() ?? null,
+        division: dto.division?.toUpperCase().trim() ?? null,
+        location: dto.location?.toUpperCase().trim() ?? null,
+        directReportTo: dto.directReportTo?.toUpperCase().trim() ?? null,
+        directReportToId: dto.directReportToId ?? null,
         status: dto.status ?? EmployeeStatus.ACTIVE,
-        nationality: dto.nationality ?? 'Mexicana',
+        nationality: dto.nationality?.toUpperCase().trim() ?? 'MEXICANA',
       }),
     );
 
@@ -180,18 +188,19 @@ export class EmployeesService {
 
     if (dto.codNom !== undefined) record.codNom = dto.codNom ?? null;
     if (dto.companyCode !== undefined) record.companyCode = dto.companyCode;
-    if (dto.companyName !== undefined) record.companyName = dto.companyName;
-    if (dto.division !== undefined) record.division = dto.division ?? null;
-    if (dto.area !== undefined) record.area = dto.area ?? null;
+    if (dto.companyName !== undefined) record.companyName = dto.companyName?.toUpperCase().trim() ?? dto.companyName;
+    if (dto.division !== undefined) record.division = dto.division?.toUpperCase().trim() ?? null;
+    if (dto.area !== undefined) record.area = dto.area?.toUpperCase().trim() ?? null;
     if (dto.project !== undefined) record.project = dto.project ?? null;
     if (dto.level !== undefined) record.level = dto.level ?? null;
-    if (dto.position !== undefined) record.position = dto.position;
+    if (dto.position !== undefined) record.position = dto.position.toUpperCase().trim();
     if (dto.emailSignature !== undefined) record.emailSignature = dto.emailSignature ?? null;
-    if (dto.location !== undefined) record.location = dto.location ?? null;
+    if (dto.location !== undefined) record.location = dto.location?.toUpperCase().trim() ?? null;
     if (dto.modality !== undefined) record.modality = dto.modality ?? null;
     if (dto.contractSchema !== undefined) record.contractSchema = dto.contractSchema ?? null;
-    if (dto.fullName !== undefined) record.fullName = dto.fullName;
-    if (dto.directReportTo !== undefined) record.directReportTo = dto.directReportTo ?? null;
+    if (dto.fullName !== undefined) record.fullName = dto.fullName.toUpperCase().trim();
+    if (dto.directReportTo !== undefined) record.directReportTo = dto.directReportTo?.toUpperCase().trim() ?? null;
+    if (dto.directReportToId !== undefined) record.directReportToId = dto.directReportToId ?? null;
     if (dto.gender !== undefined) record.gender = dto.gender ?? null;
     if (dto.nationality !== undefined) record.nationality = dto.nationality ?? null;
     if (dto.seniorityDate !== undefined) record.seniorityDate = dto.seniorityDate ?? null;

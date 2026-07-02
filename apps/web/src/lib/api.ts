@@ -614,6 +614,7 @@ export interface EmployeeDetail {
   contractSchema: string | null;
   fullName: string;
   directReportTo: string | null;
+  directReportToId: string | null;
   corporateEmail: string | null;
   gender: string | null;
   nationality: string | null;
@@ -646,6 +647,7 @@ export interface CreateEmployeePayload {
   contractSchema?: string;
   fullName: string;
   directReportTo?: string;
+  directReportToId?: string;
   corporateEmail?: string;
   gender?: string;
   nationality?: string;
@@ -1392,6 +1394,10 @@ export function listVendorInvoices(vendorId: string, params: ListInvoicesParams 
 
 export function getVendorStatement(vendorId: string): Promise<VendorStatement> {
   return apiFetchWithRetry<VendorStatement>(`/vendors/${vendorId}/statement`);
+}
+
+export function deleteVendor(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/vendors/${id}`, { method: 'DELETE' });
 }
 
 export interface CreateInvoicePayload {
