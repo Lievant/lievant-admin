@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { EmployeesPage } from '@/lib/api';
-import { deleteEmployee } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
@@ -412,7 +411,8 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
                 type="button"
                 onClick={async () => {
                   try {
-                    await deleteEmployee(deleteTarget.id);
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/employees/${deleteTarget.id}`, { method: 'DELETE', credentials: 'include' });
+                    if (!res.ok) throw new Error('error');
                     setDeleteTarget(null);
                     router.refresh();
                   } catch {
