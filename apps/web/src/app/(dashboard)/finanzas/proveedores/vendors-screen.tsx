@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { CatalogItem, Vendor } from '@/lib/api';
-import { deleteVendor } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { VENDOR_STATUSES, VENDOR_STATUS_BADGE_STYLES, VENDOR_STATUS_LABELS, vendorDisplayName } from './constants';
@@ -233,7 +232,8 @@ export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: 
                 type="button"
                 onClick={async () => {
                   try {
-                    await deleteVendor(deleteTarget.id);
+                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/vendors/${deleteTarget.id}`, { method: 'DELETE', credentials: 'include' });
+                    if (!res.ok) throw new Error('error');
                     setDeleteTarget(null);
                     router.refresh();
                   } catch {
