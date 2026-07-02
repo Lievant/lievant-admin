@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { EmployeesPage } from '@/lib/api';
+import { deleteEmployeeAction } from './actions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
@@ -410,13 +411,12 @@ export function EmployeesScreen({ page, apiUnavailable, filters, cursor, cursors
               <button
                 type="button"
                 onClick={async () => {
-                  try {
-                    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/employees/${deleteTarget.id}`, { method: 'DELETE', credentials: 'include' });
-                    if (!res.ok) throw new Error('error');
+                  const result = await deleteEmployeeAction(deleteTarget.id);
+                  if (result.success) {
                     setDeleteTarget(null);
                     router.refresh();
-                  } catch {
-                    setDeleteError('No se pudo eliminar el empleado.');
+                  } else {
+                    setDeleteError(result.error ?? 'No se pudo eliminar el empleado.');
                   }
                 }}
                 className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
