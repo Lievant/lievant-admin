@@ -107,6 +107,11 @@ export class VendorsController {
     return this.vendorsService.uploadDocument(id, file, dto, user.id);
   }
 
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.vendorsService.remove(id);
+  }
+
   @Delete('documents/:docId')
   removeDocument(@Param('docId', ParseUUIDPipe) docId: string) {
     return this.vendorsService.removeDocument(docId);

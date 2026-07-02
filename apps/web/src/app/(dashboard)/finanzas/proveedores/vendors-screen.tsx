@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { CatalogItem, Vendor } from '@/lib/api';
+import { deleteVendor } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { VENDOR_STATUSES, VENDOR_STATUS_BADGE_STYLES, VENDOR_STATUS_LABELS, vendorDisplayName } from './constants';
+import { useCurrentUser } from '@/components/user-provider';
 
 interface VendorsFilters {
   status: string;
@@ -24,6 +26,10 @@ interface VendorsScreenProps {
 
 export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: VendorsScreenProps) {
   const router = useRouter();
+  const currentUser = useCurrentUser();
+  const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [search, setSearch] = useState(filters.search);
 
   useEffect(() => {
@@ -178,14 +184,25 @@ export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: 
                   <td className="px-4 py-3 text-slate-600">
                     {vendor.paymentTermsDays != null ? `${vendor.paymentTermsDays} días` : '—'}
                   </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/finanzas/proveedores/${vendor.id}`}
-                      onClick={(e) => e.stopPropagation()}
-                      className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
-                    >
-                      Ver detalle
-                    </Link>
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/finanzas/proveedores/${vendor.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+                      >
+                        Ver detalle
+                      </Link>
+                      {isSuperAdmin && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeleteTarget({ id: vendor.id, name: vendorDisplayName(vendor) }); }}
+                          className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-500 hover:border-red-300 hover:bg-red-50"
+                        >
+                          Eliminar
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -193,6 +210,44 @@ export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: 
           </tbody>
         </table>
       </div>
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
+          <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
+            <h3 className="text-base font-bold text-navy">¿Eliminar proveedor?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              ¿Estás seguro de eliminar a <strong>{deleteTarget.name}</strong>? Esta acción no se puede deshacer fácilmente.
+            </p>
+            {deleteError && (
+              <p className="mt-2 text-sm text-red-600">{deleteError}</p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await deleteVendor(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  } catch {
+                    setDeleteError('No se pudo eliminar el proveedor.');
+                  }
+                }}
+                className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+              >
+                Eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,9 +8,10 @@ interface TextFieldProps {
   placeholder?: string;
   mono?: boolean;
   type?: string;
+  uppercase?: boolean;
 }
 
-export function TextField({ id, label, value, onChange, placeholder, mono, type = 'text' }: TextFieldProps) {
+export function TextField({ id, label, value, onChange, placeholder, mono, type = 'text', uppercase }: TextFieldProps) {
   return (
     <div className="flex flex-col gap-1">
       <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor={id}>
@@ -20,8 +21,9 @@ export function TextField({ id, label, value, onChange, placeholder, mono, type 
         id={id}
         type={type}
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => onChange(uppercase ? e.target.value.toUpperCase() : e.target.value)}
         placeholder={placeholder}
+        style={uppercase ? { textTransform: 'uppercase' } : undefined}
         className={cn(
           'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota',
           mono && 'font-mono',

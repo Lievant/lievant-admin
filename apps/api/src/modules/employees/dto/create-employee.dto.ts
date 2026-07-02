@@ -61,6 +61,10 @@ export class CreateEmployeeDto {
   directReportTo?: string;
 
   @IsOptional()
+  @IsUUID()
+  directReportToId?: string;
+
+  @IsOptional()
   @IsCorporateEmailDomain()
   corporateEmail?: string;
 

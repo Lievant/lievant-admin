@@ -5,6 +5,7 @@ import type { EmployeeDetail, EmployeeStatus, Modality, UpdateEmployeePayload } 
 import { CloseIcon } from '@/components/icons';
 import { EMPLOYEE_STATUSES, EMPLOYEE_STATUS_LABELS, GENDERS, modalityFromCatalogName } from '../constants';
 import { TextField, SelectField } from '../form-field';
+import { EmployeePicker, type EmployeePickerValue } from '../employee-picker';
 import type { EmployeeFormCatalogs } from '../catalog-data';
 import { updateEmployeeAction } from './actions';
 
@@ -31,6 +32,11 @@ export function EditEmployeeDialog({
   const [modality, setModality] = useState<Modality | ''>(employee.modality ?? '');
   const [contractSchema, setContractSchema] = useState(employee.contractSchema ?? '');
   const [directReportTo, setDirectReportTo] = useState(employee.directReportTo ?? '');
+  const [directReportToEmployee, setDirectReportToEmployee] = useState<EmployeePickerValue | null>(
+    employee.directReportToId
+      ? { id: employee.directReportToId, fullName: employee.directReportTo ?? '', position: '', area: null, location: null, corporateEmail: null }
+      : null,
+  );
   const [corporateEmail, setCorporateEmail] = useState(employee.corporateEmail ?? '');
   const [emailSignature, setEmailSignature] = useState(employee.emailSignature ?? '');
   const [gender, setGender] = useState(employee.gender ?? '');
@@ -110,7 +116,12 @@ export function EditEmployeeDialog({
       if (location.trim()) payload.location = location.trim();
       if (modality) payload.modality = modality;
       if (contractSchema.trim()) payload.contractSchema = contractSchema.trim();
-      if (directReportTo.trim()) payload.directReportTo = directReportTo.trim();
+      if (directReportToEmployee) {
+        payload.directReportToId = directReportToEmployee.id;
+        payload.directReportTo = directReportToEmployee.fullName;
+      } else if (directReportTo.trim()) {
+        payload.directReportTo = directReportTo.trim();
+      }
       if (corporateEmail.trim()) payload.corporateEmail = corporateEmail.trim();
       if (emailSignature.trim()) payload.emailSignature = emailSignature.trim();
       if (gender.trim()) payload.gender = gender.trim();
@@ -148,7 +159,7 @@ export function EditEmployeeDialog({
 
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
           <div className="grid grid-cols-2 gap-4">
-            <TextField id="employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} />
+            <TextField id="employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} uppercase />
             <SelectField
               id="employee-status"
               label="Estado"
@@ -168,13 +179,21 @@ export function EditEmployeeDialog({
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
               <SelectField id="employee-division" label="División" value={division} onChange={setDivision} options={divisionOptions} />
-              <TextField id="employee-area" label="Área" value={area} onChange={setArea} />
+              <TextField id="employee-area" label="Área" value={area} onChange={setArea} uppercase />
               <TextField id="employee-project" label="Proyecto" value={project} onChange={setProject} />
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
-              <TextField id="employee-position" label="Puesto" value={position} onChange={setPosition} />
+              <TextField id="employee-position" label="Puesto" value={position} onChange={setPosition} uppercase />
               <SelectField id="employee-level" label="Nivel" value={level} onChange={setLevel} options={orgLevelOptions} />
-              <TextField id="employee-direct-report" label="Reporta a" value={directReportTo} onChange={setDirectReportTo} />
+              <EmployeePicker
+                id="employee-direct-report"
+                label="Reporta a"
+                value={directReportToEmployee}
+                onSelect={(emp) => {
+                  setDirectReportToEmployee(emp);
+                  setDirectReportTo(emp?.fullName ?? '');
+                }}
+              />
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
               <SelectField id="employee-location" label="Ubicación" value={location} onChange={setLocation} options={locationOptions} />
@@ -201,7 +220,7 @@ export function EditEmployeeDialog({
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos laborales</p>
             <div className="grid grid-cols-3 gap-4">
               <SelectField id="employee-gender" label="Género" value={gender} onChange={setGender} options={GENDERS} />
-              <TextField id="employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} />
+              <TextField id="employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} uppercase />
               <TextField id="employee-seniority-date" label="Fecha de antigüedad" type="date" value={seniorityDate} onChange={setSeniorityDate} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4">

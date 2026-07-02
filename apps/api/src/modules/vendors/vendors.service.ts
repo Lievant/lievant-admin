@@ -229,6 +229,11 @@ export class VendorsService {
     );
   }
 
+  async remove(id: string): Promise<void> {
+    const vendor = await this.getVendorOrFail(id);
+    await this.vendorsRepository.softRemove(vendor);
+  }
+
   async removeDocument(docId: string): Promise<void> {
     const document = await this.documentsRepository.findOne({ where: { id: docId } });
     if (!document) {
