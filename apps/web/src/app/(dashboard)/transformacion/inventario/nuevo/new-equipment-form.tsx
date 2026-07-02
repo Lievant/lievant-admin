@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { EquipmentBrandCatalog, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
 
@@ -299,9 +300,9 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         >
           {saving ? 'Guardando…' : 'Guardar equipo'}
         </button>
-        <a href="/transformacion/inventario" className="rounded-md border border-slate-200 px-6 py-2 text-sm text-slate-600 hover:bg-slate-50">
+        <Link href="/transformacion/inventario" className="rounded-md border border-slate-200 px-6 py-2 text-sm text-slate-600 hover:bg-slate-50">
           Cancelar
-        </a>
+        </Link>
       </div>
     </form>
   );
