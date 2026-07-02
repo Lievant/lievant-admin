@@ -7,7 +7,7 @@ on:
       - 'apps/api/**'
       - 'package.json'
       - 'package-lock.json'
-      - 'apps/api/Dockerfile'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -54,4 +54,4 @@ jobs:
             --cluster ${{ secrets.ECS_CLUSTER }} \
             --services ${{ secrets.ECS_SERVICE }} \
             --region ${{ secrets.AWS_REGION }}
-          echo "✅ Deployment completado exitosamente"
+          echo "Deployment completado exitosamente"
