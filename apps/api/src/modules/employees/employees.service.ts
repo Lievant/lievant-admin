@@ -639,15 +639,11 @@ export class EmployeesService {
   }
 
   private async generateDisplayId(): Promise<string> {
-    const last = await this.employeesRepository
-      .createQueryBuilder('employee')
-      .withDeleted()
-      .orderBy('employee.displayId', 'DESC')
-      .limit(1)
-      .getOne();
-
-    const lastNumber = last ? parseInt(last.displayId.replace('EMP-', ''), 10) || 0 : 0;
-    return `EMP-${String(lastNumber + 1).padStart(4, '0')}`;
+    const result = await this.employeesRepository.query(
+      `SELECT nextval('employees.employee_display_id_seq') AS next_id`,
+    );
+    const nextId = parseInt(result[0].next_id, 10);
+    return `EMP-${String(nextId).padStart(4, '0')}`;
   }
 
   private async assertUserExists(id: string): Promise<void> {
