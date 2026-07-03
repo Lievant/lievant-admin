@@ -2377,3 +2377,252 @@ export function listEquipmentBrands(): Promise<EquipmentBrandCatalog[]> {
 export function listEquipmentStatuses(): Promise<EquipmentStatusCatalog[]> {
   return apiFetchWithRetry<EquipmentStatusCatalog[]>('/inventory/equipment-statuses');
 }
+
+// ---------------------------------------------------------------------------
+// Proyectos
+// ---------------------------------------------------------------------------
+
+export interface ProjectMemberSummary {
+  id: string;
+  projectId: string;
+  employeeId: string;
+  employeeName: string | null;
+  employeeEmail: string | null;
+  role: string | null;
+  estimatedHoursMonthly: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  isActive: boolean;
+}
+
+export interface ProjectBusinessUnit {
+  id: string;
+  businessUnit: string;
+  percentage: string;
+}
+
+export interface ProjectFinancials {
+  id: string;
+  billingType: string;
+  currency: string;
+  totalValue: string | null;
+  monthlyFee: string | null;
+  overheadPercentage: string;
+  hasCommission: boolean;
+  commissionPercentage: string | null;
+  commissionEmployeeId: string | null;
+  billingDay: number;
+  billingNotes: string | null;
+  updatedAt: string;
+}
+
+export interface ProjectBillingMilestone {
+  id: string;
+  projectId: string;
+  name: string;
+  amount: string;
+  dueDate: string | null;
+  invoicedAt: string | null;
+  paidAt: string | null;
+  notes: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface ProjectDocument {
+  id: string;
+  type: string;
+  name: string;
+  s3Key: string;
+  fileSize: number | null;
+  uploadedAt: string;
+  downloadUrl?: string;
+}
+
+export interface ProjectHistoryEntry {
+  id: string;
+  changedByName: string;
+  action: string;
+  fieldChanged: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface ProjectSummary {
+  id: string;
+  displayId: string;
+  name: string;
+  projectType: string;
+  status: string;
+  primaryBusinessUnit: string | null;
+  projectManagerId: string | null;
+  projectManagerName: string | null;
+  projectManagerEmail: string | null;
+  clientRecordId: string | null;
+  clientName: string | null;
+  brandId: string | null;
+  brandName: string | null;
+  pmCode: string | null;
+  corProjectId: string | null;
+  corSyncStatus: string;
+  startDate: string | null;
+  endDate: string | null;
+  monthlyFee: string | null;
+  totalValue: string | null;
+  currency: string;
+  createdAt: string;
+}
+
+export interface ProjectDetail extends ProjectSummary {
+  description: string | null;
+  members: ProjectMemberSummary[];
+  businessUnits: ProjectBusinessUnit[];
+  financials: ProjectFinancials | null;
+  milestones: ProjectBillingMilestone[];
+  documents: ProjectDocument[];
+  history: ProjectHistoryEntry[];
+}
+
+export interface ProjectsPage {
+  data: ProjectSummary[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface ProjectStats {
+  total: number;
+  active: number;
+  recurring: number;
+  oneTime: number;
+  totalMonthlyFee: number;
+  totalPortfolioValue: number;
+}
+
+export interface CreateProjectPayload {
+  name: string;
+  projectType: string;
+  description?: string;
+  status?: string;
+  clientRecordId?: string;
+  brandId?: string;
+  primaryBusinessUnit?: string;
+  projectManagerId?: string;
+  startDate?: string;
+  endDate?: string;
+  pmCode?: string;
+  corProjectId?: string;
+  businessUnits?: { businessUnit: string; percentage: string }[];
+}
+
+export type UpdateProjectPayload = Partial<CreateProjectPayload>;
+
+export interface AddProjectMemberPayload {
+  employeeId: string;
+  role?: string;
+  estimatedHoursMonthly?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface UpdateProjectFinancialsPayload {
+  billingType?: string;
+  currency?: string;
+  totalValue?: string;
+  monthlyFee?: string;
+  overheadPercentage?: string;
+  hasCommission?: boolean;
+  commissionPercentage?: string;
+  commissionEmployeeId?: string;
+  billingDay?: number;
+  billingNotes?: string;
+}
+
+export interface AddProjectMilestonePayload {
+  name: string;
+  amount: string;
+  dueDate?: string;
+  notes?: string;
+  sortOrder?: number;
+}
+
+export interface ListProjectsParams {
+  status?: string;
+  projectType?: string;
+  businessUnit?: string;
+  clientRecordId?: string;
+  projectManagerId?: string;
+  search?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function listProjects(params: ListProjectsParams = {}): Promise<ProjectsPage> {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  if (params.projectType) q.set('projectType', params.projectType);
+  if (params.businessUnit) q.set('businessUnit', params.businessUnit);
+  if (params.clientRecordId) q.set('clientRecordId', params.clientRecordId);
+  if (params.projectManagerId) q.set('projectManagerId', params.projectManagerId);
+  if (params.search) q.set('search', params.search);
+  if (params.cursor) q.set('cursor', params.cursor);
+  if (params.limit) q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return apiFetchWithRetry<ProjectsPage>(`/projects${qs ? `?${qs}` : ''}`);
+}
+
+export function getProject(id: string): Promise<ProjectDetail> {
+  return apiFetchWithRetry<ProjectDetail>(`/projects/${id}`);
+}
+
+export function getProjectStats(): Promise<ProjectStats> {
+  return apiFetchWithRetry<ProjectStats>('/projects/stats');
+}
+
+export function createProject(payload: CreateProjectPayload): Promise<ProjectSummary> {
+  return apiFetchWithRetry<ProjectSummary>('/projects', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateProject(id: string, payload: UpdateProjectPayload): Promise<ProjectSummary> {
+  return apiFetchWithRetry<ProjectSummary>(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteProject(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/projects/${id}`, { method: 'DELETE' });
+}
+
+export function addProjectMember(id: string, payload: AddProjectMemberPayload): Promise<ProjectMemberSummary> {
+  return apiFetchWithRetry<ProjectMemberSummary>(`/projects/${id}/members`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function removeProjectMember(id: string, employeeId: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/projects/${id}/members/${employeeId}`, { method: 'DELETE' });
+}
+
+export function updateProjectFinancials(id: string, payload: UpdateProjectFinancialsPayload): Promise<ProjectFinancials> {
+  return apiFetchWithRetry<ProjectFinancials>(`/projects/${id}/financials`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function addProjectMilestone(id: string, payload: AddProjectMilestonePayload): Promise<ProjectBillingMilestone> {
+  return apiFetchWithRetry<ProjectBillingMilestone>(`/projects/${id}/milestones`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listProjectDocuments(id: string): Promise<ProjectDocument[]> {
+  return apiFetchWithRetry<ProjectDocument[]>(`/projects/${id}/documents`);
+}

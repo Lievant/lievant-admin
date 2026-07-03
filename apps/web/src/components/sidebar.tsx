@@ -57,6 +57,10 @@ export function Sidebar({ user }: SidebarProps) {
         </NavLink>
         {pathname.startsWith('/finanzas') && (
           <SubMenu>
+            <NavSubLink href="/finanzas/proyectos" active={pathname.startsWith('/finanzas/proyectos')}>
+              <ListIcon className="h-4 w-4" />
+              Proyectos
+            </NavSubLink>
             <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
               <BuildingIcon className="h-4 w-4" />
               Clientes
