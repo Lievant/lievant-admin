@@ -1,12 +1,13 @@
 import { ModuleCard, StatCard } from '@/components/dashboard-cards';
-import { BuildingIcon, TableIcon, TruckIcon } from '@/components/icons';
-import { getMissingDocumentsReport, listClients, listVendors } from '@/lib/api';
+import { BuildingIcon, ListIcon, TableIcon, TruckIcon } from '@/components/icons';
+import { getMissingDocumentsReport, getProjectStats, listClients, listVendors } from '@/lib/api';
 
 export default async function FinanzasPage() {
-  const [clientsResult, missingDocsResult, vendorsResult] = await Promise.allSettled([
+  const [clientsResult, missingDocsResult, vendorsResult, projectStatsResult] = await Promise.allSettled([
     listClients({ status: 'active' }),
     getMissingDocumentsReport(),
     listVendors({ status: 'activo' }),
+    getProjectStats(),
   ]);
 
   const activeClients =
@@ -15,6 +16,8 @@ export default async function FinanzasPage() {
     missingDocsResult.status === 'fulfilled' ? missingDocsResult.value.length : null;
   const activeVendors =
     vendorsResult.status === 'fulfilled' ? vendorsResult.value.length : null;
+  const activeProjects =
+    projectStatsResult.status === 'fulfilled' ? projectStatsResult.value.active : null;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
@@ -25,6 +28,12 @@ export default async function FinanzasPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatCard
+          label="Proyectos activos"
+          value={activeProjects ?? '—'}
+          href="/finanzas/proyectos?status=active"
+          description="En cartera actual"
+        />
         <StatCard
           label="Clientes activos"
           value={activeClients ?? '—'}
@@ -43,12 +52,6 @@ export default async function FinanzasPage() {
           href="/finanzas/proveedores"
           description="En padrón"
         />
-        <StatCard
-          label="OC abiertas"
-          value={0}
-          href="/finanzas/proveedores"
-          description="Próximamente"
-        />
       </div>
 
       {/* Module access */}
@@ -57,6 +60,13 @@ export default async function FinanzasPage() {
           Accesos rápidos
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <ModuleCard
+            title="Proyectos"
+            description="Cartera de proyectos, equipo y facturación"
+            href="/finanzas/proyectos"
+            icon={<ListIcon className="h-6 w-6" />}
+            accentClass="bg-purple-50 text-purple-600"
+          />
           <ModuleCard
             title="Clientes"
             description="Cartera de clientes, contratos y contactos"

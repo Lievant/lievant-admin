@@ -38,6 +38,13 @@ import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.en
 import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
 import { EquipmentStatus } from '../modules/inventory/entities/equipment-status.entity';
 import { EquipmentType } from '../modules/inventory/entities/equipment-type.entity';
+import { ProjectBillingMilestone } from '../modules/projects/entities/project-billing-milestone.entity';
+import { ProjectBusinessUnit } from '../modules/projects/entities/project-business-unit.entity';
+import { ProjectDocument } from '../modules/projects/entities/project-document.entity';
+import { ProjectFinancials } from '../modules/projects/entities/project-financials.entity';
+import { ProjectHistory } from '../modules/projects/entities/project-history.entity';
+import { ProjectMember } from '../modules/projects/entities/project-member.entity';
+import { ProjectRecord } from '../modules/projects/entities/project-record.entity';
 
 for (const envFile of ['.env.local', '.env', '../../.env.local', '../../.env']) {
   dotenv.config({ path: path.resolve(process.cwd(), envFile) });
@@ -89,6 +96,13 @@ const AppDataSource = new DataSource({
     EquipmentType,
     EquipmentBrand,
     EquipmentStatus,
+    ProjectRecord,
+    ProjectMember,
+    ProjectBusinessUnit,
+    ProjectFinancials,
+    ProjectBillingMilestone,
+    ProjectDocument,
+    ProjectHistory,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
