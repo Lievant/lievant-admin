@@ -1,4 +1,4 @@
-import { listClients, listProjects, type ListProjectsParams } from '@/lib/api';
+import { getProjectStats, listClients, listProjects, type ListProjectsParams } from '@/lib/api';
 import { ProjectsScreen } from './projects-screen';
 
 async function safe<T>(p: Promise<T>): Promise<T | null> {
@@ -31,9 +31,10 @@ export default async function ProyectosPage({ searchParams }: Props) {
   if (search) query.search = search;
   if (cursor) query.cursor = cursor;
 
-  const [page, clients] = await Promise.all([
+  const [page, clients, stats] = await Promise.all([
     safe(listProjects(query)),
     safe(listClients({ status: 'active', limit: 100 })),
+    safe(getProjectStats()),
   ]);
 
   return (
@@ -44,6 +45,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
         apiUnavailable={page === null}
         filters={{ status: status ?? '', projectType: projectType ?? '', businessUnit: businessUnit ?? '', search: search ?? '' }}
         cursor={cursor ?? ''}
+        activeCount={stats?.active ?? null}
       />
     </div>
   );
