@@ -4,7 +4,13 @@ import { useState } from 'react';
 import type { ProjectDetail } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-const BUSINESS_UNITS = ['SIOcore', 'Omnicanalidad', 'Marketing Digital', 'Transformación Digital', 'SGSI'];
+const BUSINESS_UNITS = [
+  { value: 'marketing_digital', label: 'Marketing Digital' },
+  { value: 'marketplaces', label: 'Marketplaces' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'fullcommerce', label: 'Fullcommerce' },
+  { value: 'omnicanalidad', label: 'Omnicanalidad' },
+];
 
 const STATUS_BADGE: Record<string, string> = {
   active: 'bg-green-100 text-green-800',
@@ -176,7 +182,7 @@ export function GeneralTab({ project, onUpdate }: Props) {
               className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none"
             >
               <option value="">— Sin área —</option>
-              {BUSINESS_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+              {BUSINESS_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
             </select>
           </div>
           <div>

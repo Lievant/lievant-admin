@@ -5,7 +5,17 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import type { ClientListItem, ProjectsPage } from '@/lib/api';
 import { PlusIcon, SearchIcon } from '@/components/icons';
+import { SortableHeader } from '@/components/ui/sortable-header';
+import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import { cn } from '@/lib/utils';
+
+const BUSINESS_UNITS = [
+  { value: 'marketing_digital', label: 'Marketing Digital' },
+  { value: 'marketplaces', label: 'Marketplaces' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'fullcommerce', label: 'Fullcommerce' },
+  { value: 'omnicanalidad', label: 'Omnicanalidad' },
+];
 
 const PROJECT_TYPE_LABELS: Record<string, string> = {
   recurring: 'Recurrente',
@@ -29,7 +39,9 @@ const TYPE_BADGE: Record<string, string> = {
   one_time: 'bg-purple-100 text-purple-700',
 };
 
-const BUSINESS_UNITS = ['SIOcore', 'Omnicanalidad', 'Marketing Digital', 'Transformación Digital', 'SGSI'];
+const BU_LABEL: Record<string, string> = Object.fromEntries(
+  BUSINESS_UNITS.map((u) => [u.value, u.label]),
+);
 
 interface Props {
   page: ProjectsPage;
@@ -37,6 +49,7 @@ interface Props {
   apiUnavailable: boolean;
   filters: { status: string; projectType: string; businessUnit: string; search: string };
   cursor: string;
+  activeCount: number | null;
 }
 
 function buildUrl(params: Record<string, string | undefined>) {
@@ -46,9 +59,10 @@ function buildUrl(params: Record<string, string | undefined>) {
   return `/finanzas/proyectos${qs ? `?${qs}` : ''}`;
 }
 
-export function ProjectsScreen({ page, clients, apiUnavailable, filters }: Props) {
+export function ProjectsScreen({ page, clients, apiUnavailable, filters, activeCount }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
+  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -74,6 +88,11 @@ export function ProjectsScreen({ page, clients, apiUnavailable, filters }: Props
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-terracota">Finanzas</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Proyectos</h1>
+          {activeCount !== null && (
+            <p className="mt-1 text-sm text-slate-500">
+              {activeCount} proyecto{activeCount !== 1 ? 's' : ''} activo{activeCount !== 1 ? 's' : ''}
+            </p>
+          )}
         </div>
         <Link
           href="/finanzas/proyectos/nuevo"
@@ -124,38 +143,43 @@ export function ProjectsScreen({ page, clients, apiUnavailable, filters }: Props
           className="h-9 rounded-lg border border-slate-200 px-3 text-sm focus:outline-none"
         >
           <option value="">Área: Todas</option>
-          {BUSINESS_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          {BUSINESS_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
         </select>
       </div>
 
       {/* Table */}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-100 bg-slate-50">
+          <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
             <tr>
-              {['ID', 'Nombre', 'Cliente', 'Área', 'Tipo', 'PM', 'Estado', 'Cuota mensual', ''].map((h) => (
-                <th key={h} className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  {h}
-                </th>
-              ))}
+              <SortableHeader label="ID" sortKey="displayId" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Nombre" sortKey="name" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Cliente" sortKey="clientName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Área" sortKey="primaryBusinessUnit" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Tipo" sortKey="projectType" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="PM" sortKey="projectManagerName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <SortableHeader label="Estado" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {page.data.length === 0 && (
+            {sorted.length === 0 && (
               <tr>
-                <td colSpan={9} className="py-12 text-center text-slate-400">
+                <td colSpan={8} className="py-12 text-center text-slate-400">
                   No se encontraron proyectos.
                 </td>
               </tr>
             )}
-            {page.data.map((p) => (
+            {sorted.map((p) => (
               <tr key={p.id} className="hover:bg-slate-50">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{p.displayId}</td>
                 <td className="px-4 py-3 font-medium text-navy">{p.name}</td>
                 <td className="max-w-[160px] truncate px-4 py-3 text-slate-600">
                   {clientNameById[p.clientRecordId ?? ''] ?? p.clientName ?? '—'}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{p.primaryBusinessUnit ?? '—'}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {BU_LABEL[p.primaryBusinessUnit ?? ''] ?? p.primaryBusinessUnit ?? '—'}
+                </td>
                 <td className="px-4 py-3">
                   <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', TYPE_BADGE[p.projectType] ?? 'bg-slate-100 text-slate-600')}>
                     {PROJECT_TYPE_LABELS[p.projectType] ?? p.projectType}
@@ -175,11 +199,6 @@ export function ProjectsScreen({ page, clients, apiUnavailable, filters }: Props
                   <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', STATUS_BADGE[p.status] ?? 'bg-slate-100 text-slate-600')}>
                     {STATUS_LABELS[p.status] ?? p.status}
                   </span>
-                </td>
-                <td className="px-4 py-3 text-right text-slate-600">
-                  {p.monthlyFee
-                    ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: p.currency }).format(parseFloat(p.monthlyFee))
-                    : '—'}
                 </td>
                 <td className="px-4 py-3">
                   <Link

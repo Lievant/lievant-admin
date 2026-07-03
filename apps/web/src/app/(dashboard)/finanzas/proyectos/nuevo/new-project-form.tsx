@@ -5,7 +5,13 @@ import { useRouter } from 'next/navigation';
 import type { ClientListItem, EmployeeListItem } from '@/lib/api';
 import { cn } from '@/lib/utils';
 
-const BUSINESS_UNITS = ['SIOcore', 'Omnicanalidad', 'Marketing Digital', 'Transformación Digital', 'SGSI'];
+const BUSINESS_UNITS = [
+  { value: 'marketing_digital', label: 'Marketing Digital' },
+  { value: 'marketplaces', label: 'Marketplaces' },
+  { value: 'performance', label: 'Performance' },
+  { value: 'fullcommerce', label: 'Fullcommerce' },
+  { value: 'omnicanalidad', label: 'Omnicanalidad' },
+];
 
 interface Props {
   clients: ClientListItem[];
@@ -201,7 +207,7 @@ export function NewProjectForm({ clients, employees }: Props) {
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none"
               >
                 <option value="">— Sin área —</option>
-                {BUSINESS_UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+                {BUSINESS_UNITS.map((u) => <option key={u.value} value={u.value}>{u.label}</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-4">
