@@ -50,7 +50,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
           employeesPage ?? {
             data: [],
             nextCursor: null,
-            stats: { total: 0, active: 0, inactive: 0, companies: 0, expiringContracts: 0 },
+            stats: { total: 0, active: 0, inactive: 0, companies: 0, expiringContracts: 0, newHires: 0 },
           }
         }
         apiUnavailable={apiUnavailable}
