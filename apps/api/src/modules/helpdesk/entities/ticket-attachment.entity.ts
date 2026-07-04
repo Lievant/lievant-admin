@@ -13,8 +13,8 @@ export class TicketAttachment {
   @JoinColumn({ name: 'ticket_id' })
   ticket!: Ticket;
 
-  @Column({ type: 'varchar', length: 255 })
-  name!: string;
+  @Column({ name: 'file_name', type: 'varchar', length: 255 })
+  fileName!: string;
 
   @Column({ name: 's3_key', type: 'varchar', length: 500 })
   s3Key!: string;

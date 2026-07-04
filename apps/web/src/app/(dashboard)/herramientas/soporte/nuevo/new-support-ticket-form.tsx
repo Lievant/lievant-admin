@@ -40,10 +40,11 @@ export function NewSupportTicketForm({ categories }: Props) {
   });
   const [myEquipment, setMyEquipment] = useState<MyEquipmentItem[]>([]);
   const [subcategories, setSubcategories] = useState<HelpdeskSubcategorySummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [uploadStep, setUploadStep] = useState<'idle' | 'creating' | 'uploading'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SubmitResult>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const loading = uploadStep !== 'idle';
 
   useEffect(() => {
     fetch('/api/inventory/equipment/my')
@@ -76,10 +77,11 @@ export function NewSupportTicketForm({ categories }: Props) {
       setError('La descripción debe tener al menos 20 caracteres.');
       return;
     }
-    setLoading(true);
     setError(null);
 
     try {
+      // Paso 1: crear ticket (JSON)
+      setUploadStep('creating');
       let equipmentLabel: string | undefined;
       if (form.equipmentId) {
         const eq = myEquipment.find((e) => e.id === form.equipmentId);
@@ -110,11 +112,28 @@ export function NewSupportTicketForm({ categories }: Props) {
       }
 
       const ticket = (await res.json()) as { displayId: string; id: string };
+
+      // Paso 2: subir adjunto si existe
+      if (form.attachment) {
+        setUploadStep('uploading');
+        const fd = new FormData();
+        fd.append('file', form.attachment);
+        const uploadRes = await fetch(`/api/helpdesk/tickets/${ticket.id}/attachments`, {
+          method: 'POST',
+          body: fd,
+        });
+        if (!uploadRes.ok) {
+          // Ticket creado pero adjunto falló — informar sin bloquear
+          const uploadBody = (await uploadRes.json()) as { message?: string };
+          throw new Error(`Ticket creado (${ticket.displayId}) pero el adjunto falló: ${uploadBody.message ?? uploadRes.status}`);
+        }
+      }
+
       setResult(ticket);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al crear el ticket. Intenta de nuevo.');
     } finally {
-      setLoading(false);
+      setUploadStep('idle');
     }
   }
 
@@ -293,7 +312,11 @@ export function NewSupportTicketForm({ categories }: Props) {
           disabled={loading}
           className="rounded-lg bg-terracota px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-terracota/90 disabled:opacity-60"
         >
-          {loading ? 'Enviando…' : 'Enviar ticket'}
+          {uploadStep === 'creating'
+          ? 'Creando ticket…'
+          : uploadStep === 'uploading'
+            ? 'Subiendo adjunto…'
+            : 'Enviar ticket'}
         </button>
       </div>
     </form>

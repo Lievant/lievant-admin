@@ -1903,6 +1903,16 @@ export interface TicketDetail extends TicketSummary {
   estimatedDelivery: string | null;
   assigneeName: string | null;
   history: TicketHistoryEntry[];
+  attachments: TicketAttachmentItem[];
+}
+
+export interface TicketAttachmentItem {
+  id: string;
+  fileName: string;
+  fileSize: number | null;
+  mimeType: string | null;
+  uploadedAt: string;
+  downloadUrl: string;
 }
 
 export interface TicketPage {

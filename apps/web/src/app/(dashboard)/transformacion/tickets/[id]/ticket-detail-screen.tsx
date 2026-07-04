@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { TicketAssignee, TicketDetail, TicketPriority, TicketStatus } from '@/lib/api';
+import type { TicketAssignee, TicketAttachmentItem, TicketDetail, TicketPriority, TicketStatus } from '@/lib/api';
 import { ChevronLeftIcon } from '@/components/icons';
 import {
   escalateAction,
@@ -241,6 +241,20 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                   <p className="whitespace-pre-line text-sm text-slate-700">{ticket.solution}</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Adjuntos */}
+          {ticket.attachments.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-400">
+                Adjuntos
+              </h2>
+              <ul className="space-y-2">
+                {ticket.attachments.map((a) => (
+                  <AttachmentRow key={a.id} attachment={a} />
+                ))}
+              </ul>
             </div>
           )}
 
@@ -555,5 +569,36 @@ function Row({ label, value, accent }: { label: string; value: string; accent?: 
       <dt className="shrink-0 text-slate-400">{label}</dt>
       <dd className={cn('text-right font-medium text-slate-700', accent)}>{value}</dd>
     </div>
+  );
+}
+
+function AttachmentRow({ attachment: a }: { attachment: TicketAttachmentItem }) {
+  const isPdf = a.mimeType === 'application/pdf';
+  const isImage = a.mimeType?.startsWith('image/');
+  const sizeKb = a.fileSize ? Math.round(a.fileSize / 1024) : null;
+
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+      <div className="flex items-center gap-3">
+        <span className="text-lg">
+          {isPdf ? '📄' : isImage ? '🖼️' : '📎'}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-navy">{a.fileName}</p>
+          <p className="text-xs text-slate-400">
+            {sizeKb !== null ? `${sizeKb} KB · ` : ''}
+            {new Date(a.uploadedAt).toLocaleDateString('es-MX', { dateStyle: 'short' })}
+          </p>
+        </div>
+      </div>
+      <a
+        href={a.downloadUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="shrink-0 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+      >
+        Descargar
+      </a>
+    </li>
   );
 }
