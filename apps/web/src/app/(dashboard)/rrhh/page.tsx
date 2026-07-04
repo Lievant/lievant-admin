@@ -6,11 +6,10 @@ export default async function RrhhPage() {
   const today = new Date();
   const currentMonth = today.getMonth() + 1;
 
-  const [activeEmployeesResult, birthdaysResult, expiringResult, newHiresResult] = await Promise.allSettled([
+  const [activeEmployeesResult, birthdaysResult, expiringResult] = await Promise.allSettled([
     listEmployees({ status: 'active', limit: 1 }),
     getBirthdayReport(currentMonth, 'date'),
     getExpiringContracts(30),
-    listEmployees({ limit: 100 }),
   ]);
 
   const activeEmployees =
@@ -19,14 +18,8 @@ export default async function RrhhPage() {
     birthdaysResult.status === 'fulfilled' ? birthdaysResult.value.length : null;
   const expiringContracts =
     expiringResult.status === 'fulfilled' ? expiringResult.value.length : null;
-
   const newHiresThisMonth =
-    newHiresResult.status === 'fulfilled'
-      ? newHiresResult.value.data.filter((e) => {
-          const created = new Date(e.createdAt);
-          return created.getFullYear() === today.getFullYear() && created.getMonth() === today.getMonth();
-        }).length
-      : null;
+    activeEmployeesResult.status === 'fulfilled' ? activeEmployeesResult.value.stats.newHires : null;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">

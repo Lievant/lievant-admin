@@ -98,6 +98,7 @@ export class EmployeesService {
         total: filtered.length,
         active: filteredActive,
         inactive: filtered.length - filteredActive,
+        newHires: 0,
         companies: new Set(filtered.map((i) => i.companyCode)).size,
         expiringContracts: filtered.filter((i) => {
           if (!i.contractEndDate) return false;
@@ -644,7 +645,16 @@ export class EmployeesService {
       .andWhere('employee.contractEndDate >= CURRENT_DATE')
       .getCount();
 
-    return { total, active, inactive, companies, expiringContracts };
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDayOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const newHires = await baseQb()
+      .andWhere('employee.seniorityDate >= :firstDay', { firstDay: firstDayOfMonth.toISOString().split('T')[0] })
+      .andWhere('employee.seniorityDate <= :lastDay', { lastDay: lastDayOfMonth.toISOString().split('T')[0] })
+      .getCount();
+
+    return { total, active, inactive, companies, expiringContracts, newHires };
   }
 
   private async generateDisplayId(): Promise<string> {

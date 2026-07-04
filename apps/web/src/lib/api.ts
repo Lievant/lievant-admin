@@ -583,6 +583,7 @@ export interface EmployeeStats {
   inactive: number;
   companies: number;
   expiringContracts: number;
+  newHires: number;
 }
 
 export interface EmployeesPage {
