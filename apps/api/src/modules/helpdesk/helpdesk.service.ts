@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
@@ -12,7 +12,9 @@ import { HelpdeskCategory } from './entities/category.entity';
 import { HelpdeskSubcategory } from './entities/subcategory.entity';
 import { Ticket } from './entities/ticket.entity';
 import { TicketAssignee } from './entities/ticket-assignee.entity';
+import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
+import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 const CATEGORY_PRIORITY: Record<string, string> = {
   conectividad: 'P1',
@@ -34,9 +36,11 @@ export class HelpdeskService {
     @InjectRepository(Ticket) private readonly ticketsRepo: Repository<Ticket>,
     @InjectRepository(TicketAssignee) private readonly assigneesRepo: Repository<TicketAssignee>,
     @InjectRepository(TicketHistory) private readonly historyRepo: Repository<TicketHistory>,
+    @InjectRepository(TicketAttachment) private readonly attachmentsRepo: Repository<TicketAttachment>,
     @InjectRepository(HelpdeskCategory) private readonly categoriesRepo: Repository<HelpdeskCategory>,
     @InjectRepository(HelpdeskSubcategory) private readonly subcategoriesRepo: Repository<HelpdeskSubcategory>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
+    private readonly storage: HelpdeskStorageService,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -115,13 +119,60 @@ export class HelpdeskService {
   async findById(id: string) {
     const ticket = await this.ticketsRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
-    const [history, assignee] = await Promise.all([
+    const [history, assignee, attachments] = await Promise.all([
       this.historyRepo.find({ where: { ticketId: id }, order: { createdAt: 'ASC' } }),
       ticket.assignedTo
         ? this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } })
         : Promise.resolve(null),
+      this.getAttachments(id),
     ]);
-    return { ...ticket, history, assigneeName: assignee?.name ?? null };
+    return { ...ticket, history, assigneeName: assignee?.name ?? null, attachments };
+  }
+
+  async getAttachments(ticketId: string) {
+    const rows = await this.attachmentsRepo.find({
+      where: { ticketId },
+      order: { uploadedAt: 'ASC' },
+    });
+    return Promise.all(
+      rows.map(async (a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        fileSize: a.fileSize,
+        mimeType: a.mimeType,
+        uploadedAt: a.uploadedAt,
+        downloadUrl: await this.storage.getPresignedUrl(a.s3Key),
+      })),
+    );
+  }
+
+  async uploadAttachment(ticketId: string, file: Express.Multer.File, userId: string) {
+    await this.getOrFail(ticketId);
+
+    if (!(ALLOWED_ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+      throw new BadRequestException(`Tipo de archivo no permitido: ${file.mimetype}`);
+    }
+
+    const s3Key = await this.storage.uploadAttachment(file, ticketId);
+
+    const attachment = this.attachmentsRepo.create({
+      ticketId,
+      fileName: file.originalname,
+      s3Key,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      uploadedBy: userId,
+    });
+    const saved = await this.attachmentsRepo.save(attachment);
+
+    return {
+      id: saved.id,
+      fileName: saved.fileName,
+      fileSize: saved.fileSize,
+      mimeType: saved.mimeType,
+      uploadedAt: saved.uploadedAt,
+      downloadUrl: await this.storage.getPresignedUrl(s3Key),
+    };
   }
 
   async findMyTickets(userId: string, query: QueryTicketsDto) {

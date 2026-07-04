@@ -1,4 +1,20 @@
-import { Body, Controller, DefaultValuePipe, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  DefaultValuePipe,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -9,6 +25,7 @@ import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
+import { ALLOWED_ATTACHMENT_MIME_TYPES } from './helpdesk-storage.service';
 import { HelpdeskService } from './helpdesk.service';
 
 function isTdUser(user: User): boolean {
@@ -112,5 +129,32 @@ export class HelpdeskController {
   @RequirePermission('transformacion', 'tickets.gestion', 'write')
   deleteTicket(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.deleteTicket(id);
+  }
+
+  // ------- Attachments ----------------------------------------------------
+
+  @Get('tickets/:id/attachments')
+  getAttachments(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getAttachments(id);
+  }
+
+  @Post('tickets/:id/attachments')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadAttachment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: User,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió ningún archivo.');
+    if (!(ALLOWED_ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Tipo no permitido. Acepta: ${ALLOWED_ATTACHMENT_MIME_TYPES.join(', ')}`,
+      );
+    }
+    return this.service.uploadAttachment(id, file, user.id);
   }
 }

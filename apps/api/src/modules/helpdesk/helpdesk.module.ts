@@ -7,6 +7,7 @@ import { Ticket } from './entities/ticket.entity';
 import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
+import { HelpdeskStorageService } from './helpdesk-storage.service';
 import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
 
@@ -23,7 +24,7 @@ import { HelpdeskService } from './helpdesk.service';
     ]),
   ],
   controllers: [HelpdeskController],
-  providers: [HelpdeskService],
+  providers: [HelpdeskService, HelpdeskStorageService],
   exports: [HelpdeskService],
 })
 export class HelpdeskModule {}
