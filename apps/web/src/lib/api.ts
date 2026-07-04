@@ -2379,6 +2379,20 @@ export function listEquipmentStatuses(): Promise<EquipmentStatusCatalog[]> {
   return apiFetchWithRetry<EquipmentStatusCatalog[]>('/inventory/equipment-statuses');
 }
 
+export interface MyEquipmentItem {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  status: string;
+}
+
+export function getMyEquipment(): Promise<MyEquipmentItem[]> {
+  return apiFetchWithRetry<MyEquipmentItem[]>('/inventory/equipment/my');
+}
+
 // ---------------------------------------------------------------------------
 // Proyectos
 // ---------------------------------------------------------------------------

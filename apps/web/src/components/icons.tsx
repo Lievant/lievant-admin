@@ -524,6 +524,16 @@ export function PrintIcon(props: IconProps) {
   );
 }
 
+export function HeadsetIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 14v-3a8 8 0 1 1 16 0v3" />
+      <rect x="2" y="13" width="4" height="7" rx="1" />
+      <rect x="18" y="13" width="4" height="7" rx="1" />
+    </Svg>
+  );
+}
+
 export function MicrosoftLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" {...props}>

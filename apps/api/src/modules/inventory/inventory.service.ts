@@ -408,6 +408,32 @@ export class InventoryService {
   }
 
   // -------------------------------------------------------------------------
+  // Equipos del usuario autenticado
+  // -------------------------------------------------------------------------
+
+  async getMyEquipment(userEmail: string) {
+    const employee = await this.employeesRepo.findOne({
+      where: { corporateEmail: userEmail },
+    });
+    if (!employee) return [];
+
+    const items = await this.equipmentRepo.find({
+      where: { assignedToEmployeeId: employee.id, deletedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+
+    return items.map((e) => ({
+      id: e.id,
+      displayId: e.displayId,
+      legacyId: e.legacyId,
+      equipmentType: e.equipmentType,
+      brand: e.brand,
+      model: e.model,
+      status: e.status,
+    }));
+  }
+
+  // -------------------------------------------------------------------------
   // generateDisplayId: TEC-YYYY-NNN
   // -------------------------------------------------------------------------
 
