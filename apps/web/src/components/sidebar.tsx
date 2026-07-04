@@ -8,6 +8,7 @@ import {
   BuildingIcon,
   CpuIcon,
   DoorIcon,
+  HeadsetIcon,
   HomeIcon,
   IdCardIcon,
   LaptopIcon,
@@ -149,6 +150,10 @@ export function Sidebar({ user }: SidebarProps) {
         <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
           <DoorIcon className="h-5 w-5" />
           Reserva de salas
+        </NavLink>
+        <NavLink href="/herramientas/soporte" active={pathname.startsWith('/herramientas/soporte')}>
+          <HeadsetIcon className="h-5 w-5" />
+          Soporte TI
         </NavLink>
 
         {isSuperAdmin && (

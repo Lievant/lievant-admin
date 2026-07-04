@@ -21,7 +21,6 @@ import { UpdateEquipmentDto } from './dto/update-equipment.dto';
 import { InventoryService } from './inventory.service';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
-@RequirePermission('transformacion', 'inventario', 'read')
 @Controller('inventory')
 export class InventoryController {
   constructor(private readonly service: InventoryService) {}
@@ -29,16 +28,19 @@ export class InventoryController {
   // ── Catálogos ──────────────────────────────────────────────────────────────
 
   @Get('equipment-types')
+  @RequirePermission('transformacion', 'inventario', 'read')
   getTypes() {
     return this.service.findTypes();
   }
 
   @Get('equipment-brands')
+  @RequirePermission('transformacion', 'inventario', 'read')
   getBrands() {
     return this.service.findBrands();
   }
 
   @Get('equipment-statuses')
+  @RequirePermission('transformacion', 'inventario', 'read')
   getStatuses() {
     return this.service.findStatuses();
   }
@@ -46,21 +48,31 @@ export class InventoryController {
   // ── Inventario ─────────────────────────────────────────────────────────────
 
   @Get('equipment/stats')
+  @RequirePermission('transformacion', 'inventario', 'read')
   getStats() {
     return this.service.getStats();
   }
 
   @Get('equipment/report/by-area')
+  @RequirePermission('transformacion', 'inventario', 'read')
   getReportByArea() {
     return this.service.getReportByArea();
   }
 
+  // Declarado antes de /:id para que no sea interceptado como UUID
+  @Get('equipment/my')
+  getMyEquipment(@CurrentUser() user: User) {
+    return this.service.getMyEquipment(user.email);
+  }
+
   @Get('equipment')
+  @RequirePermission('transformacion', 'inventario', 'read')
   findAll(@Query() query: QueryEquipmentDto) {
     return this.service.findAll(query);
   }
 
   @Get('equipment/:id')
+  @RequirePermission('transformacion', 'inventario', 'read')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.findById(id);
   }
