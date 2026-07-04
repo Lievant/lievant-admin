@@ -80,10 +80,20 @@ export function NewSupportTicketForm({ categories }: Props) {
     setError(null);
 
     try {
+      let equipmentLabel: string | undefined;
+      if (form.equipmentId) {
+        const eq = myEquipment.find((e) => e.id === form.equipmentId);
+        if (eq) {
+          const parts = [eq.equipmentType, eq.brand, eq.model].filter(Boolean).join(' ');
+          const label = eq.displayId ? `${parts} — ${eq.displayId}` : parts;
+          equipmentLabel = label.slice(0, 50);
+        }
+      }
+
       const payload = {
         category: form.category,
         subcategory: form.subcategory || undefined,
-        equipmentId: form.equipmentId || undefined,
+        equipmentId: equipmentLabel,
         description: form.description.trim(),
         impact: form.impact,
       };
