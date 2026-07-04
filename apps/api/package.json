@@ -25,7 +25,8 @@
     "seed:employees": "ts-node -T src/database/seeds/003-employees-headcount.seed.ts",
     "seed:helpdesk": "ts-node -T src/database/seeds/004-helpdesk-historical.seed.ts",
     "seed:inventory": "ts-node -T src/database/seeds/005-inventory-equipment.seed.ts",
-    "seed:projects": "ts-node -T src/database/seeds/006-projects-from-cor.seed.ts"
+    "seed:projects": "ts-node -T src/database/seeds/006-projects-from-cor.seed.ts",
+    "seed:licenses": "ts-node -T src/database/seeds/007-licenses-from-csv.seed.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1067.0",

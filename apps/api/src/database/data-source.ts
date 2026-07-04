@@ -38,6 +38,9 @@ import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.en
 import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
 import { EquipmentStatus } from '../modules/inventory/entities/equipment-status.entity';
 import { EquipmentType } from '../modules/inventory/entities/equipment-type.entity';
+import { EmployeeLicense } from '../modules/licenses/entities/employee-license.entity';
+import { ToolAssignment } from '../modules/licenses/entities/tool-assignment.entity';
+import { ToolCatalog } from '../modules/licenses/entities/tool-catalog.entity';
 import { ProjectBillingMilestone } from '../modules/projects/entities/project-billing-milestone.entity';
 import { ProjectBusinessUnit } from '../modules/projects/entities/project-business-unit.entity';
 import { ProjectDocument } from '../modules/projects/entities/project-document.entity';
@@ -103,6 +106,9 @@ const AppDataSource = new DataSource({
     ProjectBillingMilestone,
     ProjectDocument,
     ProjectHistory,
+    ToolCatalog,
+    EmployeeLicense,
+    ToolAssignment,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',

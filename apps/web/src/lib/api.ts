@@ -2651,3 +2651,151 @@ export function addProjectMilestone(id: string, payload: AddProjectMilestonePayl
 export function listProjectDocuments(id: string): Promise<ProjectDocument[]> {
   return apiFetchWithRetry<ProjectDocument[]>(`/projects/${id}/documents`);
 }
+
+// ---------------------------------------------------------------------------
+// Licenciamientos
+// ---------------------------------------------------------------------------
+
+export interface LicenseToolSummary {
+  toolId: string;
+  toolName: string;
+  hasAccess: boolean;
+  isAdmin: boolean;
+}
+
+export interface LicenseEmployeeRow {
+  employeeId: string;
+  displayId: string;
+  fullName: string;
+  corporateEmail: string | null;
+  area: string | null;
+  division: string | null;
+  location: string | null;
+  photoUrl: string | null;
+  activeDirectoryName: string | null;
+  responsiva: string | null;
+  tools: LicenseToolSummary[];
+}
+
+export interface ListLicensesParams {
+  search?: string;
+  tool?: string;
+  hasAccess?: boolean;
+  department?: string;
+  division?: string;
+  location?: string;
+}
+
+export function listLicenses(params: ListLicensesParams = {}): Promise<LicenseEmployeeRow[]> {
+  const q = new URLSearchParams();
+  if (params.search) q.set('search', params.search);
+  if (params.tool) q.set('tool', params.tool);
+  if (params.hasAccess !== undefined) q.set('hasAccess', String(params.hasAccess));
+  if (params.department) q.set('department', params.department);
+  if (params.division) q.set('division', params.division);
+  if (params.location) q.set('location', params.location);
+  const qs = q.toString();
+  return apiFetchWithRetry<LicenseEmployeeRow[]>(`/licenses/employees${qs ? `?${qs}` : ''}`);
+}
+
+export interface LicenseStatsByTool {
+  toolId: string;
+  toolName: string;
+  count: number;
+}
+
+export interface LicenseStats {
+  totalEmployeesWithLicenses: number;
+  byTool: LicenseStatsByTool[];
+}
+
+export function getLicenseStats(): Promise<LicenseStats> {
+  return apiFetchWithRetry<LicenseStats>('/licenses/employees/stats');
+}
+
+export interface LicenseToolDetail {
+  toolId: string;
+  toolName: string;
+  category: string;
+  icon: string;
+  color: string;
+  hasAccess: boolean;
+  isAdmin: boolean;
+  grantedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface EmployeeLicenseDetail {
+  employeeId: string;
+  displayId: string;
+  fullName: string;
+  corporateEmail: string | null;
+  position: string;
+  area: string | null;
+  division: string | null;
+  location: string | null;
+  photoUrl: string | null;
+  activeDirectoryName: string | null;
+  responsiva: string | null;
+  notes: string | null;
+  tools: LicenseToolDetail[];
+}
+
+export function getEmployeeLicense(employeeId: string): Promise<EmployeeLicenseDetail> {
+  return apiFetchWithRetry<EmployeeLicenseDetail>(`/licenses/employees/${employeeId}`);
+}
+
+export interface UpsertLicensesToolPayload {
+  toolId: string;
+  hasAccess: boolean;
+  isAdmin?: boolean;
+  notes?: string;
+}
+
+export interface UpsertLicensesPayload {
+  activeDirectoryName?: string;
+  responsiva?: string;
+  notes?: string;
+  tools: UpsertLicensesToolPayload[];
+}
+
+export function upsertEmployeeLicenses(
+  employeeId: string,
+  payload: UpsertLicensesPayload,
+): Promise<EmployeeLicenseDetail> {
+  return apiFetchWithRetry<EmployeeLicenseDetail>(`/licenses/employees/${employeeId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface ToolCatalogItem {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string;
+  icon: string;
+  color: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export function listLicenseTools(): Promise<ToolCatalogItem[]> {
+  return apiFetchWithRetry<ToolCatalogItem[]>('/licenses/tools');
+}
+
+export interface CreateToolPayload {
+  name: string;
+  description?: string;
+  category?: string;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+}
+
+export function createTool(payload: CreateToolPayload): Promise<ToolCatalogItem> {
+  return apiFetchWithRetry<ToolCatalogItem>('/licenses/tools', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
