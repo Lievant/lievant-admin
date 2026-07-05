@@ -16,6 +16,7 @@ const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHUNK_TOKENS = 500;
 const OVERLAP_TOKENS = 50;
 const TOKENS_PER_WORD = 1.3;
+const EMBEDDING_BATCH_SIZE = 100;
 
 const MIME_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
@@ -162,21 +163,27 @@ export class IsobotIngestionService {
       return { documentId, fileName, chunksCreated: 0 };
     }
 
-    const embeddingResponse = await getOpenAI().embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: chunks.map((c) => c.content),
-    });
+    // Batching: un documento grande puede exceder el límite de 300,000 tokens
+    // por request de OpenAI si se manda de un solo golpe.
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += EMBEDDING_BATCH_SIZE) {
+      const batch = chunks.slice(batchStart, batchStart + EMBEDDING_BATCH_SIZE);
+      const embeddingResponse = await getOpenAI().embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: batch.map((c) => c.content),
+      });
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      const embedding = embeddingResponse.data[i]!.embedding;
-      await this.chunksRepo.manager.query(
-        `
-        INSERT INTO isobot.document_chunks (document_id, chunk_index, content, token_count, embedding)
-        VALUES ($1, $2, $3, $4, $5::vector)
-        `,
-        [documentId, i, chunk.content, chunk.tokenCount, toVectorLiteral(embedding)],
-      );
+      for (let j = 0; j < batch.length; j++) {
+        const chunk = batch[j]!;
+        const embedding = embeddingResponse.data[j]!.embedding;
+        const chunkIndex = batchStart + j;
+        await this.chunksRepo.manager.query(
+          `
+          INSERT INTO isobot.document_chunks (document_id, chunk_index, content, token_count, embedding)
+          VALUES ($1, $2, $3, $4, $5::vector)
+          `,
+          [documentId, chunkIndex, chunk.content, chunk.tokenCount, toVectorLiteral(embedding)],
+        );
+      }
     }
 
     return { documentId, fileName, chunksCreated: chunks.length };

@@ -56,6 +56,20 @@ function macroprocessFor(filePath: string): string | null {
   return parentDir === path.basename(SGSI_DIR) ? null : parentDir;
 }
 
+const FILE_TIMEOUT_MS = 60_000;
+
+// Nota: esto no cancela el trabajo en curso (extracción/embeddings siguen
+// corriendo en segundo plano si pierden la carrera) — solo evita que un
+// archivo atorado bloquee el resto del batch.
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Timeout después de ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 async function run(): Promise<void> {
   if (!fs.existsSync(SGSI_DIR)) {
     fs.mkdirSync(SGSI_DIR, { recursive: true });
@@ -81,9 +95,10 @@ async function run(): Promise<void> {
 
   for (const filePath of files) {
     try {
-      const result = await ingestion.processDocument(filePath, {
-        macroprocess: macroprocessFor(filePath),
-      });
+      const result = await withTimeout(
+        ingestion.processDocument(filePath, { macroprocess: macroprocessFor(filePath) }),
+        FILE_TIMEOUT_MS,
+      );
       console.log(`  ✓  ${result.fileName} → ${result.chunksCreated} chunks`);
       processed++;
     } catch (err) {
