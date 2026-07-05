@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { RobotIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
 import { cn } from '@/lib/utils';
@@ -167,8 +168,18 @@ export function IsobotScreen() {
             <div key={i} className="flex items-start gap-2">
               <IsobotAvatar />
               <div className="max-w-[75%] space-y-2">
-                <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm text-navy shadow-sm">
-                  {msg.content}
+                <div
+                  className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm text-navy shadow-sm
+                    prose prose-sm max-w-none text-navy
+                    [&_strong]:font-semibold
+                    [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1
+                    [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
+                    [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1
+                    [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1
+                    [&_p]:mb-2 [&_p:last-child]:mb-0
+                    [&_hr]:border-slate-200 [&_hr]:my-2"
+                >
+                  <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
                 {msg.sources && msg.sources.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">

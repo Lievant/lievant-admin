@@ -16,6 +16,13 @@ const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHUNK_TOKENS = 500;
 const OVERLAP_TOKENS = 50;
 const TOKENS_PER_WORD = 1.3;
+const EMBEDDING_BATCH_SIZE = 100;
+// Los XLSX del SGSI son formatos/registros, no bases de datos — 1000 filas
+// alcanza de sobra para RAG y evita que una hoja enorme bloquee el event
+// loop de Node de forma síncrona (XLSX.utils.sheet_to_csv es CPU-bound).
+const MAX_XLSX_ROWS = 1000;
+const MAX_XLSX_COLS = 50;
+const MAX_WORD_CHARS = 2000;
 
 const MIME_TYPES: Record<string, string> = {
   pdf: 'application/pdf',
@@ -70,6 +77,24 @@ export class IsobotIngestionService {
     return ext;
   }
 
+  // sheet_to_csv no acepta un option `range` en esta versión de la librería;
+  // en su lugar se acorta `!ref` (que es lo que sheet_to_csv usa internamente
+  // para decidir hasta dónde iterar) sobre una copia superficial de la hoja.
+  //
+  // El límite de columnas es tan importante como el de filas: una hoja con
+  // formato aplicado a las 16,384 columnas máximas de Excel (pero solo unas
+  // pocas con datos reales) genera un CSV de varios MB casi vacío, que luego
+  // produce un chunk gigante enviado a OpenAI — eso fue lo que causó los
+  // cuelgues de ~20 min (timeout + reintento del SDK), no la cantidad de filas.
+  private limitedSheet(sheet: XLSX.WorkSheet): XLSX.WorkSheet {
+    if (!sheet['!ref']) return sheet;
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    const maxRow = Math.min(range.e.r, range.s.r + MAX_XLSX_ROWS - 1);
+    const maxCol = Math.min(range.e.c, range.s.c + MAX_XLSX_COLS - 1);
+    if (range.e.r <= maxRow && range.e.c <= maxCol) return sheet;
+    return { ...sheet, '!ref': XLSX.utils.encode_range({ s: range.s, e: { r: maxRow, c: maxCol } }) };
+  }
+
   private async extractText(buffer: Buffer, fileType: string): Promise<string> {
     switch (fileType) {
       case 'pdf': {
@@ -89,7 +114,8 @@ export class IsobotIngestionService {
         const workbook = XLSX.read(buffer, { type: 'buffer' });
         return workbook.SheetNames.map((name) => {
           const sheet = workbook.Sheets[name]!;
-          return `--- ${name} ---\n${XLSX.utils.sheet_to_csv(sheet)}`;
+          const csv = XLSX.utils.sheet_to_csv(this.limitedSheet(sheet));
+          return `--- ${name} ---\n${csv}`;
         }).join('\n\n');
       }
       default:
@@ -103,7 +129,14 @@ export class IsobotIngestionService {
   // -------------------------------------------------------------------------
 
   private chunkText(text: string, chunkTokens = CHUNK_TOKENS, overlapTokens = OVERLAP_TOKENS): Chunk[] {
-    const words = text.split(/\s+/).filter(Boolean);
+    // Un "word" (separado por espacios) sin límite de tamaño puede volverse
+    // un chunk gigante si el texto de origen no tiene espacios (p. ej. una
+    // fila de CSV mal formada) — se trunca como salvaguarda independiente
+    // del tipo de archivo.
+    const words = text
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => (w.length > MAX_WORD_CHARS ? w.slice(0, MAX_WORD_CHARS) : w));
     if (words.length === 0) return [];
 
     const chunkSize = Math.max(1, Math.round(chunkTokens / TOKENS_PER_WORD));
@@ -162,21 +195,27 @@ export class IsobotIngestionService {
       return { documentId, fileName, chunksCreated: 0 };
     }
 
-    const embeddingResponse = await getOpenAI().embeddings.create({
-      model: EMBEDDING_MODEL,
-      input: chunks.map((c) => c.content),
-    });
+    // Batching: un documento grande puede exceder el límite de 300,000 tokens
+    // por request de OpenAI si se manda de un solo golpe.
+    for (let batchStart = 0; batchStart < chunks.length; batchStart += EMBEDDING_BATCH_SIZE) {
+      const batch = chunks.slice(batchStart, batchStart + EMBEDDING_BATCH_SIZE);
+      const embeddingResponse = await getOpenAI().embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: batch.map((c) => c.content),
+      });
 
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk = chunks[i]!;
-      const embedding = embeddingResponse.data[i]!.embedding;
-      await this.chunksRepo.manager.query(
-        `
-        INSERT INTO isobot.document_chunks (document_id, chunk_index, content, token_count, embedding)
-        VALUES ($1, $2, $3, $4, $5::vector)
-        `,
-        [documentId, i, chunk.content, chunk.tokenCount, toVectorLiteral(embedding)],
-      );
+      for (let j = 0; j < batch.length; j++) {
+        const chunk = batch[j]!;
+        const embedding = embeddingResponse.data[j]!.embedding;
+        const chunkIndex = batchStart + j;
+        await this.chunksRepo.manager.query(
+          `
+          INSERT INTO isobot.document_chunks (document_id, chunk_index, content, token_count, embedding)
+          VALUES ($1, $2, $3, $4, $5::vector)
+          `,
+          [documentId, chunkIndex, chunk.content, chunk.tokenCount, toVectorLiteral(embedding)],
+        );
+      }
     }
 
     return { documentId, fileName, chunksCreated: chunks.length };
