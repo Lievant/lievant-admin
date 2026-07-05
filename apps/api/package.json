@@ -26,9 +26,11 @@
     "seed:helpdesk": "ts-node -T src/database/seeds/004-helpdesk-historical.seed.ts",
     "seed:inventory": "ts-node -T src/database/seeds/005-inventory-equipment.seed.ts",
     "seed:projects": "ts-node -T src/database/seeds/006-projects-from-cor.seed.ts",
-    "seed:licenses": "ts-node -T src/database/seeds/007-licenses-from-csv.seed.ts"
+    "seed:licenses": "ts-node -T src/database/seeds/007-licenses-from-csv.seed.ts",
+    "seed:isobot": "ts-node -T src/database/seeds/008-isobot-documents.seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@aws-sdk/client-s3": "^3.1067.0",
     "@aws-sdk/client-ses": "^3.1065.0",
     "@aws-sdk/s3-request-presigner": "^3.1067.0",
@@ -45,13 +47,17 @@
     "class-validator": "^0.14.1",
     "docx-templates": "^4.15.0",
     "ioredis": "^5.11.1",
+    "mammoth": "^1.12.0",
+    "openai": "^6.45.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "pdf-parse": "^2.4.5",
     "pg": "^8.12.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.34.5",
-    "typeorm": "^0.3.20"
+    "typeorm": "^0.3.20",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",

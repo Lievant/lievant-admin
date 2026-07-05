@@ -17,6 +17,7 @@ import {
   LogoutIcon,
   PeopleIcon,
   ReportMoneyIcon,
+  RobotIcon,
   ShieldLockIcon,
   ShoppingCartIcon,
   SpeakerphoneIcon,
@@ -154,6 +155,10 @@ export function Sidebar({ user }: SidebarProps) {
         <NavLink href="/herramientas/soporte" active={pathname.startsWith('/herramientas/soporte')}>
           <HeadsetIcon className="h-5 w-5" />
           Soporte TI
+        </NavLink>
+        <NavLink href="/herramientas/isobot" active={pathname.startsWith('/herramientas/isobot')}>
+          <RobotIcon className="h-5 w-5" />
+          ISOBOT
         </NavLink>
 
         {isSuperAdmin && (

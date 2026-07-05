@@ -545,6 +545,21 @@ export function MicrosoftLogo(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function RobotIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="8" width="14" height="11" rx="2" />
+      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      <path d="M12 3v1" />
+      <circle cx="9.5" cy="13" r="1" fill="currentColor" />
+      <circle cx="14.5" cy="13" r="1" fill="currentColor" />
+      <path d="M9 17h6" />
+      <path d="M3 12v3" />
+      <path d="M21 12v3" />
+    </Svg>
+  );
+}
+
 const MODULE_ICONS: Record<ModuleIcon, (props: IconProps) => React.ReactElement> = {
   finance: FinanceIcon,
   people: PeopleIcon,
