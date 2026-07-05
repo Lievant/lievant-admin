@@ -8,6 +8,7 @@ import { ClientsModule } from './modules/clients/clients.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { IsobotModule } from './modules/isobot/isobot.module';
 import { LicensesModule } from './modules/licenses/licenses.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
@@ -43,6 +44,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     InventoryModule,
     ProjectsModule,
     LicensesModule,
+    IsobotModule,
   ],
 })
 export class AppModule {}
