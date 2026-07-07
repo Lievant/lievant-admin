@@ -16,12 +16,9 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
-import { Roles } from '../auth/decorators/roles.decorator';
-import { SystemRole } from '../auth/constants/roles.constant';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
 import { ClientsService } from './clients.service';
 import { ALLOWED_DOCUMENT_MIME_TYPES } from './document-storage.service';
 import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
@@ -95,15 +92,15 @@ export class ClientsController {
     return this.clientsService.updateBrand(brandId, dto);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_FINANZAS)
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes.financiero', 'read')
   @Get(':id/financial')
   getFinancial(@Param('id', ParseUUIDPipe) id: string) {
     return this.clientsService.getFinancial(id);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN, SystemRole.ADMIN_FINANZAS)
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes.financiero', 'write')
   @Patch(':id/financial')
   updateFinancial(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateFinancialDto) {
     return this.clientsService.updateFinancial(id, dto);

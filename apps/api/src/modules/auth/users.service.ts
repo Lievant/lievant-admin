@@ -97,7 +97,11 @@ export class UsersService {
       throw new ConflictException(`Ya existe un usuario con el email ${dto.email}`);
     }
 
-    const roles = dto.roleIds?.length ? await this.rolesRepository.findBy({ id: In(dto.roleIds) }) : [];
+    // Sin roleIds explícitos: COLABORADOR por defecto (solo herramientas,
+    // sin permisos adicionales hasta que se le asignen individualmente).
+    const roles = dto.roleIds?.length
+      ? await this.rolesRepository.findBy({ id: In(dto.roleIds) })
+      : await this.rolesRepository.findBy({ name: 'COLABORADOR' });
 
     const user = this.usersRepository.create({
       email: dto.email,

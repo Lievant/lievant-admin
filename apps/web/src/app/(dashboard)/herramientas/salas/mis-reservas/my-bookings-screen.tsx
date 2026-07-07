@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { Booking } from '@/lib/api';
+import type { Booking, ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import {
   BOOKING_STATUS_BADGE_STYLES,
   BOOKING_STATUS_LABELS,
@@ -27,10 +28,10 @@ const EMPTY_MESSAGES: Record<Tab, string> = {
 
 interface MyBookingsScreenProps {
   bookings: Booking[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
 }
 
-export function MyBookingsScreen({ bookings, apiUnavailable }: MyBookingsScreenProps) {
+export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps) {
   const [tab, setTab] = useState<Tab>('proximas');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
@@ -43,6 +44,10 @@ export function MyBookingsScreen({ bookings, apiUnavailable }: MyBookingsScreenP
     return booking.status !== 'cancelada' && !isFuture;
   });
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header>
@@ -50,7 +55,7 @@ export function MyBookingsScreen({ bookings, apiUnavailable }: MyBookingsScreenP
         <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión para ver datos en vivo.
         </div>

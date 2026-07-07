@@ -1,9 +1,11 @@
 import {
+  errorKindOf,
   getRoomAdminScope,
   listRoomCitiesByCountry,
   listRoomCountries,
   listRoomOfficesByCity,
   searchRooms,
+  type ErrorKind,
   type RoomAvailability,
   type RoomType,
   type SearchRoomsParams,
@@ -11,11 +13,11 @@ import {
 import { todayDateString } from './constants';
 import { RoomsScreen } from './rooms-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -39,10 +41,10 @@ export default async function SalasPage({ searchParams }: SalasPageProps) {
   const durationHours = Number(asString(params.duration_hours) ?? '1');
   const roomType = asString(params.room_type) as RoomType | undefined;
 
-  const [countries, adminScope] = await Promise.all([safe(listRoomCountries()), safe(getRoomAdminScope())]);
+  const [countriesResult, adminScopeResult] = await Promise.all([safe(listRoomCountries()), safe(getRoomAdminScope())]);
 
-  const cities = countryId ? await safe(listRoomCitiesByCountry(countryId)) : null;
-  const offices = cityId ? await safe(listRoomOfficesByCity(cityId)) : null;
+  const cities = countryId ? (await safe(listRoomCitiesByCountry(countryId))).data : null;
+  const offices = cityId ? (await safe(listRoomOfficesByCity(cityId))).data : null;
 
   let rooms: RoomAvailability[] | null = null;
   if (officeId) {
@@ -53,19 +55,20 @@ export default async function SalasPage({ searchParams }: SalasPageProps) {
       duration_hours: durationHours,
     };
     if (roomType) query.room_type = roomType;
-    rooms = await safe(searchRooms(query));
+    rooms = (await safe(searchRooms(query))).data;
   }
 
+  const adminScope = adminScopeResult.data;
   const isAdmin = Boolean(adminScope?.isGlobalAdmin || (adminScope?.officeIds.length ?? 0) > 0);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <RoomsScreen
-        countries={countries ?? []}
+        countries={countriesResult.data ?? []}
         cities={cities ?? []}
         offices={offices ?? []}
         rooms={rooms}
-        apiUnavailable={countries === null}
+        errorKind={countriesResult.errorKind}
         isAdmin={isAdmin}
         filters={{
           country_id: countryId ?? '',

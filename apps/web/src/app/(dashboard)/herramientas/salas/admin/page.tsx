@@ -1,16 +1,16 @@
-import { getLocationsTree, getRoomAdminScope, listPendingApprovals } from '@/lib/api';
+import { errorKindOf, getLocationsTree, getRoomAdminScope, listPendingApprovals, type ErrorKind } from '@/lib/api';
 import { AdminScreen } from './admin-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
 export default async function SalasAdminPage() {
-  const adminScope = await safe(getRoomAdminScope());
+  const adminScope = (await safe(getRoomAdminScope())).data;
   const isAdmin = Boolean(adminScope?.isGlobalAdmin || (adminScope?.officeIds.length ?? 0) > 0);
 
   if (!adminScope || !isAdmin) {
@@ -23,7 +23,7 @@ export default async function SalasAdminPage() {
     );
   }
 
-  const [locationsTree, pendingApprovals] = await Promise.all([
+  const [locationsTreeResult, pendingApprovalsResult] = await Promise.all([
     safe(getLocationsTree()),
     safe(listPendingApprovals()),
   ]);
@@ -33,9 +33,9 @@ export default async function SalasAdminPage() {
       <AdminScreen
         isGlobalAdmin={adminScope.isGlobalAdmin}
         officeIds={adminScope.officeIds}
-        locationsTree={locationsTree ?? []}
-        apiUnavailable={locationsTree === null}
-        pendingApprovals={pendingApprovals ?? []}
+        locationsTree={locationsTreeResult.data ?? []}
+        errorKind={locationsTreeResult.errorKind}
+        pendingApprovals={pendingApprovalsResult.data ?? []}
       />
     </div>
   );

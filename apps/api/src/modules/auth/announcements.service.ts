@@ -10,8 +10,6 @@ export interface CreateAnnouncementDto {
   eventDate?: string;
 }
 
-const MANAGERS = ['SUPER_ADMIN', 'ADMIN_RRHH'];
-
 @Injectable()
 export class AnnouncementsService {
   constructor(
@@ -44,9 +42,23 @@ export class AnnouncementsService {
   }
 
   private assertCanManage(user: User): void {
-    const has = user.roles?.some((r) => MANAGERS.includes(r.name));
-    if (!has) {
-      throw new ForbiddenException('Solo SUPER_ADMIN y ADMIN_RRHH pueden gestionar comunicados');
+    if (user.roles?.some((r) => r.name === 'SUPER_ADMIN')) return;
+
+    const override = user.userPermissions?.find(
+      (up) => up.permission?.section === 'rrhh' && up.permission?.module === 'comunicados' && up.permission?.action === 'write',
+    );
+    if (override !== undefined) {
+      if (!override.granted) {
+        throw new ForbiddenException('No tienes permisos para gestionar comunicados');
+      }
+      return;
+    }
+
+    const hasViaRole = user.roles?.some((role) =>
+      role.permissions?.some((p) => p.section === 'rrhh' && p.module === 'comunicados' && p.action === 'write'),
+    );
+    if (!hasViaRole) {
+      throw new ForbiddenException('No tienes permisos para gestionar comunicados');
     }
   }
 }

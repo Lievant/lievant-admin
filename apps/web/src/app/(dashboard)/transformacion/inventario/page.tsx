@@ -1,4 +1,5 @@
 import {
+  errorKindOf,
   getEquipmentStats,
   listEquipment,
   listEquipmentBrands,
@@ -6,15 +7,16 @@ import {
   listEquipmentTypes,
   type EquipmentPage,
   type EquipmentStats,
+  type ErrorKind,
   type ListEquipmentParams,
 } from '@/lib/api';
 import { InventoryScreen } from './inventory-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -48,7 +50,7 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
   if (location) query.location = location;
   if (area) query.area = area;
 
-  const [page, stats, types, brands, statuses] = await Promise.all([
+  const [pageResult, statsResult, typesResult, brandsResult, statusesResult] = await Promise.all([
     safe(listEquipment(query)),
     safe(getEquipmentStats()),
     safe(listEquipmentTypes()),
@@ -62,9 +64,9 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <InventoryScreen
-        page={page ?? emptyPage}
-        stats={stats ?? emptyStats}
-        apiUnavailable={page === null}
+        page={pageResult.data ?? emptyPage}
+        stats={statsResult.data ?? emptyStats}
+        errorKind={pageResult.errorKind}
         filters={{
           search: search ?? '',
           equipmentType: equipmentType ?? '',
@@ -76,9 +78,9 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
         catalogs={{
-          types: types ?? [],
-          brands: brands ?? [],
-          statuses: statuses ?? [],
+          types: typesResult.data ?? [],
+          brands: brandsResult.data ?? [],
+          statuses: statusesResult.data ?? [],
         }}
       />
     </div>

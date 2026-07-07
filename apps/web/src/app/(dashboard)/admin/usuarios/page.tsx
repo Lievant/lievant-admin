@@ -1,22 +1,20 @@
-import { listRoles, listUsers } from '@/lib/api';
+import { errorKindOf, listRoles, listUsers, type ErrorKind } from '@/lib/api';
 import { UsersScreen } from './users-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
 export default async function UsersPage() {
-  const [users, roles] = await Promise.all([safe(listUsers()), safe(listRoles())]);
-
-  const apiUnavailable = users === null;
+  const [usersResult, rolesResult] = await Promise.all([safe(listUsers()), safe(listRoles())]);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
-      <UsersScreen users={users ?? []} roles={roles ?? []} apiUnavailable={apiUnavailable} />
+      <UsersScreen users={usersResult.data ?? []} roles={rolesResult.data ?? []} errorKind={usersResult.errorKind} />
     </div>
   );
 }

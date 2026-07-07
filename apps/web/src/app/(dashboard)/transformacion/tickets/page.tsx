@@ -1,8 +1,19 @@
-import { getCurrentUser, getHelpdeskCategories, listTickets, type ListTicketsParams } from '@/lib/api';
+import {
+  errorKindOf,
+  getCurrentUser,
+  getHelpdeskCategories,
+  listTickets,
+  type ErrorKind,
+  type ListTicketsParams,
+} from '@/lib/api';
 import { TicketsScreen } from './tickets-screen';
 
-async function safe<T>(p: Promise<T>): Promise<T | null> {
-  try { return await p; } catch { return null; }
+async function safe<T>(p: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
+  try {
+    return { data: await p, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
+  }
 }
 
 function asString(v: string | string[] | undefined): string | undefined {
@@ -33,11 +44,12 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   if (slaStatus) query.slaStatus = slaStatus;
   if (cursor) query.cursor = cursor;
 
-  const [ticketPage, categories, currentUser] = await Promise.all([
+  const [ticketPageResult, categoriesResult, currentUserResult] = await Promise.all([
     safe(listTickets(query)),
     safe(getHelpdeskCategories()),
     safe(getCurrentUser()),
   ]);
+  const currentUser = currentUserResult.data;
 
   const isTd =
     currentUser?.roles.some((r) => r.name === 'SUPER_ADMIN' || r.name === 'TECNICO_TD') ||
@@ -47,13 +59,13 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <TicketsScreen
-        page={ticketPage ?? { data: [], nextCursor: null, total: 0 }}
-        categories={categories ?? []}
+        page={ticketPageResult.data ?? { data: [], nextCursor: null, total: 0 }}
+        categories={categoriesResult.data ?? []}
         isTd={isTd}
         filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', slaStatus: slaStatus ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
-        apiUnavailable={ticketPage === null}
+        errorKind={ticketPageResult.errorKind}
       />
     </div>
   );

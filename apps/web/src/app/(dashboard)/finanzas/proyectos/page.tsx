@@ -1,8 +1,19 @@
-import { getProjectStats, listClients, listProjects, type ListProjectsParams } from '@/lib/api';
+import {
+  errorKindOf,
+  getProjectStats,
+  listClients,
+  listProjects,
+  type ErrorKind,
+  type ListProjectsParams,
+} from '@/lib/api';
 import { ProjectsScreen } from './projects-screen';
 
-async function safe<T>(p: Promise<T>): Promise<T | null> {
-  try { return await p; } catch { return null; }
+async function safe<T>(p: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
+  try {
+    return { data: await p, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
+  }
 }
 
 function asString(v: string | string[] | undefined): string | undefined {
@@ -31,7 +42,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
   if (search) query.search = search;
   if (cursor) query.cursor = cursor;
 
-  const [page, clients, stats] = await Promise.all([
+  const [pageResult, clientsResult, statsResult] = await Promise.all([
     safe(listProjects(query)),
     safe(listClients({ status: 'active', limit: 100 })),
     safe(getProjectStats()),
@@ -40,12 +51,12 @@ export default async function ProyectosPage({ searchParams }: Props) {
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <ProjectsScreen
-        page={page ?? { data: [], nextCursor: null, total: 0 }}
-        clients={clients?.data ?? []}
-        apiUnavailable={page === null}
+        page={pageResult.data ?? { data: [], nextCursor: null, total: 0 }}
+        clients={clientsResult.data?.data ?? []}
+        errorKind={pageResult.errorKind}
         filters={{ status: status ?? '', projectType: projectType ?? '', businessUnit: businessUnit ?? '', search: search ?? '' }}
         cursor={cursor ?? ''}
-        activeCount={stats?.active ?? null}
+        activeCount={statsResult.data?.active ?? null}
       />
     </div>
   );

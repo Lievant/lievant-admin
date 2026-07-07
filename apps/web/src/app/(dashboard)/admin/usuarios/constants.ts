@@ -12,11 +12,8 @@ export const LOCATION_LABELS: Record<UserLocation, string> = {
 
 export const ROLE_BADGE_STYLES: Record<string, string> = {
   SUPER_ADMIN: 'bg-terracota/10 text-terracota-dark',
-  ADMIN_FINANZAS: 'bg-blue-50 text-blue-600',
-  ADMIN_RRHH: 'bg-blue-50 text-blue-600',
-  ADMIN_NOMINA: 'bg-purple-50 text-purple-600',
-  CUENTA_MANAGER: 'bg-amber-50 text-amber-600',
-  VIEWER: 'bg-slate-100 text-slate-500',
+  DIRECTOR: 'bg-blue-50 text-blue-600',
+  COLABORADOR: 'bg-slate-100 text-slate-500',
 };
 
 export const DEFAULT_ROLE_BADGE = 'bg-slate-100 text-slate-500';

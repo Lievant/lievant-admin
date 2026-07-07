@@ -1,12 +1,19 @@
-import { listEmployees, type DocStatus, type EmployeeStatus, type ListEmployeesParams } from '@/lib/api';
+import {
+  errorKindOf,
+  listEmployees,
+  type DocStatus,
+  type ErrorKind,
+  type EmployeeStatus,
+  type ListEmployeesParams,
+} from '@/lib/api';
 import { loadEmployeeFilterCatalogs } from './catalog-data';
 import { EmployeesScreen } from './employees-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -40,8 +47,8 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
   if (search) query.search = search;
   if (docStatus) query.docStatus = docStatus;
 
-  const [employeesPage, catalogs] = await Promise.all([safe(listEmployees(query)), loadEmployeeFilterCatalogs()]);
-  const apiUnavailable = employeesPage === null;
+  const [employeesResult, catalogs] = await Promise.all([safe(listEmployees(query)), loadEmployeeFilterCatalogs()]);
+  const { data: employeesPage, errorKind } = employeesResult;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
@@ -53,7 +60,7 @@ export default async function EmpleadosPage({ searchParams }: EmpleadosPageProps
             stats: { total: 0, active: 0, inactive: 0, companies: 0, expiringContracts: 0, newHires: 0 },
           }
         }
-        apiUnavailable={apiUnavailable}
+        errorKind={errorKind}
         filters={{
           status: status ?? '',
           companyCode: companyCode ?? '',

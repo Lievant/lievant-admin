@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { CatalogItem, Vendor } from '@/lib/api';
+import type { CatalogItem, ErrorKind, Vendor } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { deleteVendorAction } from './actions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
@@ -20,11 +21,11 @@ interface VendorsFilters {
 interface VendorsScreenProps {
   vendors: Vendor[];
   categories: CatalogItem[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   filters: VendorsFilters;
 }
 
-export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: VendorsScreenProps) {
+export function VendorsScreen({ vendors, categories, errorKind, filters }: VendorsScreenProps) {
   const router = useRouter();
   const currentUser = useCurrentUser();
   const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
@@ -62,6 +63,10 @@ export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const hasFilters = Boolean(filters.status || filters.category_id || filters.search);
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -78,7 +83,7 @@ export function VendorsScreen({ vendors, categories, apiUnavailable, filters }: 
         </Link>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>

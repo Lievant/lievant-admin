@@ -1,20 +1,31 @@
 import { StatCard } from '@/components/stat-card';
-import { listRoles, listUsers } from '@/lib/api';
+import { errorKindOf, listRoles, listUsers, type ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
 export default async function AdminPage() {
-  const [users, roles] = await Promise.all([safe(listUsers()), safe(listRoles())]);
+  const [usersResult, rolesResult] = await Promise.all([safe(listUsers()), safe(listRoles())]);
+  const users = usersResult.data;
+  const roles = rolesResult.data;
 
   const totalUsers = users?.length ?? null;
   const totalRoles = roles?.length ?? null;
   const pendingUsers = users?.filter((user) => !user.isActive).length ?? null;
+
+  if (usersResult.errorKind === 'forbidden' && rolesResult.errorKind === 'forbidden') {
+    return (
+      <div className="mx-auto max-w-5xl px-8 py-10">
+        <NoPermissions />
+      </div>
+    );
+  }
 
   const apiUnavailable = users === null && roles === null;
 

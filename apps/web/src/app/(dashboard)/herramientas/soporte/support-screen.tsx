@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import type { ErrorKind, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { PlusIcon } from '@/components/icons';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
@@ -54,11 +55,11 @@ const STATUS_FILTER_OPTIONS = [
 
 interface SupportScreenProps {
   page: TicketPage;
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   statusFilter: string;
 }
 
-export function SupportScreen({ page, apiUnavailable, statusFilter }: SupportScreenProps) {
+export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenProps) {
   const router = useRouter();
 
   function onStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
@@ -69,6 +70,10 @@ export function SupportScreen({ page, apiUnavailable, statusFilter }: SupportScr
   }
 
   const tickets = page.data;
+
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
 
   return (
     <>
@@ -86,7 +91,7 @@ export function SupportScreen({ page, apiUnavailable, statusFilter }: SupportScr
         </Link>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           No se pudo conectar con el servidor. Intenta de nuevo más tarde.
         </div>

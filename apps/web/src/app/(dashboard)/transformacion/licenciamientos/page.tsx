@@ -1,8 +1,10 @@
 import {
+  errorKindOf,
   getLicenseStats,
   listActiveCatalogItems,
   listLicenses,
   listLicenseTools,
+  type ErrorKind,
   type LicenseEmployeeRow,
   type LicenseStats,
   type ListLicensesParams,
@@ -10,11 +12,11 @@ import {
 } from '@/lib/api';
 import { LicensesScreen } from './licenses-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -43,7 +45,7 @@ export default async function LicenciamientosPage({ searchParams }: Licenciamien
   if (department) query.department = department;
   if (division) query.division = division;
 
-  const [employees, stats, tools, areas, divisions] = await Promise.all([
+  const [employeesResult, statsResult, toolsResult, areasResult, divisionsResult] = await Promise.all([
     safe(listLicenses(query)),
     safe(getLicenseStats()),
     safe(listLicenseTools()),
@@ -58,10 +60,10 @@ export default async function LicenciamientosPage({ searchParams }: Licenciamien
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <LicensesScreen
-        employees={employees ?? emptyEmployees}
-        stats={stats ?? emptyStats}
-        tools={tools ?? emptyTools}
-        apiUnavailable={employees === null}
+        employees={employeesResult.data ?? emptyEmployees}
+        stats={statsResult.data ?? emptyStats}
+        tools={toolsResult.data ?? emptyTools}
+        errorKind={employeesResult.errorKind}
         filters={{
           search: search ?? '',
           tool: tool ?? '',
@@ -70,8 +72,8 @@ export default async function LicenciamientosPage({ searchParams }: Licenciamien
           division: division ?? '',
         }}
         catalogs={{
-          areas: areas ?? [],
-          divisions: divisions ?? [],
+          areas: areasResult.data ?? [],
+          divisions: divisionsResult.data ?? [],
         }}
       />
     </div>

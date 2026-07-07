@@ -4,7 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { City, Country, Office, RoomAvailability } from '@/lib/api';
+import type { City, Country, ErrorKind, Office, RoomAvailability } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { PeopleIcon } from '@/components/icons';
 import { BookRoomDialog } from './book-room-dialog';
 import {
@@ -31,7 +32,7 @@ interface RoomsScreenProps {
   cities: City[];
   offices: Office[];
   rooms: RoomAvailability[] | null;
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   isAdmin: boolean;
   filters: RoomsFilters;
 }
@@ -39,7 +40,7 @@ interface RoomsScreenProps {
 const TIME_SLOTS = generateTimeSlots();
 const MAX_VISIBLE_AMENITIES = 4;
 
-export function RoomsScreen({ countries, cities, offices, rooms, apiUnavailable, isAdmin, filters }: RoomsScreenProps) {
+export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAdmin, filters }: RoomsScreenProps) {
   const router = useRouter();
   const [countryId, setCountryId] = useState(filters.country_id);
   const [cityId, setCityId] = useState(filters.city_id);
@@ -92,6 +93,10 @@ export function RoomsScreen({ countries, cities, offices, rooms, apiUnavailable,
 
   const selectedOffice = offices.find((office) => office.id === officeId);
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -117,7 +122,7 @@ export function RoomsScreen({ countries, cities, offices, rooms, apiUnavailable,
         </div>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión para ver datos en vivo.
         </div>

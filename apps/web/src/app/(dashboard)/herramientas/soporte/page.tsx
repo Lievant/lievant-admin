@@ -1,8 +1,12 @@
-import { getMyTickets } from '@/lib/api';
+import { errorKindOf, getMyTickets, type ErrorKind } from '@/lib/api';
 import { SupportScreen } from './support-screen';
 
-async function safe<T>(p: Promise<T>): Promise<T | null> {
-  try { return await p; } catch { return null; }
+async function safe<T>(p: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
+  try {
+    return { data: await p, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
+  }
 }
 
 interface Props {
@@ -15,13 +19,13 @@ export default async function SoportePage({ searchParams }: Props) {
   const statusFilter = rawStatus ?? '';
 
   const queryParams = statusFilter ? { status: statusFilter, limit: 50 } : { limit: 50 };
-  const page = await safe(getMyTickets(queryParams));
+  const { data: page, errorKind } = await safe(getMyTickets(queryParams));
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <SupportScreen
         page={page ?? { data: [], nextCursor: null, total: 0 }}
-        apiUnavailable={page === null}
+        errorKind={errorKind}
         statusFilter={statusFilter}
       />
     </div>

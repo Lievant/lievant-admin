@@ -1,11 +1,19 @@
-import { listActiveCatalogItems, listClients, type ClientStatus, type DocStatus, type ListClientsParams } from '@/lib/api';
+import {
+  errorKindOf,
+  listActiveCatalogItems,
+  listClients,
+  type ClientStatus,
+  type DocStatus,
+  type ErrorKind,
+  type ListClientsParams,
+} from '@/lib/api';
 import { ClientsScreen } from './clients-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -35,19 +43,18 @@ export default async function ClientesPage({ searchParams }: ClientesPageProps) 
   if (industry) query.industry = industry;
   if (search) query.search = search;
 
-  const [clientsPage, industries] = await Promise.all([
+  const [clientsResult, industriesResult] = await Promise.all([
     safe(listClients(query)),
     safe(listActiveCatalogItems('industries')),
   ]);
-
-  const apiUnavailable = clientsPage === null;
+  const { data: clientsPage, errorKind } = clientsResult;
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <ClientsScreen
         page={clientsPage ?? { data: [], nextCursor: null, total: 0 }}
-        industries={industries ?? []}
-        apiUnavailable={apiUnavailable}
+        industries={industriesResult.data ?? []}
+        errorKind={errorKind}
         filters={{ status: status ?? '', docStatus: docStatus ?? '', industry: industry ?? '', search: search ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}

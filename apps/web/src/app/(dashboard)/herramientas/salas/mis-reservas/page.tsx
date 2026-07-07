@@ -1,20 +1,20 @@
-import { listMyBookings } from '@/lib/api';
+import { errorKindOf, listMyBookings, type ErrorKind } from '@/lib/api';
 import { MyBookingsScreen } from './my-bookings-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
 export default async function MisReservasPage() {
-  const bookings = await safe(listMyBookings());
+  const { data: bookings, errorKind } = await safe(listMyBookings());
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
-      <MyBookingsScreen bookings={bookings ?? []} apiUnavailable={bookings === null} />
+      <MyBookingsScreen bookings={bookings ?? []} errorKind={errorKind} />
     </div>
   );
 }

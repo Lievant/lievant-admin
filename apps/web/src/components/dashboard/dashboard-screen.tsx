@@ -42,17 +42,17 @@ interface SectionChip {
 }
 
 const SECTION_CHIPS: SectionChip[] = [
-  { label: 'Finanzas',      href: '/finanzas',       section: 'finanzas' },
-  { label: 'RRHH',          href: '/rrhh',           section: 'rrhh' },
-  { label: 'Herramientas',  href: '/herramientas',   section: 'herramientas' },
-  { label: 'Configuración', href: '/admin/usuarios', section: 'admin' },
+  { label: 'Finanzas',              href: '/finanzas',       section: 'finanzas' },
+  { label: 'RRHH',                  href: '/rrhh',           section: 'rrhh' },
+  { label: 'Transformación Digital', href: '/transformacion', section: 'transformacion' },
+  { label: 'Herramientas',          href: '/herramientas',   section: 'herramientas' },
 ];
 
 const SUPER_ADMIN_CHIPS: SectionChip[] = [
-  { label: 'Ecommerce',              href: '/ecommerce',              section: '' },
-  { label: 'Marketing',              href: '/marketing',              section: '' },
-  { label: 'Omnicanalidad',          href: '/omnicanalidad',          section: '' },
-  { label: 'Transformación Digital', href: '/transformacion-digital', section: '' },
+  { label: 'Ecommerce',     href: '/ecommerce',     section: '' },
+  { label: 'Marketing',     href: '/marketing',     section: '' },
+  { label: 'Omnicanalidad', href: '/omnicanalidad', section: '' },
+  { label: 'Configuración', href: '/admin/usuarios', section: '' },
 ];
 
 // ── photo placeholder ─────────────────────────────────────────────────────────
@@ -126,11 +126,12 @@ interface Props {
 
 export function DashboardScreen({ user, dashboardData, announcements }: Props) {
   const isSuperAdmin = user?.roles.some((r) => r.name === 'SUPER_ADMIN') ?? false;
-  const canManage    = isSuperAdmin || (user?.roles.some((r) => r.name === 'ADMIN_RRHH') ?? false);
+  const canManage =
+    isSuperAdmin || (user?.permissions.some((p) => p.section === 'rrhh' && p.module === 'comunicados' && p.action === 'write') ?? false);
 
   const visibleSections: SectionChip[] = isSuperAdmin
     ? [...SECTION_CHIPS, ...SUPER_ADMIN_CHIPS]
-    : SECTION_CHIPS.filter((s) => hasSectionPerm(user, s.section));
+    : SECTION_CHIPS.filter((s) => s.section === 'herramientas' || hasSectionPerm(user, s.section));
 
   const allBirthdays = [
     ...(dashboardData?.todayBirthdays ?? []).map((b) => ({

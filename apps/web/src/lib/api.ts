@@ -12,6 +12,14 @@ export class ApiError extends Error {
   }
 }
 
+export type ErrorKind = 'forbidden' | 'unavailable';
+
+// 403 (permisos) se muestra distinto a un error de red/servidor (5xx) — ver
+// componente <NoPermissions />. Usado por el helper `safe()` de cada page.tsx.
+export function errorKindOf(error: unknown): ErrorKind {
+  return error instanceof ApiError && error.status === 403 ? 'forbidden' : 'unavailable';
+}
+
 async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
@@ -718,7 +726,7 @@ export function deleteEmployee(id: string): Promise<void> {
   });
 }
 
-// Datos personales (acceso restringido: ADMIN_RRHH, SUPER_ADMIN)
+// Datos personales (acceso restringido: permiso rrhh.empleados.personal, SUPER_ADMIN)
 
 export interface EmployeePersonalData {
   id: string;
@@ -778,7 +786,7 @@ export function updateEmployeePersonalData(
   });
 }
 
-// Compensación (acceso restringido: ADMIN_NOMINA, SUPER_ADMIN)
+// Compensación (acceso restringido: permiso rrhh.empleados.nomina, SUPER_ADMIN)
 
 export interface EmployeeCompensation {
   id: string;
@@ -924,7 +932,7 @@ export function removeEmployeeContact(contactId: string): Promise<void> {
   });
 }
 
-// Baja (acceso restringido: ADMIN_RRHH, SUPER_ADMIN)
+// Baja (acceso restringido: permiso rrhh.empleados.personal, SUPER_ADMIN)
 
 export interface EmployeeTermination {
   id: string;

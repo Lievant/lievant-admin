@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { CatalogItem, ClientsPage, DocStatus } from '@/lib/api';
+import type { CatalogItem, ClientsPage, DocStatus, ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { deleteClientAction } from './actions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
@@ -29,7 +30,7 @@ interface ClientsFilters {
 interface ClientsScreenProps {
   page: ClientsPage;
   industries: CatalogItem[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   filters: ClientsFilters;
   cursor: string;
   cursorsStack: string[];
@@ -45,7 +46,7 @@ const DOC_STATUS_OPTIONS: { value: DocStatus | ''; label: string }[] = [
 export function ClientsScreen({
   page,
   industries,
-  apiUnavailable,
+  errorKind,
   filters,
   cursor,
   cursorsStack,
@@ -119,6 +120,10 @@ export function ClientsScreen({
   const isFirstPage = cursorsStack.length === 0 && !cursor;
   const hasPagination = !filters.docStatus;
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -137,7 +142,7 @@ export function ClientsScreen({
         </Link>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>

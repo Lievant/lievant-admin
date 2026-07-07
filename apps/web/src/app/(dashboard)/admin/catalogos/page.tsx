@@ -1,19 +1,29 @@
 import Link from 'next/link';
-import { listCatalogItems } from '@/lib/api';
+import { errorKindOf, listCatalogItems, type ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { CATALOG_CONFIGS } from './constants';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
 export default async function CatalogosPage() {
   const results = await Promise.all(CATALOG_CONFIGS.map((config) => safe(listCatalogItems(config.entity))));
 
-  const apiUnavailable = results.every((result) => result === null);
+  const forbidden = results.length > 0 && results.every((result) => result.errorKind === 'forbidden');
+  const apiUnavailable = results.every((result) => result.data === null) && !forbidden;
+
+  if (forbidden) {
+    return (
+      <div className="mx-auto max-w-screen-2xl px-6 py-8">
+        <NoPermissions />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
@@ -32,7 +42,7 @@ export default async function CatalogosPage() {
 
       <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {CATALOG_CONFIGS.map((config, index) => {
-          const items = results[index];
+          const items = results[index]?.data;
           const activeCount = items?.filter((item) => item.isActive).length ?? null;
           return (
             <div key={config.entity} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
