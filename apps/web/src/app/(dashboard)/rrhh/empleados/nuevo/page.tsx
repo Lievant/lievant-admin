@@ -12,9 +12,13 @@ async function safe<T>(promise: Promise<T>): Promise<T | null> {
 
 export default async function NewEmployeePage() {
   const [currentUser, catalogs] = await Promise.all([safe(getCurrentUser()), loadEmployeeFormCatalogs()]);
-  const roleNames = currentUser?.roles.map((role) => role.name) ?? [];
-  const canEditPersonal = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_RRHH');
-  const canEditCompensation = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_NOMINA');
+  const isSuperAdmin = currentUser?.roles.some((role) => role.name === 'SUPER_ADMIN') ?? false;
+  const canEditPersonal =
+    isSuperAdmin ||
+    (currentUser?.permissions.some((p) => p.section === 'rrhh' && p.module === 'empleados.personal' && p.action === 'write') ?? false);
+  const canEditCompensation =
+    isSuperAdmin ||
+    (currentUser?.permissions.some((p) => p.section === 'rrhh' && p.module === 'empleados.nomina' && p.action === 'write') ?? false);
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-10">

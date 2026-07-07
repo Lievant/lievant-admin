@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import type { RoleSummary, UserSummary } from '@/lib/api';
+import type { ErrorKind, RoleSummary, UserSummary } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon } from '@/components/icons';
 import { activateUserAction, deactivateUserAction } from './actions';
@@ -25,10 +26,10 @@ const PAGE_SIZE = 10;
 interface UsersScreenProps {
   users: UserSummary[];
   roles: RoleSummary[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
 }
 
-export function UsersScreen({ users, roles, apiUnavailable }: UsersScreenProps) {
+export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<UserStatus | ''>('');
@@ -78,6 +79,10 @@ export function UsersScreen({ users, roles, apiUnavailable }: UsersScreenProps) 
     });
   };
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -97,7 +102,7 @@ export function UsersScreen({ users, roles, apiUnavailable }: UsersScreenProps) 
         </button>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>

@@ -3,7 +3,8 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
-import type { ClientListItem, ProjectsPage } from '@/lib/api';
+import type { ClientListItem, ErrorKind, ProjectsPage } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
@@ -46,7 +47,7 @@ const BU_LABEL: Record<string, string> = Object.fromEntries(
 interface Props {
   page: ProjectsPage;
   clients: ClientListItem[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   filters: { status: string; projectType: string; businessUnit: string; search: string };
   cursor: string;
   activeCount: number | null;
@@ -59,7 +60,7 @@ function buildUrl(params: Record<string, string | undefined>) {
   return `/finanzas/proyectos${qs ? `?${qs}` : ''}`;
 }
 
-export function ProjectsScreen({ page, clients, apiUnavailable, filters, activeCount }: Props) {
+export function ProjectsScreen({ page, clients, errorKind, filters, activeCount }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
@@ -80,6 +81,10 @@ export function ProjectsScreen({ page, clients, apiUnavailable, filters, activeC
   const clientNameById = Object.fromEntries(
     clients.map((c) => [c.id, c.primaryCompany.name]),
   );
+
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
 
   return (
     <>
@@ -104,7 +109,7 @@ export function ProjectsScreen({ page, clients, apiUnavailable, filters, activeC
       </div>
 
       {/* API banner */}
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           La API no está disponible en este momento.
         </div>

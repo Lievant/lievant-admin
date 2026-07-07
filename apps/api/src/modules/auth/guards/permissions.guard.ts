@@ -17,8 +17,16 @@ export class PermissionsGuard implements CanActivate {
 
     const { user } = context.switchToHttp().getRequest<{ user: User }>();
 
+    const isSuperAdmin = user.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
+
     // SUPER_ADMIN bypasa cualquier verificación de permiso
-    if (user.roles?.some((r) => r.name === 'SUPER_ADMIN')) return true;
+    if (isSuperAdmin) return true;
+
+    // section='admin' es exclusivo de SUPER_ADMIN — ningún override individual
+    // puede conceder acceso a gestión de usuarios/roles/catálogos del sistema
+    if (required.section === 'admin') {
+      throw new ForbiddenException('Solo SUPER_ADMIN puede acceder a esta sección');
+    }
 
     // Override directo del usuario (granted=false revoca, granted=true concede)
     const override = user.userPermissions?.find(

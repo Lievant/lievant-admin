@@ -32,9 +32,18 @@ interface SidebarProps {
   user: CurrentUser | null;
 }
 
+function hasSection(user: CurrentUser | null, section: string): boolean {
+  if (!user) return true;
+  if (user.roles.some((r) => r.name === 'SUPER_ADMIN')) return true;
+  return user.permissions.some((p) => p.section === section);
+}
+
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const isSuperAdmin = (user?.roles.some((r) => r.name === 'SUPER_ADMIN') ?? false) || !user;
+  const showFinanzas = hasSection(user, 'finanzas');
+  const showRrhh = hasSection(user, 'rrhh');
+  const showTransformacion = hasSection(user, 'transformacion');
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-navy text-slate-200">
@@ -53,46 +62,54 @@ export function Sidebar({ user }: SidebarProps) {
 
         <SectionLabel>Módulos</SectionLabel>
 
-        <NavLink href="/finanzas" active={pathname.startsWith('/finanzas')}>
-          <ReportMoneyIcon className="h-5 w-5" />
-          Finanzas
-        </NavLink>
-        {pathname.startsWith('/finanzas') && (
-          <SubMenu>
-            <NavSubLink href="/finanzas/proyectos" active={pathname.startsWith('/finanzas/proyectos')}>
-              <ListIcon className="h-4 w-4" />
-              Proyectos
-            </NavSubLink>
-            <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
-              <BuildingIcon className="h-4 w-4" />
-              Clientes
-            </NavSubLink>
-            <NavSubLink href="/finanzas/proveedores" active={pathname.startsWith('/finanzas/proveedores')}>
-              <TruckIcon className="h-4 w-4" />
-              Proveedores
-            </NavSubLink>
-            <NavSubLink href="/finanzas/reportes" active={pathname.startsWith('/finanzas/reportes')}>
-              <TableIcon className="h-4 w-4" />
-              Reportes
-            </NavSubLink>
-          </SubMenu>
+        {showFinanzas && (
+          <>
+            <NavLink href="/finanzas" active={pathname.startsWith('/finanzas')}>
+              <ReportMoneyIcon className="h-5 w-5" />
+              Finanzas
+            </NavLink>
+            {pathname.startsWith('/finanzas') && (
+              <SubMenu>
+                <NavSubLink href="/finanzas/proyectos" active={pathname.startsWith('/finanzas/proyectos')}>
+                  <ListIcon className="h-4 w-4" />
+                  Proyectos
+                </NavSubLink>
+                <NavSubLink href="/finanzas/clientes" active={pathname.startsWith('/finanzas/clientes')}>
+                  <BuildingIcon className="h-4 w-4" />
+                  Clientes
+                </NavSubLink>
+                <NavSubLink href="/finanzas/proveedores" active={pathname.startsWith('/finanzas/proveedores')}>
+                  <TruckIcon className="h-4 w-4" />
+                  Proveedores
+                </NavSubLink>
+                <NavSubLink href="/finanzas/reportes" active={pathname.startsWith('/finanzas/reportes')}>
+                  <TableIcon className="h-4 w-4" />
+                  Reportes
+                </NavSubLink>
+              </SubMenu>
+            )}
+          </>
         )}
 
-        <NavLink href="/rrhh" active={pathname.startsWith('/rrhh')}>
-          <PeopleIcon className="h-5 w-5" />
-          RRHH
-        </NavLink>
-        {pathname.startsWith('/rrhh') && (
-          <SubMenu>
-            <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
-              <IdCardIcon className="h-4 w-4" />
-              Empleados
-            </NavSubLink>
-            <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
-              <TableIcon className="h-4 w-4" />
-              Reportes
-            </NavSubLink>
-          </SubMenu>
+        {showRrhh && (
+          <>
+            <NavLink href="/rrhh" active={pathname.startsWith('/rrhh')}>
+              <PeopleIcon className="h-5 w-5" />
+              RRHH
+            </NavLink>
+            {pathname.startsWith('/rrhh') && (
+              <SubMenu>
+                <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
+                  <IdCardIcon className="h-4 w-4" />
+                  Empleados
+                </NavSubLink>
+                <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
+                  <TableIcon className="h-4 w-4" />
+                  Reportes
+                </NavSubLink>
+              </SubMenu>
+            )}
+          </>
         )}
 
         <NavLink href="/ecommerce" active={pathname.startsWith('/ecommerce')}>
@@ -110,41 +127,45 @@ export function Sidebar({ user }: SidebarProps) {
           Omnicanalidad
         </NavLink>
 
-        <NavLink href="/transformacion" active={pathname.startsWith('/transformacion')}>
-          <CpuIcon className="h-5 w-5" />
-          Transformación Digital
-        </NavLink>
-        {pathname.startsWith('/transformacion') && (
-          <SubMenu>
-            <NavSubLink
-              href="/transformacion/licenciamientos"
-              active={pathname.startsWith('/transformacion/licenciamientos')}
-            >
-              <LicenseIcon className="h-4 w-4" />
-              Maestro de Licenciamientos
-            </NavSubLink>
-            <NavSubLink
-              href="/transformacion/inventario"
-              active={pathname.startsWith('/transformacion/inventario')}
-            >
-              <LaptopIcon className="h-4 w-4" />
-              Inventario Tecnológico
-            </NavSubLink>
-            <NavSubLink
-              href="/transformacion/tickets"
-              active={pathname.startsWith('/transformacion/tickets')}
-            >
-              <TicketIcon className="h-4 w-4" />
-              Tickets de Soporte
-            </NavSubLink>
-            <NavSubLink
-              href="/transformacion/reportes"
-              active={pathname.startsWith('/transformacion/reportes')}
-            >
-              <TableIcon className="h-4 w-4" />
-              Reportes
-            </NavSubLink>
-          </SubMenu>
+        {showTransformacion && (
+          <>
+            <NavLink href="/transformacion" active={pathname.startsWith('/transformacion')}>
+              <CpuIcon className="h-5 w-5" />
+              Transformación Digital
+            </NavLink>
+            {pathname.startsWith('/transformacion') && (
+              <SubMenu>
+                <NavSubLink
+                  href="/transformacion/licenciamientos"
+                  active={pathname.startsWith('/transformacion/licenciamientos')}
+                >
+                  <LicenseIcon className="h-4 w-4" />
+                  Maestro de Licenciamientos
+                </NavSubLink>
+                <NavSubLink
+                  href="/transformacion/inventario"
+                  active={pathname.startsWith('/transformacion/inventario')}
+                >
+                  <LaptopIcon className="h-4 w-4" />
+                  Inventario Tecnológico
+                </NavSubLink>
+                <NavSubLink
+                  href="/transformacion/tickets"
+                  active={pathname.startsWith('/transformacion/tickets')}
+                >
+                  <TicketIcon className="h-4 w-4" />
+                  Tickets de Soporte
+                </NavSubLink>
+                <NavSubLink
+                  href="/transformacion/reportes"
+                  active={pathname.startsWith('/transformacion/reportes')}
+                >
+                  <TableIcon className="h-4 w-4" />
+                  Reportes
+                </NavSubLink>
+              </SubMenu>
+            )}
+          </>
         )}
 
         <SectionLabel>Herramientas</SectionLabel>

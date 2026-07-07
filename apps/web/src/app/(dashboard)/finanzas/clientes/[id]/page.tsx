@@ -49,8 +49,10 @@ export default async function ClientDetailPage({ params }: ClientDetailPageProps
   }
 
   const currentUser = await safe(getCurrentUser());
-  const roleNames = currentUser?.roles.map((role) => role.name) ?? [];
-  const canViewFinancial = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_FINANZAS');
+  const isSuperAdmin = currentUser?.roles.some((role) => role.name === 'SUPER_ADMIN') ?? false;
+  const canViewFinancial =
+    isSuperAdmin ||
+    (currentUser?.permissions.some((p) => p.section === 'finanzas' && p.module === 'clientes.financiero' && p.action === 'read') ?? false);
 
   const [documents, financial, accountManagers, documentTypes] = await Promise.all([
     safe(listClientDocuments(id)),

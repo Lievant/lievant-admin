@@ -1,11 +1,18 @@
-import { listActiveCatalogItems, listVendors, type ListVendorsParams, type VendorStatus } from '@/lib/api';
+import {
+  errorKindOf,
+  listActiveCatalogItems,
+  listVendors,
+  type ErrorKind,
+  type ListVendorsParams,
+  type VendorStatus,
+} from '@/lib/api';
 import { VendorsScreen } from './vendors-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -30,7 +37,7 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
   if (categoryId) query.category_id = categoryId;
   if (search) query.search = search;
 
-  const [vendors, categories] = await Promise.all([
+  const [vendorsResult, categoriesResult] = await Promise.all([
     safe(listVendors(query)),
     safe(listActiveCatalogItems('vendor_categories')),
   ]);
@@ -38,9 +45,9 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <VendorsScreen
-        vendors={vendors ?? []}
-        categories={categories ?? []}
-        apiUnavailable={vendors === null}
+        vendors={vendorsResult.data ?? []}
+        categories={categoriesResult.data ?? []}
+        errorKind={vendorsResult.errorKind}
         filters={{ status: status ?? '', category_id: categoryId ?? '', search: search ?? '' }}
       />
     </div>

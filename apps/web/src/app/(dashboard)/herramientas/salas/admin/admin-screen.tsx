@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import type { Booking, CountryWithCities } from '@/lib/api';
+import type { Booking, CountryWithCities, ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { AllBookingsTab } from './all-bookings-tab';
 import { flattenOffices } from './office-options';
 import { LocationsTab } from './locations-tab';
@@ -15,11 +16,11 @@ interface AdminScreenProps {
   isGlobalAdmin: boolean;
   officeIds: string[];
   locationsTree: CountryWithCities[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   pendingApprovals: Booking[];
 }
 
-export function AdminScreen({ isGlobalAdmin, officeIds, locationsTree, apiUnavailable, pendingApprovals }: AdminScreenProps) {
+export function AdminScreen({ isGlobalAdmin, officeIds, locationsTree, errorKind, pendingApprovals }: AdminScreenProps) {
   const [tab, setTab] = useState<Tab>('aprobaciones');
 
   const offices = flattenOffices(locationsTree, officeIds, isGlobalAdmin);
@@ -33,6 +34,10 @@ export function AdminScreen({ isGlobalAdmin, officeIds, locationsTree, apiUnavai
     tabs.push({ id: 'ubicaciones', label: 'Ubicaciones' });
   }
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header>
@@ -40,7 +45,7 @@ export function AdminScreen({ isGlobalAdmin, officeIds, locationsTree, apiUnavai
         <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión para ver datos en vivo.
         </div>

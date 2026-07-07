@@ -48,8 +48,10 @@ export default async function VendorDetailPage({ params }: VendorDetailPageProps
   }
 
   const currentUser = await safe(getCurrentUser());
-  const roleNames = currentUser?.roles.map((role) => role.name) ?? [];
-  const canViewBankDetails = roleNames.includes('SUPER_ADMIN') || roleNames.includes('ADMIN_FINANZAS');
+  const isSuperAdmin = currentUser?.roles.some((role) => role.name === 'SUPER_ADMIN') ?? false;
+  const canViewBankDetails =
+    isSuperAdmin ||
+    (currentUser?.permissions.some((p) => p.section === 'finanzas' && p.module === 'proveedores.bancario' && p.action === 'read') ?? false);
 
   const [categories, documents, statement] = await Promise.all([
     safe(listActiveCatalogItems('vendor_categories')),

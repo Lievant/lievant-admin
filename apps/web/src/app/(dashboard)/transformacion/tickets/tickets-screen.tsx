@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { HelpdeskCategorySummary, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import type { ErrorKind, HelpdeskCategorySummary, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { deleteTicketAction } from './actions';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
@@ -76,7 +77,7 @@ interface TicketsScreenProps {
   filters: Filters;
   cursor: string;
   cursorsStack: string[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
 }
 
 export function TicketsScreen({
@@ -86,7 +87,7 @@ export function TicketsScreen({
   filters,
   cursor,
   cursorsStack,
-  apiUnavailable,
+  errorKind,
 }: TicketsScreenProps) {
   const router = useRouter();
   const currentUser = useCurrentUser();
@@ -150,6 +151,10 @@ export function TicketsScreen({
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
   const isFirstPage = cursorsStack.length === 0 && !cursor;
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -168,7 +173,7 @@ export function TicketsScreen({
         </Link>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-4 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API.
         </div>

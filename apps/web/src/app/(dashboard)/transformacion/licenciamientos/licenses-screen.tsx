@@ -8,7 +8,8 @@ import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import { useCurrentUser } from '@/components/user-provider';
-import type { CatalogItem, LicenseEmployeeRow, LicenseStats, ToolCatalogItem } from '@/lib/api';
+import type { CatalogItem, ErrorKind, LicenseEmployeeRow, LicenseStats, ToolCatalogItem } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { NewToolDialog } from './new-tool-dialog';
 
 interface Filters {
@@ -28,7 +29,7 @@ interface LicensesScreenProps {
   employees: LicenseEmployeeRow[];
   stats: LicenseStats;
   tools: ToolCatalogItem[];
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   filters: Filters;
   catalogs: Catalogs;
 }
@@ -97,7 +98,7 @@ function ToolBadge({ hasAccess, isAdmin }: { hasAccess: boolean; isAdmin: boolea
   );
 }
 
-export function LicensesScreen({ employees, stats, tools, apiUnavailable, filters, catalogs }: LicensesScreenProps) {
+export function LicensesScreen({ employees, stats, tools, errorKind, filters, catalogs }: LicensesScreenProps) {
   const router = useRouter();
   const currentUser = useCurrentUser();
   const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
@@ -134,6 +135,10 @@ export function LicensesScreen({ employees, stats, tools, apiUnavailable, filter
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(employees);
   const hasFilters = Boolean(filters.search || filters.tool || filters.hasAccess || filters.department || filters.division);
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -157,7 +162,7 @@ export function LicensesScreen({ employees, stats, tools, apiUnavailable, filter
 
       {showNewToolDialog && <NewToolDialog onClose={() => setShowNewToolDialog(false)} />}
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API.
         </div>

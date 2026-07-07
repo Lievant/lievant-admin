@@ -5,7 +5,7 @@ export class CreateRoleDto {
   @IsNotEmpty()
   @MaxLength(100)
   @Matches(/^[A-Z][A-Z0-9_]*$/, {
-    message: 'name debe estar en SCREAMING_SNAKE_CASE (ej: ADMIN_FINANZAS)',
+    message: 'name debe estar en SCREAMING_SNAKE_CASE (ej: DIRECTOR)',
   })
   name!: string;
 

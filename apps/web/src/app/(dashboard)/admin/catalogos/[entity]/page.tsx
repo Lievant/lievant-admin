@@ -1,14 +1,15 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { listCatalogItems } from '@/lib/api';
+import { errorKindOf, listCatalogItems, type ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { getCatalogConfig } from '../constants';
 import { CatalogDetailScreen } from './catalog-detail-screen';
 
-async function safe<T>(promise: Promise<T>): Promise<T | null> {
+async function safe<T>(promise: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
-    return await promise;
-  } catch {
-    return null;
+    return { data: await promise, errorKind: null };
+  } catch (err) {
+    return { data: null, errorKind: errorKindOf(err) };
   }
 }
 
@@ -24,8 +25,15 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
     notFound();
   }
 
-  const items = await safe(listCatalogItems(config.entity));
-  const apiUnavailable = items === null;
+  const { data: items, errorKind } = await safe(listCatalogItems(config.entity));
+
+  if (errorKind === 'forbidden') {
+    return (
+      <div className="mx-auto max-w-5xl px-8 py-10">
+        <NoPermissions />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
@@ -41,7 +49,7 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
         <span className="text-navy">{config.label}</span>
       </nav>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>

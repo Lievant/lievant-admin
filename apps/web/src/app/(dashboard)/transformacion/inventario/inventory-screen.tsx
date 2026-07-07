@@ -7,7 +7,8 @@ import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
-import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
+import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
+import { NoPermissions } from '@/components/ui/no-permissions';
 import { statusBadgeStyle, typeIcon } from './constants';
 
 interface Filters {
@@ -28,7 +29,7 @@ interface Catalogs {
 interface InventoryScreenProps {
   page: EquipmentPage;
   stats: EquipmentStats;
-  apiUnavailable: boolean;
+  errorKind: ErrorKind | null;
   filters: Filters;
   cursor: string;
   cursorsStack: string[];
@@ -76,7 +77,7 @@ function EmployeeAvatar({ name, email }: { name: string | null; email: string | 
 export function InventoryScreen({
   page,
   stats,
-  apiUnavailable,
+  errorKind,
   filters,
   cursor,
   cursorsStack,
@@ -143,6 +144,10 @@ export function InventoryScreen({
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
   const isFirstPage = cursorsStack.length === 0 && !cursor;
 
+  if (errorKind === 'forbidden') {
+    return <NoPermissions />;
+  }
+
   return (
     <div>
       <header className="flex items-start justify-between gap-4">
@@ -161,7 +166,7 @@ export function InventoryScreen({
         </Link>
       </header>
 
-      {apiUnavailable && (
+      {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
           No se pudo conectar con la API.
         </div>
