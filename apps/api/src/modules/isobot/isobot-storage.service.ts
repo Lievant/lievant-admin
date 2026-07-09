@@ -29,7 +29,15 @@ export class IsobotStorageService {
     return key;
   }
 
-  async getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {
-    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn });
+  async getPresignedUrl(key: string, fileName?: string, expiresIn = 3600): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ...(fileName ? { ResponseContentDisposition: `attachment; filename="${fileName}"` } : {}),
+      }),
+      { expiresIn },
+    );
   }
 }
