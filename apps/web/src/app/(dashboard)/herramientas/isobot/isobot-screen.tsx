@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import { RobotIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
 import { cn } from '@/lib/utils';
+import { IsobotSidebar } from './isobot-sidebar';
 
 interface MessageSource {
   documentId: string;
@@ -100,11 +101,11 @@ export function IsobotScreen() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
 
-  async function handleSend() {
-    const text = input.trim();
-    if (!text || loading) return;
+  async function sendMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
 
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
+    setMessages((prev) => [...prev, { role: 'user', content: trimmed }]);
     setInput('');
     setLoading(true);
     setError(null);
@@ -115,7 +116,7 @@ export function IsobotScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...(conversationId ? { conversationId } : {}),
-          message: text,
+          message: trimmed,
         }),
       });
 
@@ -135,6 +136,15 @@ export function IsobotScreen() {
     }
   }
 
+  function handleSend() {
+    sendMessage(input);
+  }
+
+  function handleExampleClick(text: string) {
+    setInput(text);
+    sendMessage(text);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -143,87 +153,91 @@ export function IsobotScreen() {
   }
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-slate-200 bg-slate-50 shadow-sm">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-terracota text-white">
-          <RobotIcon className="h-6 w-6" />
-        </div>
-        <div>
-          <p className="font-bold text-navy">ISOBOT</p>
-          <p className="text-xs text-slate-500">Asistente del Sistema de Gestión de Seguridad</p>
-        </div>
-      </div>
+    <div className="flex h-full overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+      <IsobotSidebar onSendExample={handleExampleClick} />
 
-      {/* Mensajes */}
-      <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-        {messages.map((msg, i) =>
-          msg.role === 'user' ? (
-            <div key={i} className="flex justify-end">
-              <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-terracota px-4 py-2.5 text-sm text-white">
-                {msg.content}
-              </div>
-            </div>
-          ) : (
-            <div key={i} className="flex items-start gap-2">
-              <IsobotAvatar />
-              <div className="max-w-[75%] space-y-2">
-                <div
-                  className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm text-navy shadow-sm
-                    prose prose-sm max-w-none text-navy
-                    [&_strong]:font-semibold
-                    [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1
-                    [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
-                    [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1
-                    [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1
-                    [&_p]:mb-2 [&_p:last-child]:mb-0
-                    [&_hr]:border-slate-200 [&_hr]:my-2"
-                >
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
+      <div className="flex flex-1 flex-col bg-slate-50">
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-terracota text-white">
+            <RobotIcon className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="font-bold text-navy">ISOBOT</p>
+            <p className="text-xs text-slate-500">Asistente del Sistema de Gestión de Seguridad</p>
+          </div>
+        </div>
+
+        {/* Mensajes */}
+        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {messages.map((msg, i) =>
+            msg.role === 'user' ? (
+              <div key={i} className="flex justify-end">
+                <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-terracota px-4 py-2.5 text-sm text-white">
+                  {msg.content}
                 </div>
-                {msg.sources && msg.sources.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {msg.sources.map((source, j) => (
-                      <SourceChip key={j} source={source} />
-                    ))}
-                  </div>
-                )}
               </div>
-            </div>
-          ),
-        )}
-        {loading && <ThinkingBubble />}
-      </div>
-
-      {error && (
-        <div className="mx-5 mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </div>
-      )}
-
-      {/* Input */}
-      <div className="flex items-end gap-2 border-t border-slate-200 bg-white px-4 py-3">
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Escribe tu pregunta sobre el SGSI…"
-          rows={1}
-          className="max-h-32 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-terracota focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          className={cn(
-            'rounded-md px-4 py-2 text-sm font-semibold transition-colors',
-            !loading && input.trim()
-              ? 'bg-terracota text-white hover:bg-terracota-dark'
-              : 'cursor-not-allowed bg-slate-100 text-slate-400',
+            ) : (
+              <div key={i} className="flex items-start gap-2">
+                <IsobotAvatar />
+                <div className="max-w-[75%] space-y-2">
+                  <div
+                    className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm text-navy shadow-sm
+                      prose prose-sm max-w-none text-navy
+                      [&_strong]:font-semibold
+                      [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1
+                      [&_h3]:text-sm [&_h3]:font-medium [&_h3]:mt-2 [&_h3]:mb-1
+                      [&_ul]:list-disc [&_ul]:pl-4 [&_ul]:space-y-1
+                      [&_ol]:list-decimal [&_ol]:pl-4 [&_ol]:space-y-1
+                      [&_p]:mb-2 [&_p:last-child]:mb-0
+                      [&_hr]:border-slate-200 [&_hr]:my-2"
+                  >
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                  {msg.sources && msg.sources.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {msg.sources.map((source, j) => (
+                        <SourceChip key={j} source={source} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ),
           )}
-        >
-          Enviar
-        </button>
+          {loading && <ThinkingBubble />}
+        </div>
+
+        {error && (
+          <div className="mx-5 mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {error}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="flex items-end gap-2 border-t border-slate-200 bg-white px-4 py-3">
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Escribe tu pregunta sobre el SGSI…"
+            rows={1}
+            className="max-h-32 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-terracota focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || !input.trim()}
+            className={cn(
+              'rounded-md px-4 py-2 text-sm font-semibold transition-colors',
+              !loading && input.trim()
+                ? 'bg-terracota text-white hover:bg-terracota-dark'
+                : 'cursor-not-allowed bg-slate-100 text-slate-400',
+            )}
+          >
+            Enviar
+          </button>
+        </div>
       </div>
     </div>
   );
