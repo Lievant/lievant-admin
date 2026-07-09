@@ -62,8 +62,10 @@ export class InventoryService {
       qb.andWhere('e.assigned_to_employee_id = :empId', { empId: query.assignedToEmployeeId });
     }
     if (query.search) {
+      // Todas las condiciones van dentro del mismo grupo OR entre paréntesis
+      // (no como .orWhere() sueltos, que romperían los demás filtros AND).
       qb.andWhere(
-        '(e.display_id ILIKE :s OR e.legacy_id ILIKE :s OR e.model ILIKE :s OR e.serial_number ILIKE :s OR e.brand ILIKE :s)',
+        '(e.display_id ILIKE :s OR e.legacy_id ILIKE :s OR e.model ILIKE :s OR e.serial_number ILIKE :s OR e.brand ILIKE :s OR emp.fullName ILIKE :s OR emp.corporateEmail ILIKE :s)',
         { s: `%${query.search}%` },
       );
     }
@@ -302,6 +304,36 @@ export class InventoryService {
   // -------------------------------------------------------------------------
   // Asignar empleado
   // -------------------------------------------------------------------------
+
+  async getEquipmentByEmployee(employeeId: string) {
+    const items = await this.equipmentRepo.find({
+      where: { assignedToEmployeeId: employeeId, deletedAt: IsNull() },
+      order: { equipmentType: 'ASC', brand: 'ASC' },
+    });
+
+    return items.map((item) => ({
+      id: item.id,
+      displayId: item.displayId,
+      legacyId: item.legacyId,
+      equipmentType: item.equipmentType,
+      brand: item.brand,
+      model: item.model,
+      status: item.status,
+    }));
+  }
+
+  async getEmployeeEquipmentFor(equipmentId: string) {
+    const item = await this.equipmentRepo.findOne({ where: { id: equipmentId } });
+    if (!item) throw new NotFoundException(`Equipo ${equipmentId} no encontrado`);
+    if (!item.assignedToEmployeeId) return [];
+
+    return this.getOtherEquipmentByEmployee(item.assignedToEmployeeId, equipmentId);
+  }
+
+  async getOtherEquipmentByEmployee(employeeId: string, currentEquipmentId: string) {
+    const items = await this.getEquipmentByEmployee(employeeId);
+    return items.filter((item) => item.id !== currentEquipmentId);
+  }
 
   async assignEmployee(id: string, dto: AssignEmployeeDto, userId: string, userName: string) {
     const item = await this.equipmentRepo.findOne({ where: { id } });

@@ -249,7 +249,7 @@ export class IsobotIngestionService {
     if (!document) throw new NotFoundException(`Documento ${id} no encontrado`);
     if (!document.s3Key) throw new BadRequestException('Este documento no tiene un archivo asociado en S3');
 
-    const url = await this.storage.getPresignedUrl(document.s3Key);
+    const url = await this.storage.getPresignedUrl(document.s3Key, document.fileName);
     return { url };
   }
 }

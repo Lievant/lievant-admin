@@ -26,6 +26,7 @@ import { CompensationTab } from './compensation-tab';
 import { VacationTab } from './vacation-tab';
 import { FamilyTab } from './family-tab';
 import { DocumentsTab } from './documents-tab';
+import { EquipmentLicensesTab } from './equipment-licenses-tab';
 import { PhotosTab } from './photos-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
@@ -38,6 +39,7 @@ const ALL_TABS = [
   { id: 'family',       label: 'Familia y baja',     badge: 'RRHH' },
   { id: 'documents',    label: 'Documentos',         badge: null },
   { id: 'photos',       label: 'Fotos',              badge: null },
+  { id: 'equipos-licencias', label: 'Equipos y Licencias', badge: null },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -90,11 +92,14 @@ export function EmployeeDetailScreen({
   const canGenerateDocuments = usePermission('rrhh', 'empleados.documentos', 'write');
   const canViewDocuments     = usePermission('rrhh', 'empleados.documentos');
   const canWriteEmployees    = usePermission('rrhh', 'empleados', 'write');
+  const canViewEquipos       = usePermission('rrhh', 'empleados.equipos', 'read');
+  const canViewLicencias     = usePermission('rrhh', 'empleados.licencias', 'read');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
     if (tab.id === 'personal' || tab.id === 'vacation' || tab.id === 'family') return canViewPersonal;
     if (tab.id === 'compensation') return canViewCompensation;
     if (tab.id === 'documents') return canViewDocuments;
+    if (tab.id === 'equipos-licencias') return canViewEquipos || canViewLicencias;
     return true; // general, photos
   });
 
@@ -223,6 +228,13 @@ export function EmployeeDetailScreen({
         )}
         {effectiveTab === 'photos' && (
           <PhotosTab employeeId={employee.id} canWrite={canWriteEmployees} />
+        )}
+        {effectiveTab === 'equipos-licencias' && (
+          <EquipmentLicensesTab
+            employeeId={employee.id}
+            canViewEquipos={canViewEquipos}
+            canViewLicencias={canViewLicencias}
+          />
         )}
       </div>
 

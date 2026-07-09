@@ -2250,6 +2250,20 @@ export interface EquipmentPage {
   total: number;
 }
 
+export interface EmployeeEquipmentItem {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  status: string;
+}
+
+export function getEquipmentByEmployee(employeeId: string): Promise<EmployeeEquipmentItem[]> {
+  return apiFetchWithRetry<EmployeeEquipmentItem[]>(`/inventory/equipment/by-employee/${employeeId}`);
+}
+
 export interface EquipmentStats {
   total: number;
   assigned: number;
@@ -2751,6 +2765,10 @@ export interface EmployeeLicenseDetail {
 
 export function getEmployeeLicense(employeeId: string): Promise<EmployeeLicenseDetail> {
   return apiFetchWithRetry<EmployeeLicenseDetail>(`/licenses/employees/${employeeId}`);
+}
+
+export function getLicensesByEmployee(employeeId: string): Promise<EmployeeLicenseDetail> {
+  return apiFetchWithRetry<EmployeeLicenseDetail>(`/licenses/employees/by-employee/${employeeId}`);
 }
 
 export interface UpsertLicensesToolPayload {
