@@ -37,9 +37,8 @@ export class IsobotController {
     return this.service.getConversation(id, user);
   }
 
-  @UseGuards(RolesGuard)
-  @Roles(SystemRole.SUPER_ADMIN)
   @Get('documents')
+  @RequirePermission('herramientas', 'isobot', 'read')
   listDocuments() {
     return this.ingestionService.listDocuments();
   }

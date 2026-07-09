@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { avatarColor, initials } from '@/lib/avatar';
 import type { EquipmentDetail } from '@/lib/api';
 import { formatDate, statusBadgeStyle, typeIcon } from '../constants';
@@ -87,7 +87,6 @@ interface Props {
 }
 
 export function AssignmentTab({ equipment, onUpdated }: Props) {
-  const router = useRouter();
   const [assigning, setAssigning] = useState(false);
   const [newEmployee, setNewEmployee] = useState<EmployeeSuggestion | null>(null);
   const [assignmentDate, setAssignmentDate] = useState('');
@@ -221,28 +220,49 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
           ) : otherEquipment.length === 0 ? (
             <p className="mt-3 text-sm text-slate-400">Este es el único equipo asignado a {emp.fullName}.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-slate-100">
-              {otherEquipment.map((item) => (
-                <li
-                  key={item.id}
-                  onClick={() => router.push(`/transformacion/inventario/${item.id}`)}
-                  className="flex cursor-pointer items-center justify-between gap-3 py-2.5 hover:bg-slate-50"
-                >
-                  <div className="flex items-center gap-2.5">
-                    <i className={`ti ${typeIcon(item.equipmentType)} text-slate-400`} />
-                    <div>
-                      <p className="text-sm font-medium text-navy">{item.displayId}</p>
-                      <p className="text-xs text-slate-500">
-                        {[item.brand, item.model].filter(Boolean).join(' ') || item.equipmentType}
-                      </p>
-                    </div>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeStyle(item.status)}`}>
-                    {item.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <div className="mt-3 overflow-hidden rounded-xl border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    <th className="px-4 py-3">ID Legado</th>
+                    <th className="px-4 py-3">Tipo</th>
+                    <th className="px-4 py-3">Marca / Modelo</th>
+                    <th className="px-4 py-3">Estado</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {otherEquipment.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 font-mono text-xs text-slate-500">{item.legacyId ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <i className={`ti ${typeIcon(item.equipmentType)} text-slate-400`} />
+                          <span className="text-slate-700">{item.equipmentType}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium text-navy">{item.brand ?? ''}</span>
+                        {item.model && <span className="ml-1 text-slate-500">{item.model}</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeStyle(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/transformacion/inventario/${item.id}`}
+                          className="text-xs font-medium text-terracota hover:underline"
+                        >
+                          Ver
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
