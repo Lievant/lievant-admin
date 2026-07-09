@@ -44,6 +44,28 @@ export class EmployeesService {
     private readonly storageService: EmployeeStorageService,
   ) {}
 
+  async searchForAssignment(q: string, limit = 10) {
+    const term = q.trim();
+    if (!term) return [];
+
+    const rows = await this.employeesRepository
+      .createQueryBuilder('employee')
+      .where('employee.status = :status', { status: EmployeeStatus.ACTIVE })
+      .andWhere('(employee.fullName ILIKE :q OR employee.corporateEmail ILIKE :q)', { q: `%${term}%` })
+      .orderBy('employee.fullName', 'ASC')
+      .take(limit)
+      .getMany();
+
+    return rows.map((e) => ({
+      id: e.id,
+      displayId: e.displayId,
+      fullName: e.fullName,
+      corporateEmail: e.corporateEmail,
+      area: e.area,
+      position: e.position,
+    }));
+  }
+
   async findAll(query: QueryEmployeesDto): Promise<EmployeesPaginatedResult<EmployeeListItem>> {
     const limit = query.limit ?? 10;
     const filterByDocStatus = !!query.docStatus;

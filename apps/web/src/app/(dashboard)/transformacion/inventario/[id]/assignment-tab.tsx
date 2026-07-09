@@ -1,16 +1,28 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { avatarColor, initials } from '@/lib/avatar';
 import type { EquipmentDetail } from '@/lib/api';
-import { formatDate } from '../constants';
+import { formatDate, statusBadgeStyle, typeIcon } from '../constants';
+
+interface OtherEquipmentItem {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  equipmentType: string;
+  brand: string | null;
+  model: string | null;
+  status: string;
+}
 
 interface EmployeeSuggestion {
   id: string;
+  displayId: string;
   fullName: string;
+  corporateEmail: string | null;
   position: string;
   area: string | null;
-  location: string | null;
 }
 
 function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion) => void }) {
@@ -23,10 +35,10 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion) => v
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) { setSuggestions([]); setOpen(false); return; }
     try {
-      const res = await fetch(`/api/employees?search=${encodeURIComponent(q)}&limit=8`);
+      const res = await fetch(`/api/employees/search-for-assignment?q=${encodeURIComponent(q)}&limit=10`);
       if (res.ok) {
-        const page = (await res.json()) as { data: EmployeeSuggestion[] };
-        setSuggestions(page.data ?? []);
+        const results = (await res.json()) as EmployeeSuggestion[];
+        setSuggestions(results ?? []);
         setOpen(true);
       }
     } catch { /* noop */ }
@@ -75,6 +87,7 @@ interface Props {
 }
 
 export function AssignmentTab({ equipment, onUpdated }: Props) {
+  const router = useRouter();
   const [assigning, setAssigning] = useState(false);
   const [newEmployee, setNewEmployee] = useState<EmployeeSuggestion | null>(null);
   const [assignmentDate, setAssignmentDate] = useState('');
@@ -88,6 +101,23 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
   const empName = emp?.fullName ?? null;
   const empEmail = emp?.corporateEmail ?? null;
   const [imgSrc, setImgSrc] = useState<string | null>(empEmail ? `/api/users/${encodeURIComponent(empEmail)}/photo` : null);
+
+  const [otherEquipment, setOtherEquipment] = useState<OtherEquipmentItem[]>([]);
+  const [loadingOther, setLoadingOther] = useState(false);
+
+  useEffect(() => {
+    if (!emp) {
+      setOtherEquipment([]);
+      return;
+    }
+    setLoadingOther(true);
+    fetch(`/api/inventory/equipment/${equipment.id}/employee-equipment`)
+      .then((res) => (res.ok ? (res.json() as Promise<OtherEquipmentItem[]>) : []))
+      .then((items) => setOtherEquipment(items))
+      .catch(() => setOtherEquipment([]))
+      .finally(() => setLoadingOther(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [equipment.id, emp?.id]);
 
   async function handleAssign() {
     if (!newEmployee) return;
@@ -181,6 +211,41 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
           )}
         </div>
       </div>
+
+      {/* Otros equipos del colaborador */}
+      {emp && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
+          <h3 className="text-sm font-semibold text-slate-700">Otros equipos de este colaborador</h3>
+          {loadingOther ? (
+            <p className="mt-3 text-sm text-slate-400">Cargando…</p>
+          ) : otherEquipment.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-400">Este es el único equipo asignado a {emp.fullName}.</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-slate-100">
+              {otherEquipment.map((item) => (
+                <li
+                  key={item.id}
+                  onClick={() => router.push(`/transformacion/inventario/${item.id}`)}
+                  className="flex cursor-pointer items-center justify-between gap-3 py-2.5 hover:bg-slate-50"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <i className={`ti ${typeIcon(item.equipmentType)} text-slate-400`} />
+                    <div>
+                      <p className="text-sm font-medium text-navy">{item.displayId}</p>
+                      <p className="text-xs text-slate-500">
+                        {[item.brand, item.model].filter(Boolean).join(' ') || item.equipmentType}
+                      </p>
+                    </div>
+                  </div>
+                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeStyle(item.status)}`}>
+                    {item.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Formulario de asignación */}
       {assigning && (

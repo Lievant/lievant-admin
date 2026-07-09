@@ -65,6 +65,14 @@ export class InventoryController {
     return this.service.getMyEquipment(user.email);
   }
 
+  // Declarado antes de /:id por la misma razón. Sin permiso de inventario:
+  // lo usa el tab "Equipos y Licencias" de RRHH con su propio permiso.
+  @Get('equipment/by-employee/:employeeId')
+  @RequirePermission('rrhh', 'empleados.equipos', 'read')
+  getEquipmentByEmployee(@Param('employeeId', ParseUUIDPipe) employeeId: string) {
+    return this.service.getEquipmentByEmployee(employeeId);
+  }
+
   @Get('equipment')
   @RequirePermission('transformacion', 'inventario', 'read')
   findAll(@Query() query: QueryEquipmentDto) {
@@ -111,5 +119,11 @@ export class InventoryController {
     @CurrentUser() user: User,
   ) {
     return this.service.unassignEmployee(id, user.id, user.name, body?.notes);
+  }
+
+  @Get('equipment/:id/employee-equipment')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  getEmployeeEquipment(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getEmployeeEquipmentFor(id);
   }
 }

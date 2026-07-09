@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { DocumentsService } from './documents.service';
+import { EmployeeAssignmentSearchController } from './employee-assignment-search.controller';
 import { EmployeePhotosService } from './employee-photos.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
@@ -31,7 +32,11 @@ import { Vacation } from './entities/vacation.entity';
       CatalogDocumentType,
     ]),
   ],
-  controllers: [EmployeesController],
+  // EmployeeAssignmentSearchController debe registrarse antes que
+  // EmployeesController: su ruta estática GET /employees/search-for-assignment
+  // sería capturada por el GET /employees/:id de EmployeesController si se
+  // registrara después (Nest/Express hacen match por orden de registro).
+  controllers: [EmployeeAssignmentSearchController, EmployeesController],
   providers: [EmployeesService, DocumentsService, EmployeeStorageService, EmployeePhotosService],
   exports: [EmployeesService],
 })

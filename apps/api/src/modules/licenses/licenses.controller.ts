@@ -29,6 +29,14 @@ export class LicensesController {
     return this.service.getStats();
   }
 
+  // Sin permiso de licenciamientos: lo usa el tab "Equipos y Licencias" de
+  // RRHH con su propio permiso. Declarado antes de /:id por seguridad de ruteo.
+  @Get('employees/by-employee/:employeeId')
+  @RequirePermission('rrhh', 'empleados.licencias', 'read')
+  getLicensesByEmployee(@Param('employeeId', ParseUUIDPipe) employeeId: string) {
+    return this.service.findByEmployee(employeeId);
+  }
+
   @Get('employees/:id')
   @RequirePermission('transformacion', 'licenciamientos', 'read')
   findOne(@Param('id', ParseUUIDPipe) id: string) {

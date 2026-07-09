@@ -188,7 +188,7 @@ export function InventoryScreen({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por ID, ID legado, modelo, serie…"
+            placeholder="Buscar por ID, modelo, serie o colaborador…"
             className="w-full text-sm text-navy placeholder:text-slate-400 focus:outline-none"
           />
         </div>
