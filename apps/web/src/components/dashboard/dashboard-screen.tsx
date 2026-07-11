@@ -7,6 +7,7 @@ import { AnnouncementsCard } from './announcements-card';
 import { BirthdaysCard } from './birthdays-card';
 import { BookingsCard } from './bookings-card';
 import { CalendarWidget } from './calendar-widget';
+import { PendingApprovalsCard } from './pending-approvals-card';
 import { QuoteWidget } from './quote-widget';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -201,6 +202,9 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
           No se pudo verificar la sesión con la API. Mostrando vista previa.
         </div>
       )}
+
+      {/* ── Aprobaciones pendientes (solo si el usuario tiene reportes con solicitudes) ── */}
+      <PendingApprovalsCard />
 
       {/* ── Grid 2 cols ──────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

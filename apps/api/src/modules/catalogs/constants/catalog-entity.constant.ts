@@ -14,6 +14,7 @@ export const CATALOG_ENTITY_NAMES = [
   'vendor_categories',
   'employee_document_types',
   'ticket_assignees',
+  'holidays',
 ] as const;
 
 export type CatalogEntityName = (typeof CATALOG_ENTITY_NAMES)[number];

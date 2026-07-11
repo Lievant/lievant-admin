@@ -10,7 +10,7 @@ import type {
   EmployeeEmergencyContact,
   EmployeePersonalData,
   EmployeeTermination,
-  EmployeeVacation,
+  EmployeeVacationSummary,
 } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import {
@@ -48,7 +48,7 @@ interface EmployeeDetailScreenProps {
   employee: EmployeeDetail;
   personal: EmployeePersonalData | null;
   compensation: EmployeeCompensation | null;
-  vacations: EmployeeVacation[];
+  vacationSummary: EmployeeVacationSummary | null;
   contacts: EmployeeEmergencyContact[];
   termination: EmployeeTermination | null;
   catalogs: EmployeeFormCatalogs;
@@ -81,7 +81,7 @@ export function EmployeeDetailScreen({
   employee,
   personal,
   compensation,
-  vacations,
+  vacationSummary,
   contacts,
   termination,
   catalogs,
@@ -94,9 +94,11 @@ export function EmployeeDetailScreen({
   const canWriteEmployees    = usePermission('rrhh', 'empleados', 'write');
   const canViewEquipos       = usePermission('rrhh', 'empleados.equipos', 'read');
   const canViewLicencias     = usePermission('rrhh', 'empleados.licencias', 'read');
+  const canViewVacations     = usePermission('rrhh', 'empleados.vacaciones', 'read');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
-    if (tab.id === 'personal' || tab.id === 'vacation' || tab.id === 'family') return canViewPersonal;
+    if (tab.id === 'personal' || tab.id === 'family') return canViewPersonal;
+    if (tab.id === 'vacation') return canViewVacations;
     if (tab.id === 'compensation') return canViewCompensation;
     if (tab.id === 'documents') return canViewDocuments;
     if (tab.id === 'equipos-licencias') return canViewEquipos || canViewLicencias;
@@ -213,7 +215,7 @@ export function EmployeeDetailScreen({
           <CompensationTab employee={employee} compensation={compensation} canView={canViewCompensation} />
         )}
         {effectiveTab === 'vacation' && (
-          <VacationTab employee={employee} vacations={vacations} canView={canViewPersonal} />
+          <VacationTab summary={vacationSummary} canView={canViewVacations} />
         )}
         {effectiveTab === 'family' && (
           <FamilyTab

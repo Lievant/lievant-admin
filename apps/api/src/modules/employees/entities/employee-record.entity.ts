@@ -86,6 +86,11 @@ export class EmployeeRecord {
   @Column({ type: 'varchar', length: 100, nullable: true })
   schedule!: string | null;
 
+  // Días laborales de la semana (1=Lunes … 7=Domingo). Usado por Vacaciones
+  // para calcular días hábiles. Default: lunes a viernes.
+  @Column({ name: 'work_days', type: 'int', array: true, nullable: true })
+  workDays!: number[] | null;
+
   @Column({ name: 'lunch_time', type: 'varchar', length: 50, nullable: true })
   lunchTime!: string | null;
 

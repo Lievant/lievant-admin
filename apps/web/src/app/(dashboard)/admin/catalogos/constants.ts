@@ -11,13 +11,25 @@ import {
   LayersIcon,
   LevelsIcon,
   MapPinIcon,
+  PlaneIcon,
   SitemapIcon,
 } from '@/components/icons';
 
 export interface CatalogFieldDef {
-  key: 'code' | 'country' | 'companyCode' | 'divisionName' | 'appliesTo' | 'isRequired' | 'description' | 'email' | 'role';
+  key:
+    | 'code'
+    | 'country'
+    | 'companyCode'
+    | 'divisionName'
+    | 'appliesTo'
+    | 'isRequired'
+    | 'description'
+    | 'email'
+    | 'role'
+    | 'date'
+    | 'isRecurring';
   label: string;
-  type: 'text' | 'select' | 'checkbox';
+  type: 'text' | 'select' | 'checkbox' | 'date';
   options?: { value: string; label: string }[];
   mono?: boolean;
   placeholder?: string;
@@ -155,6 +167,16 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     fields: [
       { key: 'email', label: 'Correo electrónico', type: 'text', placeholder: 'tecnico@lievant.com' },
       { key: 'role', label: 'Rol', type: 'text', placeholder: 'Técnico TI' },
+    ],
+  },
+  {
+    entity: 'holidays',
+    label: 'Días festivos',
+    itemLabel: 'día festivo',
+    icon: PlaneIcon,
+    fields: [
+      { key: 'date', label: 'Fecha', type: 'date', required: true },
+      { key: 'isRecurring', label: 'Se repite cada año', type: 'checkbox' },
     ],
   },
 ];

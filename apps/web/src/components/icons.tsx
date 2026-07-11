@@ -569,6 +569,14 @@ export function RobotIcon(props: IconProps) {
   );
 }
 
+export function PlaneIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10.5 13.5 3 12l1-2 6 1 4.5-5a2 2 0 0 1 3 3l-5 4.5 1 6-2 1-1.5-7.5-3 2v2l-1.5 1L4 15l1.5-1h2z" />
+    </Svg>
+  );
+}
+
 const MODULE_ICONS: Record<ModuleIcon, (props: IconProps) => React.ReactElement> = {
   finance: FinanceIcon,
   people: PeopleIcon,

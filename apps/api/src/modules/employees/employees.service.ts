@@ -8,7 +8,6 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdatePersonalDataDto } from './dto/personal-data.dto';
 import { UpdateCompensationDto } from './dto/compensation.dto';
-import { CreateVacationDto, UpdateVacationDto } from './dto/vacation.dto';
 import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emergency-contact.dto';
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
@@ -19,15 +18,10 @@ import { EmployeeDocument } from './entities/employee-document.entity';
 import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
 import { TerminationData } from './entities/termination-data.entity';
-import { Vacation } from './entities/vacation.entity';
 import { DocStatus, EmployeeListItem, EmployeesPaginatedResult, EmployeeStats, ExpiringContractItem } from './interfaces/employee-list-item.interface';
 import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
 import { EmployeeStorageService } from './employee-storage.service';
-
-function toFixed(value: number | undefined, fallback = 0): string {
-  return (value ?? fallback).toFixed(1);
-}
 
 @Injectable()
 export class EmployeesService {
@@ -35,7 +29,6 @@ export class EmployeesService {
     @InjectRepository(EmployeeRecord) private readonly employeesRepository: Repository<EmployeeRecord>,
     @InjectRepository(PersonalData) private readonly personalDataRepository: Repository<PersonalData>,
     @InjectRepository(Compensation) private readonly compensationRepository: Repository<Compensation>,
-    @InjectRepository(Vacation) private readonly vacationsRepository: Repository<Vacation>,
     @InjectRepository(EmergencyContact) private readonly emergencyContactsRepository: Repository<EmergencyContact>,
     @InjectRepository(TerminationData) private readonly terminationRepository: Repository<TerminationData>,
     @InjectRepository(User) private readonly usersRepository: Repository<User>,
@@ -230,6 +223,7 @@ export class EmployeesService {
     if (dto.contractType !== undefined) record.contractType = dto.contractType ?? null;
     if (dto.contractEndDate !== undefined) record.contractEndDate = dto.contractEndDate ?? null;
     if (dto.schedule !== undefined) record.schedule = dto.schedule ?? null;
+    if (dto.workDays !== undefined) record.workDays = dto.workDays ?? null;
     if (dto.lunchTime !== undefined) record.lunchTime = dto.lunchTime ?? null;
     if (dto.studies !== undefined) record.studies = dto.studies ?? null;
     if (dto.status !== undefined) record.status = dto.status;
@@ -306,52 +300,6 @@ export class EmployeesService {
     if (dto.netEstimate !== undefined) compensation.netEstimate = dto.netEstimate.toFixed(2);
 
     return this.compensationRepository.save(compensation);
-  }
-
-  async listVacations(employeeId: string): Promise<Vacation[]> {
-    await this.getEmployeeOrFail(employeeId);
-    return this.vacationsRepository.find({ where: { employeeId }, order: { year: 'DESC' } });
-  }
-
-  async createVacation(employeeId: string, dto: CreateVacationDto): Promise<Vacation> {
-    await this.getEmployeeOrFail(employeeId);
-
-    const existing = await this.vacationsRepository.findOne({ where: { employeeId, year: dto.year } });
-    if (existing) {
-      throw new ConflictException(`Ya existe un registro de vacaciones para el año ${dto.year}`);
-    }
-
-    const opening = dto.openingBalance ?? 0;
-    const taken = dto.taken ?? 0;
-
-    const vacation = this.vacationsRepository.create({
-      employeeId,
-      year: dto.year,
-      openingBalance: toFixed(opening),
-      taken: toFixed(taken),
-      closingBalance: toFixed(opening - taken),
-      supportActivityDays: toFixed(dto.supportActivityDays ?? 0),
-      notes: dto.notes ?? null,
-    });
-
-    return this.vacationsRepository.save(vacation);
-  }
-
-  async updateVacation(vacationId: string, dto: UpdateVacationDto): Promise<Vacation> {
-    const vacation = await this.vacationsRepository.findOne({ where: { id: vacationId } });
-    if (!vacation) {
-      throw new NotFoundException(`Registro de vacaciones ${vacationId} no encontrado`);
-    }
-
-    if (dto.year !== undefined) vacation.year = dto.year;
-    if (dto.openingBalance !== undefined) vacation.openingBalance = toFixed(dto.openingBalance);
-    if (dto.taken !== undefined) vacation.taken = toFixed(dto.taken);
-    if (dto.supportActivityDays !== undefined) vacation.supportActivityDays = toFixed(dto.supportActivityDays);
-    if (dto.notes !== undefined) vacation.notes = dto.notes ?? null;
-
-    vacation.closingBalance = toFixed(Number(vacation.openingBalance ?? 0) - Number(vacation.taken ?? 0));
-
-    return this.vacationsRepository.save(vacation);
   }
 
   async listEmergencyContacts(employeeId: string): Promise<EmergencyContact[]> {

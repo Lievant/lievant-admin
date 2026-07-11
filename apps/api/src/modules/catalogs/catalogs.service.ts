@@ -18,6 +18,7 @@ import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
 import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
+import { Holiday } from '../vacations/entities/holiday.entity';
 
 export interface CatalogRecord {
   id: string;
@@ -30,6 +31,9 @@ export interface CatalogRecord {
   role?: string | null;
   appliesTo?: string;
   isRequired?: boolean;
+  // Solo festivos (catalogs.holidays)
+  date?: string;
+  isRecurring?: boolean;
   isActive: boolean;
   sortOrder: number;
   createdAt: Date;
@@ -56,6 +60,7 @@ export class CatalogsService {
     @InjectRepository(CatalogVendorCategory) vendorCategories: Repository<CatalogVendorCategory>,
     @InjectRepository(CatalogEmployeeDocumentType) employeeDocumentTypes: Repository<CatalogEmployeeDocumentType>,
     @InjectRepository(TicketAssignee) ticketAssignees: Repository<TicketAssignee>,
+    @InjectRepository(Holiday) holidays: Repository<Holiday>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -73,17 +78,25 @@ export class CatalogsService {
       vendor_categories: vendorCategories as unknown as Repository<CatalogRecord>,
       employee_document_types: employeeDocumentTypes as unknown as Repository<CatalogRecord>,
       ticket_assignees: ticketAssignees as unknown as Repository<CatalogRecord>,
+      holidays: holidays as unknown as Repository<CatalogRecord>,
     };
+  }
+
+  // El catálogo de festivos no tiene columna sort_order; se ordena por fecha.
+  private orderFor(entity: string) {
+    return entity === 'holidays'
+      ? ({ date: 'ASC' } as const)
+      : ({ sortOrder: 'ASC', name: 'ASC' } as const);
   }
 
   async findAll(entity: string, appliesTo?: string): Promise<CatalogRecord[]> {
     const repo = this.getRepository(entity);
-    return repo.find({ where: { ...(appliesTo ? { appliesTo } : {}) }, order: { sortOrder: 'ASC', name: 'ASC' } });
+    return repo.find({ where: { ...(appliesTo ? { appliesTo } : {}) }, order: this.orderFor(entity) });
   }
 
   async findActive(entity: string, appliesTo?: string): Promise<CatalogRecord[]> {
     const repo = this.getRepository(entity);
-    return repo.find({ where: { isActive: true, ...(appliesTo ? { appliesTo } : {}) }, order: { sortOrder: 'ASC', name: 'ASC' } });
+    return repo.find({ where: { isActive: true, ...(appliesTo ? { appliesTo } : {}) }, order: this.orderFor(entity) });
   }
 
   async create(entity: string, dto: CreateCatalogItemDto): Promise<CatalogRecord> {
@@ -98,6 +111,8 @@ export class CatalogsService {
     if (dto.role !== undefined) data.role = dto.role;
     if (dto.appliesTo !== undefined) data.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) data.isRequired = dto.isRequired;
+    if (dto.date !== undefined) data.date = dto.date;
+    if (dto.isRecurring !== undefined) data.isRecurring = dto.isRecurring;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
 
@@ -117,6 +132,8 @@ export class CatalogsService {
     if (dto.role !== undefined) record.role = dto.role;
     if (dto.appliesTo !== undefined) record.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) record.isRequired = dto.isRequired;
+    if (dto.date !== undefined) record.date = dto.date;
+    if (dto.isRecurring !== undefined) record.isRecurring = dto.isRecurring;
     if (dto.isActive !== undefined) record.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) record.sortOrder = dto.sortOrder;
 

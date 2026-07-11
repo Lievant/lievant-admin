@@ -6,9 +6,9 @@ import {
   getEmployeeCompensation,
   getEmployeePersonalData,
   getEmployeeTermination,
+  getEmployeeVacationSummary,
   listEmployeeContacts,
   listEmployeeDocuments,
-  listEmployeeVacations,
   type EmployeeDetail,
 } from '@/lib/api';
 import { loadEmployeeFormCatalogs } from '../catalog-data';
@@ -66,11 +66,12 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
   const canViewCompensation = hasPermission('rrhh', 'empleados.nomina');
   const canGenerateDocs     = hasPermission('rrhh', 'empleados.documentos', 'write');
   const canViewDocuments    = hasPermission('rrhh', 'empleados.documentos');
+  const canViewVacations    = hasPermission('rrhh', 'empleados.vacaciones');
 
-  const [personal, compensation, vacations, contacts, termination, catalogs, documents] = await Promise.all([
+  const [personal, compensation, vacationSummary, contacts, termination, catalogs, documents] = await Promise.all([
     canViewPersonal ? safe(getEmployeePersonalData(id)) : Promise.resolve(null),
     canViewCompensation ? safe(getEmployeeCompensation(id)) : Promise.resolve(null),
-    canViewPersonal ? safe(listEmployeeVacations(id)) : Promise.resolve(null),
+    canViewVacations ? safe(getEmployeeVacationSummary(id)) : Promise.resolve(null),
     canViewPersonal ? safe(listEmployeeContacts(id)) : Promise.resolve(null),
     (canViewPersonal || canGenerateDocs) ? safe(getEmployeeTermination(id)) : Promise.resolve(null),
     loadEmployeeFormCatalogs(),
@@ -83,7 +84,7 @@ export default async function EmployeeDetailPage({ params }: EmployeeDetailPageP
         employee={employee}
         personal={personal}
         compensation={compensation}
-        vacations={vacations ?? []}
+        vacationSummary={vacationSummary}
         contacts={contacts ?? []}
         termination={termination}
         catalogs={catalogs}

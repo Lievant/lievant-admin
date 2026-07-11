@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
@@ -12,6 +13,7 @@ import { IsobotModule } from './modules/isobot/isobot.module';
 import { LicensesModule } from './modules/licenses/licenses.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
+import { VacationsModule } from './modules/vacations/vacations.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
 
 @Module({
@@ -21,6 +23,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
       isGlobal: true,
       envFilePath: ['.env.local', '.env', '../../.env.local', '../../.env'],
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -45,6 +48,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     ProjectsModule,
     LicensesModule,
     IsobotModule,
+    VacationsModule,
   ],
 })
 export class AppModule {}

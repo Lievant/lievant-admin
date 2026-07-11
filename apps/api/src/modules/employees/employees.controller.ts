@@ -30,7 +30,6 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { UpdatePersonalDataDto } from './dto/personal-data.dto';
 import { UpdateCompensationDto } from './dto/compensation.dto';
-import { CreateVacationDto, UpdateVacationDto } from './dto/vacation.dto';
 import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emergency-contact.dto';
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
@@ -127,23 +126,6 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados.nomina', 'write')
   updateCompensation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCompensationDto) {
     return this.employeesService.updateCompensation(id, dto);
-  }
-
-  @Get(':id/vacations')
-  listVacations(@Param('id', ParseUUIDPipe) id: string) {
-    return this.employeesService.listVacations(id);
-  }
-
-  @Post(':id/vacations')
-  @RequirePermission('rrhh', 'empleados', 'write')
-  createVacation(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateVacationDto) {
-    return this.employeesService.createVacation(id, dto);
-  }
-
-  @Patch('vacations/:vacId')
-  @RequirePermission('rrhh', 'empleados', 'write')
-  updateVacation(@Param('vacId', ParseUUIDPipe) vacId: string, @Body() dto: UpdateVacationDto) {
-    return this.employeesService.updateVacation(vacId, dto);
   }
 
   @Get(':id/contacts')

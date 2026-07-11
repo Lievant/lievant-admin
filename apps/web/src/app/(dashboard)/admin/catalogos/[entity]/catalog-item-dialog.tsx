@@ -21,6 +21,8 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
     for (const field of config.fields) {
       if (field.type === 'checkbox') {
         initial[field.key] = Boolean(item?.[field.key]);
+      } else if (field.type === 'date') {
+        initial[field.key] = ((item?.[field.key] as string | undefined) ?? '').slice(0, 10);
       } else {
         initial[field.key] =
           (item?.[field.key] as string | undefined) ?? (field.key === 'appliesTo' ? 'client' : '');
@@ -124,6 +126,27 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
                   />
                   {field.label}
                 </label>
+              );
+            }
+
+            if (field.type === 'date') {
+              return (
+                <div key={field.key} className="flex flex-col gap-1">
+                  <label
+                    className="text-xs font-semibold uppercase tracking-wide text-slate-500"
+                    htmlFor={`catalog-${field.key}`}
+                  >
+                    {field.label}
+                    {field.required ? ' *' : ''}
+                  </label>
+                  <input
+                    id={`catalog-${field.key}`}
+                    type="date"
+                    value={String(extra[field.key] ?? '')}
+                    onChange={(e) => setExtra((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                  />
+                </div>
               );
             }
 

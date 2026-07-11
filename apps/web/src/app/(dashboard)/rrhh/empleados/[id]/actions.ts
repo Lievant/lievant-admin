@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache';
 import {
   ApiError,
   addEmployeeContact,
-  createEmployeeVacation,
   generateEmployeeDocument,
   removeEmployeeContact,
   removeEmployeeDocument,
@@ -13,16 +12,13 @@ import {
   updateEmployeeContact,
   updateEmployeePersonalData,
   updateEmployeeTermination,
-  updateEmployeeVacation,
   type CreateEmergencyContactPayload,
-  type CreateVacationPayload,
   type EmployeeDocumentType,
   type UpdateCompensationPayload,
   type UpdateEmergencyContactPayload,
   type UpdateEmployeePayload,
   type UpdatePersonalDataPayload,
   type UpdateTerminationPayload,
-  type UpdateVacationPayload,
 } from '@/lib/api';
 
 export interface ActionResult {
@@ -70,30 +66,6 @@ export async function updateCompensationAction(
 ): Promise<ActionResult> {
   try {
     await updateEmployeeCompensation(employeeId, payload);
-    revalidatePath(`/rrhh/empleados/${employeeId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}
-
-export async function createVacationAction(employeeId: string, payload: CreateVacationPayload): Promise<ActionResult> {
-  try {
-    await createEmployeeVacation(employeeId, payload);
-    revalidatePath(`/rrhh/empleados/${employeeId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}
-
-export async function updateVacationAction(
-  employeeId: string,
-  vacationId: string,
-  payload: UpdateVacationPayload,
-): Promise<ActionResult> {
-  try {
-    await updateEmployeeVacation(vacationId, payload);
     revalidatePath(`/rrhh/empleados/${employeeId}`);
     return { success: true };
   } catch (err) {

@@ -631,6 +631,7 @@ export interface EmployeeDetail {
   contractType: string | null;
   contractEndDate: string | null;
   schedule: string | null;
+  workDays: number[] | null;
   lunchTime: string | null;
   studies: string | null;
   status: EmployeeStatus;
@@ -664,6 +665,7 @@ export interface CreateEmployeePayload {
   contractType?: string;
   contractEndDate?: string;
   schedule?: string;
+  workDays?: number[];
   lunchTime?: string;
   studies?: string;
   status?: EmployeeStatus;
@@ -838,49 +840,6 @@ export function updateEmployeeCompensation(
   });
 }
 
-// Vacaciones
-
-export interface EmployeeVacation {
-  id: string;
-  employeeId: string;
-  year: number;
-  openingBalance: string | null;
-  taken: string;
-  closingBalance: string | null;
-  supportActivityDays: string;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreateVacationPayload {
-  year: number;
-  openingBalance?: number;
-  taken?: number;
-  supportActivityDays?: number;
-  notes?: string;
-}
-
-export type UpdateVacationPayload = Partial<CreateVacationPayload>;
-
-export function listEmployeeVacations(employeeId: string): Promise<EmployeeVacation[]> {
-  return apiFetchWithRetry<EmployeeVacation[]>(`/employees/${employeeId}/vacations`);
-}
-
-export function createEmployeeVacation(employeeId: string, payload: CreateVacationPayload): Promise<EmployeeVacation> {
-  return apiFetchWithRetry<EmployeeVacation>(`/employees/${employeeId}/vacations`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export function updateEmployeeVacation(vacationId: string, payload: UpdateVacationPayload): Promise<EmployeeVacation> {
-  return apiFetchWithRetry<EmployeeVacation>(`/employees/vacations/${vacationId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(payload),
-  });
-}
-
 // Contactos de emergencia
 
 export interface EmployeeEmergencyContact {
@@ -1048,7 +1007,8 @@ export type CatalogEntity =
   | 'document_types_employee'
   | 'vendor_categories'
   | 'employee_document_types'
-  | 'ticket_assignees';
+  | 'ticket_assignees'
+  | 'holidays';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -1073,6 +1033,8 @@ export interface CatalogItem {
   role?: string | null;
   appliesTo?: string | null;
   isRequired?: boolean;
+  date?: string | null;
+  isRecurring?: boolean;
   isActive: boolean;
   sortOrder: number;
   createdAt: string;
@@ -1090,6 +1052,8 @@ export interface CreateCatalogItemPayload {
   role?: string;
   appliesTo?: string;
   isRequired?: boolean;
+  date?: string;
+  isRecurring?: boolean;
   isActive?: boolean;
   sortOrder?: number;
 }
@@ -2824,4 +2788,135 @@ export function createTool(payload: CreateToolPayload): Promise<ToolCatalogItem>
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Vacaciones (Módulo)
+// ---------------------------------------------------------------------------
+
+export type VacationRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface VacationBalanceSummary {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  yearsOfService: number;
+  entitledDays: number;
+  usedDays: number;
+  expiredDays: number;
+  availableDays: number;
+  isCurrent: boolean;
+}
+
+export interface MyVacationBalance {
+  employeeId: string;
+  fullName: string;
+  seniorityDate: string | null;
+  workDays: number[];
+  balance: VacationBalanceSummary;
+}
+
+export interface VacationRequestItem {
+  id: string;
+  displayId: string;
+  startDate: string;
+  endDate: string;
+  workingDaysTaken: number;
+  status: VacationRequestStatus;
+  notes: string | null;
+  rejectionReason: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  substitute: { id: string; fullName: string; corporateEmail: string | null } | null;
+  period: { periodStart: string; periodEnd: string } | null;
+}
+
+export interface VacationHoliday {
+  id: string;
+  name: string;
+  date: string;
+  isRecurring: boolean;
+  country: string;
+}
+
+export interface PendingApprovalItem {
+  id: string;
+  displayId: string;
+  startDate: string;
+  endDate: string;
+  workingDaysTaken: number;
+  notes: string | null;
+  createdAt: string;
+  employee: {
+    id: string;
+    fullName: string;
+    position: string;
+    corporateEmail: string | null;
+    photoUrl: string | null;
+  };
+  substitute: { id: string; fullName: string; photoUrl: string | null } | null;
+}
+
+export interface VacationMovementItem {
+  id: string;
+  movementType:
+    | 'PERIOD_START'
+    | 'PERIOD_EXPIRY'
+    | 'REQUEST_APPROVED'
+    | 'REQUEST_CANCELLED'
+    | 'MANUAL_ADJUSTMENT';
+  daysDelta: number;
+  description: string | null;
+  createdAt: string;
+}
+
+export interface EmployeeVacationSummary {
+  employeeId: string;
+  fullName: string;
+  seniorityDate: string | null;
+  balance: VacationBalanceSummary | null;
+  compensation: {
+    monthlySalary: number | null;
+    dailySalary: number | null;
+    estimatedPrima: number | null;
+  };
+  movements: VacationMovementItem[];
+  requests: VacationRequestItem[];
+}
+
+export interface VacationReportRow {
+  requestId: string;
+  displayId: string;
+  employeeId: string;
+  fullName: string;
+  area: string | null;
+  startDate: string;
+  endDate: string;
+  workingDaysTaken: number;
+  daysInRange: number;
+  daysOutsideRange: number;
+  monthlySalary: number | null;
+  dailySalary: number | null;
+  primaVacacional: number | null;
+}
+
+export function getMyVacationBalance(): Promise<MyVacationBalance> {
+  return apiFetchWithRetry<MyVacationBalance>('/vacations/my-balance');
+}
+
+export function getMyVacationRequests(): Promise<VacationRequestItem[]> {
+  return apiFetchWithRetry<VacationRequestItem[]>('/vacations/my-requests');
+}
+
+export function getVacationHolidays(year?: number): Promise<VacationHoliday[]> {
+  return apiFetchWithRetry<VacationHoliday[]>(`/vacations/holidays${year ? `?year=${year}` : ''}`);
+}
+
+export function getEmployeeVacationSummary(employeeId: string): Promise<EmployeeVacationSummary> {
+  return apiFetchWithRetry<EmployeeVacationSummary>(`/vacations/employees/${employeeId}/summary`);
+}
+
+export function getVacationReport(startDate: string, endDate: string): Promise<VacationReportRow[]> {
+  const qs = new URLSearchParams({ startDate, endDate }).toString();
+  return apiFetchWithRetry<VacationReportRow[]>(`/vacations/report?${qs}`);
 }

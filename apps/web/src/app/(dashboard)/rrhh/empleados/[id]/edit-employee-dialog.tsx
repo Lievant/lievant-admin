@@ -6,6 +6,7 @@ import { CloseIcon } from '@/components/icons';
 import { EMPLOYEE_STATUSES, EMPLOYEE_STATUS_LABELS, GENDERS, modalityFromCatalogName } from '../constants';
 import { TextField, SelectField } from '../form-field';
 import { EmployeePicker, type EmployeePickerValue } from '../employee-picker';
+import { WorkDaysPicker, DEFAULT_WORK_DAYS } from '../work-days-picker';
 import type { EmployeeFormCatalogs } from '../catalog-data';
 import { updateEmployeeAction } from './actions';
 
@@ -45,6 +46,9 @@ export function EditEmployeeDialog({
   const [contractType, setContractType] = useState(employee.contractType ?? '');
   const [contractEndDate, setContractEndDate] = useState(employee.contractEndDate ?? '');
   const [schedule, setSchedule] = useState(employee.schedule ?? '');
+  const [workDays, setWorkDays] = useState<number[]>(
+    employee.workDays && employee.workDays.length ? employee.workDays : DEFAULT_WORK_DAYS,
+  );
   const [lunchTime, setLunchTime] = useState(employee.lunchTime ?? '');
   const [studies, setStudies] = useState(employee.studies ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -130,6 +134,7 @@ export function EditEmployeeDialog({
       if (contractType.trim()) payload.contractType = contractType.trim();
       if (contractEndDate) payload.contractEndDate = contractEndDate;
       if (schedule.trim()) payload.schedule = schedule.trim();
+      payload.workDays = workDays;
       if (lunchTime.trim()) payload.lunchTime = lunchTime.trim();
       if (studies.trim()) payload.studies = studies.trim();
 
@@ -230,6 +235,9 @@ export function EditEmployeeDialog({
             <div className="mt-4 grid grid-cols-2 gap-4">
               <TextField id="employee-lunch-time" label="Horario de comida" value={lunchTime} onChange={setLunchTime} />
               <TextField id="employee-studies" label="Estudios" value={studies} onChange={setStudies} />
+            </div>
+            <div className="mt-4">
+              <WorkDaysPicker value={workDays} onChange={setWorkDays} />
             </div>
           </div>
 

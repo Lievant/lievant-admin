@@ -183,6 +183,10 @@ function renderFieldValue(item: CatalogItem, field: CatalogConfig['fields'][numb
     return value ? 'Sí' : 'No';
   }
 
+  if (field.type === 'date') {
+    return value ? String(value).slice(0, 10) : '—';
+  }
+
   if (field.type === 'select') {
     const option = field.options?.find((opt) => opt.value === value);
     return option?.label ?? '—';

@@ -16,6 +16,7 @@ import {
   ListIcon,
   LogoutIcon,
   PeopleIcon,
+  PlaneIcon,
   ReportMoneyIcon,
   RobotIcon,
   ShieldLockIcon,
@@ -180,6 +181,10 @@ export function Sidebar({ user }: SidebarProps) {
         <NavLink href="/herramientas/isobot" active={pathname.startsWith('/herramientas/isobot')}>
           <RobotIcon className="h-5 w-5" />
           ISOBOT
+        </NavLink>
+        <NavLink href="/herramientas/vacaciones" active={pathname.startsWith('/herramientas/vacaciones')}>
+          <PlaneIcon className="h-5 w-5" />
+          Vacaciones
         </NavLink>
 
         {isSuperAdmin && (
