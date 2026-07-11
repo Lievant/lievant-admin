@@ -1,5 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsDateString, IsIn, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreateCatalogItemDto {
   @IsString()
@@ -45,6 +45,15 @@ export class CreateCatalogItemDto {
   @IsOptional()
   @IsInt()
   sortOrder?: number;
+
+  // Solo para el catálogo de festivos (catalogs.holidays)
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
 }
 
 export class UpdateCatalogItemDto extends PartialType(CreateCatalogItemDto) {}

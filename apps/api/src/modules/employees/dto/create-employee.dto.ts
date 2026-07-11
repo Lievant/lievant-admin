@@ -1,4 +1,16 @@
-import { IsDateString, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 import { EmployeeStatus } from '../constants/employee-status.constant';
 import { Modality } from '../constants/modality.constant';
 import { IsCorporateEmailDomain, IsNotFutureDate } from '../validators/employee-validators';
@@ -91,6 +103,15 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsString()
   schedule?: string;
+
+  // Días laborales de la semana (1=Lunes … 7=Domingo)
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(7, { each: true })
+  workDays?: number[];
 
   @IsOptional()
   @IsString()

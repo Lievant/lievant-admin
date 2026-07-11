@@ -15,7 +15,6 @@ import { EmployeePhoto } from './entities/employee-photo.entity';
 import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
 import { TerminationData } from './entities/termination-data.entity';
-import { Vacation } from './entities/vacation.entity';
 
 @Module({
   imports: [
@@ -23,7 +22,6 @@ import { Vacation } from './entities/vacation.entity';
       EmployeeRecord,
       PersonalData,
       Compensation,
-      Vacation,
       EmergencyContact,
       TerminationData,
       User,

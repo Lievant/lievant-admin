@@ -14,6 +14,7 @@ import type {
 import { EMPLOYEE_STATUSES, EMPLOYEE_STATUS_LABELS, GENDERS, modalityFromCatalogName } from '../constants';
 import { TextField, SelectField } from '../form-field';
 import { EmployeePicker, type EmployeePickerValue } from '../employee-picker';
+import { WorkDaysPicker, DEFAULT_WORK_DAYS } from '../work-days-picker';
 import type { EmployeeFormCatalogs } from '../catalog-data';
 import { createEmployeeAction } from './actions';
 
@@ -67,6 +68,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
   const [contractType, setContractType] = useState('');
   const [contractEndDate, setContractEndDate] = useState('');
   const [schedule, setSchedule] = useState('');
+  const [workDays, setWorkDays] = useState<number[]>(DEFAULT_WORK_DAYS);
   const [lunchTime, setLunchTime] = useState('');
   const [studies, setStudies] = useState('');
 
@@ -216,6 +218,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
       if (contractType.trim()) payload.contractType = contractType.trim();
       if (contractEndDate) payload.contractEndDate = contractEndDate;
       if (schedule.trim()) payload.schedule = schedule.trim();
+      payload.workDays = workDays;
       if (lunchTime.trim()) payload.lunchTime = lunchTime.trim();
       if (studies.trim()) payload.studies = studies.trim();
 
@@ -388,6 +391,9 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <TextField id="new-employee-lunch-time" label="Horario de comida" value={lunchTime} onChange={setLunchTime} placeholder="14:00 - 15:00" />
                 <TextField id="new-employee-studies" label="Estudios" value={studies} onChange={setStudies} />
+              </div>
+              <div className="mt-4">
+                <WorkDaysPicker value={workDays} onChange={setWorkDays} />
               </div>
             </div>
           </>

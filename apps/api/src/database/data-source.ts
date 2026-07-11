@@ -32,7 +32,6 @@ import { EmployeePhoto } from '../modules/employees/entities/employee-photo.enti
 import { EmployeeRecord } from '../modules/employees/entities/employee-record.entity';
 import { PersonalData } from '../modules/employees/entities/personal-data.entity';
 import { TerminationData } from '../modules/employees/entities/termination-data.entity';
-import { Vacation } from '../modules/employees/entities/vacation.entity';
 import { Equipment } from '../modules/inventory/entities/equipment.entity';
 import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.entity';
 import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
@@ -48,6 +47,11 @@ import { ProjectFinancials } from '../modules/projects/entities/project-financia
 import { ProjectHistory } from '../modules/projects/entities/project-history.entity';
 import { ProjectMember } from '../modules/projects/entities/project-member.entity';
 import { ProjectRecord } from '../modules/projects/entities/project-record.entity';
+import { Holiday } from '../modules/vacations/entities/holiday.entity';
+import { VacationBalance } from '../modules/vacations/entities/vacation-balance.entity';
+import { VacationMovement } from '../modules/vacations/entities/vacation-movement.entity';
+import { VacationPolicy } from '../modules/vacations/entities/vacation-policy.entity';
+import { VacationRequest } from '../modules/vacations/entities/vacation-request.entity';
 
 for (const envFile of ['.env.local', '.env', '../../.env.local', '../../.env']) {
   dotenv.config({ path: path.resolve(process.cwd(), envFile) });
@@ -77,7 +81,6 @@ const AppDataSource = new DataSource({
     EmployeeRecord,
     PersonalData,
     Compensation,
-    Vacation,
     EmergencyContact,
     TerminationData,
     EmployeeDocument,
@@ -109,6 +112,11 @@ const AppDataSource = new DataSource({
     ToolCatalog,
     EmployeeLicense,
     ToolAssignment,
+    VacationBalance,
+    VacationRequest,
+    VacationMovement,
+    VacationPolicy,
+    Holiday,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',
