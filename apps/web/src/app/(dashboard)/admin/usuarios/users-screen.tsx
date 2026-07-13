@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import type { ErrorKind, RoleSummary, UserSummary } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { avatarColor, initials } from '@/lib/avatar';
 import { CheckIcon, CloseIcon, PlusIcon, SearchIcon } from '@/components/icons';
 import { activateUserAction, deactivateUserAction } from './actions';
@@ -170,6 +171,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
 
       {/* Table */}
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -303,6 +305,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
             })}
           </tbody>
         </table>
+        </ScrollableTable>
 
         {/* Pager */}
         <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">

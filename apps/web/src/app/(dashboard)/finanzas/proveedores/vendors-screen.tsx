@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { CatalogItem, ErrorKind, Vendor } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { deleteVendorAction } from './actions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
@@ -131,6 +132,7 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
 
       {/* Table */}
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -214,6 +216,7 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
             })}
           </tbody>
         </table>
+        </ScrollableTable>
       </div>
 
       {deleteTarget && (

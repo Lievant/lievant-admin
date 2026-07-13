@@ -6,6 +6,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { VacationReportRow } from '@/lib/api';
 import { ChevronLeftIcon, PlaneIcon, TableIcon } from '@/components/icons';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 
 interface Props {
   rows: VacationReportRow[];
@@ -124,7 +125,8 @@ export function VacationReportScreen({ rows, startDate, endDate }: Props) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
               <tr>
@@ -168,6 +170,7 @@ export function VacationReportScreen({ rows, startDate, endDate }: Props) {
               </tr>
             </tfoot>
           </table>
+          </ScrollableTable>
         </div>
       )}
     </div>

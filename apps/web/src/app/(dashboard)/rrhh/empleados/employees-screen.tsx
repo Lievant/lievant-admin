@@ -10,6 +10,7 @@ import { deleteEmployeeAction } from './actions';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import { useCurrentUser } from '@/components/user-provider';
 import type { EmployeeFilterCatalogs } from './catalog-data';
@@ -230,6 +231,7 @@ export function EmployeesScreen({ page, errorKind, filters, cursor, cursorsStack
 
       {/* Table */}
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -368,6 +370,7 @@ export function EmployeesScreen({ page, errorKind, filters, cursor, cursorsStack
             })}
           </tbody>
         </table>
+        </ScrollableTable>
 
         {/* Pager — hidden when docStatus filter is active (all results returned) */}
         {hasPagination && (

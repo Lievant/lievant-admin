@@ -10,7 +10,9 @@ import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import { useCurrentUser } from '@/components/user-provider';
 import type { CatalogItem, ErrorKind, LicenseEmployeeRow, LicenseStats, ToolCatalogItem } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { NewToolDialog } from './new-tool-dialog';
+import { NewLicenseRecordDialog } from './new-license-record-dialog';
 
 interface Filters {
   search: string;
@@ -102,8 +104,14 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
   const router = useRouter();
   const currentUser = useCurrentUser();
   const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
+  const canManage =
+    isSuperAdmin ||
+    (currentUser?.permissions?.some(
+      (p) => p.section === 'transformacion' && p.module === 'licenciamientos' && p.action === 'write',
+    ) ?? false);
   const [search, setSearch] = useState(filters.search);
   const [showNewToolDialog, setShowNewToolDialog] = useState(false);
+  const [showNewRecordDialog, setShowNewRecordDialog] = useState(false);
 
   useEffect(() => setSearch(filters.search), [filters.search]);
 
@@ -148,19 +156,35 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
             {stats.totalEmployeesWithLicenses} empleado{stats.totalEmployeesWithLicenses !== 1 ? 's' : ''} con licencias registradas
           </p>
         </div>
-        {isSuperAdmin && (
-          <button
-            type="button"
-            onClick={() => setShowNewToolDialog(true)}
-            className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Nueva herramienta
-          </button>
+        {canManage && (
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowNewRecordDialog(true)}
+              className="flex items-center gap-2 rounded-md border border-terracota px-4 py-2 text-sm font-semibold text-terracota hover:bg-terracota/5"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Agregar empleado
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNewToolDialog(true)}
+              className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Nueva herramienta
+            </button>
+          </div>
         )}
       </header>
 
       {showNewToolDialog && <NewToolDialog onClose={() => setShowNewToolDialog(false)} />}
+      {showNewRecordDialog && (
+        <NewLicenseRecordDialog
+          existingEmployeeIds={employees.map((e) => e.employeeId)}
+          onClose={() => setShowNewRecordDialog(false)}
+        />
+      )}
 
       {errorKind === 'unavailable' && (
         <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
@@ -244,7 +268,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
       </div>
 
       {/* Tabla */}
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <ScrollableTable className="mt-4" bodyClassName="rounded-xl border border-slate-200 bg-white shadow-sm">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -297,7 +321,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
             )}
           </tbody>
         </table>
-      </div>
+      </ScrollableTable>
     </div>
   );
 }

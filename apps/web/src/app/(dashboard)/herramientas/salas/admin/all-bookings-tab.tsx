@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Booking, ListAdminBookingsParams, Room } from '@/lib/api';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { cancelBookingAction, listAdminBookingsAction, listRoomsByOfficeAction } from '../actions';
 import { BOOKING_STATUS_BADGE_STYLES, BOOKING_STATUS_LABELS, formatDateTimeRange } from '../constants';
 import { SelectField, TextField } from '../form-field';
@@ -95,7 +96,8 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
           No se encontraron reservas.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <ScrollableTable>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -138,6 +140,7 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
               ))}
             </tbody>
           </table>
+          </ScrollableTable>
         </div>
       )}
     </div>

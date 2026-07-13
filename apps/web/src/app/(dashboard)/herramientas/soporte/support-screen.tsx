@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { ErrorKind, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { PlusIcon } from '@/components/icons';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
@@ -141,7 +142,8 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
           )}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
@@ -206,6 +208,7 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
               })}
             </tbody>
           </table>
+          </ScrollableTable>
         </div>
       )}
     </>

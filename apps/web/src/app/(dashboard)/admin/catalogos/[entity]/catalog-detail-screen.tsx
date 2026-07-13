@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import type { CatalogItem } from '@/lib/api';
 import { CloseIcon, PlusIcon } from '@/components/icons';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CatalogConfig } from '../constants';
 import { deactivateCatalogItemAction, updateCatalogItemAction } from './actions';
 import { CatalogItemDialog } from './catalog-item-dialog';
@@ -74,6 +75,7 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
       )}
 
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -166,6 +168,7 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
             })}
           </tbody>
         </table>
+        </ScrollableTable>
       </div>
 
       {isCreateOpen && <CatalogItemDialog config={config} item={null} onClose={() => setCreateOpen(false)} />}

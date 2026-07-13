@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { Invoice, InvoiceStatus, VendorDetail, VendorStatement } from '@/lib/api';
 import { EyeIcon, PlusIcon } from '@/components/icons';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { INVOICE_STATUS_BADGE_STYLES, INVOICE_STATUS_LABELS, INVOICE_STATUSES, formatCurrency } from '../constants';
 import { AddInvoiceDialog } from './add-invoice-dialog';
 import { RegisterPaymentDialog } from './register-payment-dialog';
@@ -147,6 +148,7 @@ export function StatementTab({ vendor, statement }: { vendor: VendorDetail; stat
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -212,6 +214,7 @@ export function StatementTab({ vendor, statement }: { vendor: VendorDetail; stat
             ))}
           </tbody>
         </table>
+        </ScrollableTable>
       </div>
 
       {isAddOpen && (

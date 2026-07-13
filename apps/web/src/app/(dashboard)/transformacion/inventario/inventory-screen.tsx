@@ -9,6 +9,7 @@ import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { statusBadgeStyle, typeIcon } from './constants';
 
 interface Filters {
@@ -240,6 +241,7 @@ export function InventoryScreen({
 
       {/* Tabla */}
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -306,6 +308,7 @@ export function InventoryScreen({
             )}
           </tbody>
         </table>
+        </ScrollableTable>
       </div>
 
       {/* Paginación */}
