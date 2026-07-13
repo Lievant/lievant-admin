@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { InventoryAreaReport, InventoryReportEmployee } from '@/lib/api';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 
 interface Props {
   report: InventoryAreaReport | null;
@@ -216,6 +217,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
                   </div>
 
                   <div className="overflow-hidden rounded-lg border border-slate-200">
+                    <ScrollableTable>
                     <table className="w-full text-left text-xs">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
@@ -250,6 +252,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
                         ))}
                       </tbody>
                     </table>
+                    </ScrollableTable>
                   </div>
                 </div>
               ))}

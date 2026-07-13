@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import type { ClientListItem, ErrorKind, ProjectsPage } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
@@ -153,7 +154,8 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <ScrollableTable>
         <table className="w-full text-sm">
           <thead className="border-b border-slate-100 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
             <tr>
@@ -217,6 +219,7 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
             ))}
           </tbody>
         </table>
+        </ScrollableTable>
       </div>
 
       {/* Pagination */}

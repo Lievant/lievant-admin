@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { ErrorKind, MyVacationBalance, VacationRequestItem, VacationRequestStatus } from '@/lib/api';
 import { PlaneIcon, PlusIcon } from '@/components/icons';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 
 interface Props {
   balance: MyVacationBalance | null;
@@ -109,6 +110,7 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <ScrollableTable>
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                 <tr>
@@ -138,6 +140,7 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
                 ))}
               </tbody>
             </table>
+            </ScrollableTable>
           </div>
         )}
       </section>

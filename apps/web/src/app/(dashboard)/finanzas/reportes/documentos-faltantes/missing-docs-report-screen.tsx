@@ -5,6 +5,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import type { MissingDocumentReportItem } from '@/lib/api';
 import { ChevronLeftIcon, TableIcon } from '@/components/icons';
+import { ScrollableTable } from '@/components/ui/scrollable-table';
 
 interface Props {
   items: MissingDocumentReportItem[];
@@ -106,7 +107,8 @@ export function MissingDocsReportScreen({ items }: Props) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <ScrollableTable>
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
               <tr>
@@ -208,6 +210,7 @@ export function MissingDocsReportScreen({ items }: Props) {
               })}
             </tbody>
           </table>
+          </ScrollableTable>
         </div>
       )}
     </div>
