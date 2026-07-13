@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { Holiday } from './entities/holiday.entity';
 import { VacationBalance } from './entities/vacation-balance.entity';
@@ -18,6 +19,7 @@ import { VacationsService } from './vacations.service';
       VacationMovement,
       VacationPolicy,
       Holiday,
+      User,
     ]),
   ],
   controllers: [VacationsController],

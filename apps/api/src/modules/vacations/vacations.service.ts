@@ -54,6 +54,7 @@ export class VacationsService {
     @InjectRepository(VacationMovement) private readonly movementsRepo: Repository<VacationMovement>,
     @InjectRepository(VacationPolicy) private readonly policiesRepo: Repository<VacationPolicy>,
     @InjectRepository(Holiday) private readonly holidaysRepo: Repository<Holiday>,
+    @InjectRepository(User) private readonly usersRepo: Repository<User>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -62,7 +63,27 @@ export class VacationsService {
   // ==========================================================================
 
   private async getEmployeeByUserId(userId: string): Promise<EmployeeRecord> {
-    const employee = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+    // Primero por el vínculo directo auth_user_id
+    let employee = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+
+    // Fallback: por el email del usuario (para expedientes aún sin vincular)
+    if (!employee) {
+      const user = await this.usersRepo.findOne({ where: { id: userId } });
+      if (user?.email) {
+        employee = await this.employeesRepo
+          .createQueryBuilder('e')
+          .where('LOWER(e.corporate_email) = LOWER(:email)', { email: user.email })
+          .andWhere('e.deleted_at IS NULL')
+          .getOne();
+
+        // Auto-vincula para que las próximas consultas usen la vía directa
+        if (employee && !employee.authUserId) {
+          employee.authUserId = userId;
+          await this.employeesRepo.save(employee);
+        }
+      }
+    }
+
     if (!employee) {
       throw new NotFoundException('No se encontró un expediente de empleado vinculado a tu usuario.');
     }
