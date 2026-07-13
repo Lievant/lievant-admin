@@ -19,6 +19,7 @@ import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { Holiday } from '../vacations/entities/holiday.entity';
+import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
 
 export interface CatalogRecord {
   id: string;
@@ -61,6 +62,7 @@ export class CatalogsService {
     @InjectRepository(CatalogEmployeeDocumentType) employeeDocumentTypes: Repository<CatalogEmployeeDocumentType>,
     @InjectRepository(TicketAssignee) ticketAssignees: Repository<TicketAssignee>,
     @InjectRepository(Holiday) holidays: Repository<Holiday>,
+    @InjectRepository(EquipmentBrand) equipmentBrands: Repository<EquipmentBrand>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -79,6 +81,7 @@ export class CatalogsService {
       employee_document_types: employeeDocumentTypes as unknown as Repository<CatalogRecord>,
       ticket_assignees: ticketAssignees as unknown as Repository<CatalogRecord>,
       holidays: holidays as unknown as Repository<CatalogRecord>,
+      equipment_brands: equipmentBrands as unknown as Repository<CatalogRecord>,
     };
   }
 

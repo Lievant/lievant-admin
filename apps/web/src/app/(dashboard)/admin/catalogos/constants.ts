@@ -179,6 +179,13 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
       { key: 'isRecurring', label: 'Se repite cada año', type: 'checkbox' },
     ],
   },
+  {
+    entity: 'equipment_brands',
+    label: 'Marcas de equipos',
+    itemLabel: 'marca',
+    icon: LaptopIcon,
+    fields: [],
+  },
 ];
 
 export function getCatalogConfig(entity: string): CatalogConfig | undefined {

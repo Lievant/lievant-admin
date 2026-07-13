@@ -18,6 +18,7 @@ import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { Holiday } from '../vacations/entities/holiday.entity';
+import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { Holiday } from '../vacations/entities/holiday.entity';
       CatalogEmployeeDocumentType,
       TicketAssignee,
       Holiday,
+      EquipmentBrand,
     ]),
   ],
   controllers: [CatalogsController],
