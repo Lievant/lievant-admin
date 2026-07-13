@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { EquipmentBrandCatalog, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
+import { BrandSelect } from '../brand-select';
 
 interface EmployeeSuggestion {
   id: string;
@@ -189,10 +190,7 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
           </div>
           <div>
             <label className={labelClass}>Marca</label>
-            <select value={form.brand} onChange={(e) => set('brand', e.target.value)} className={inputClass}>
-              <option value="">Seleccionar…</option>
-              {brands.map((b) => <option key={b.id} value={b.name}>{b.name}</option>)}
-            </select>
+            <BrandSelect brands={brands} value={form.brand} onChange={(v) => set('brand', v)} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>Modelo</label>

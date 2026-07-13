@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { EquipmentBrandCatalog, EquipmentDetail, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
+import { BrandSelect } from '../brand-select';
 import { formatCurrency, formatDate } from '../constants';
 
 interface Catalogs {
@@ -155,10 +156,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Marca</label>
-          <select value={form.brand} onChange={(e) => set('brand', e.target.value)} className={inputClass}>
-            <option value="">—</option>
-            {catalogs.brands.map((b) => <option key={b.id} value={b.name}>{b.name}</option>)}
-          </select>
+          <BrandSelect brands={catalogs.brands} value={form.brand} onChange={(v) => set('brand', v)} className={inputClass} />
         </div>
         <div>
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Modelo</label>

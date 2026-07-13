@@ -1008,7 +1008,8 @@ export type CatalogEntity =
   | 'vendor_categories'
   | 'employee_document_types'
   | 'ticket_assignees'
-  | 'holidays';
+  | 'holidays'
+  | 'equipment_brands';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
