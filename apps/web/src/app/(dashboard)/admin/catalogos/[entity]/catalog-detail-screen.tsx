@@ -10,7 +10,7 @@ import { deactivateCatalogItemAction, updateCatalogItemAction } from './actions'
 import { CatalogItemDialog } from './catalog-item-dialog';
 
 interface CatalogDetailScreenProps {
-  config: CatalogConfig;
+  config: Omit<CatalogConfig, 'icon'>;
   items: CatalogItem[];
 }
 
