@@ -7,7 +7,7 @@ import type { CatalogConfig } from '../constants';
 import { createCatalogItemAction, updateCatalogItemAction } from './actions';
 
 interface CatalogItemDialogProps {
-  config: CatalogConfig;
+  config: Omit<CatalogConfig, 'icon'>;
   item: CatalogItem | null;
   onClose: () => void;
 }

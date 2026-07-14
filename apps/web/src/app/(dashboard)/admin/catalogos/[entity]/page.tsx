@@ -25,6 +25,10 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
     notFound();
   }
 
+  // `icon` es un componente (función) y no es serializable de Server a Client
+  // Component. Se excluye antes de pasar la config al Client Component.
+  const { icon: _icon, ...clientConfig } = config;
+
   const { data: items, errorKind } = await safe(listCatalogItems(config.entity));
 
   if (errorKind === 'forbidden') {
@@ -55,7 +59,7 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
         </div>
       )}
 
-      <CatalogDetailScreen config={config} items={items ?? []} />
+      <CatalogDetailScreen config={clientConfig} items={items ?? []} />
     </div>
   );
 }
