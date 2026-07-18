@@ -2,21 +2,27 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { AdAccount } from './entities/ad-account.entity';
+import { ApiCredential } from './entities/api-credential.entity';
 import { MediaBudget } from './entities/budget.entity';
 import { DailySpend } from './entities/daily-spend.entity';
 import { MediaAlert } from './entities/media-alert.entity';
 import { MediaAuditLog } from './entities/media-audit-log.entity';
 import { PacingSnapshot, PacingStatus } from './entities/pacing-snapshot.entity';
 import { Platform } from './entities/platform.entity';
+import { SyncLog } from './entities/sync-log.entity';
 import {
   CreateAdAccountDto,
+  CreateCredentialDto,
   QueryAccountsDto,
   QueryAlertsDto,
   QueryAuditLogDto,
   QueryBudgetsDto,
+  QueryCredentialsDto,
   QuerySpendDto,
+  QuerySyncLogsDto,
   UpdateAdAccountDto,
   UpdateBudgetDto,
+  UpdateCredentialDto,
   UpsertBudgetDto,
 } from './dto/media.dto';
 import { MediaPacingService, PacingResult } from './media-pacing.service';
@@ -60,6 +66,7 @@ export interface AccountPacingRow {
   daysToExhaustion: number | null;
   projectedExhaustionDate: string | null;
   lastSyncedAt: Date | null;
+  lastSyncError: string | null;
   status: PacingStatus;
 }
 
@@ -75,6 +82,8 @@ export class MediaService {
     @InjectRepository(PacingSnapshot) private readonly pacingRepo: Repository<PacingSnapshot>,
     @InjectRepository(MediaAlert) private readonly alertRepo: Repository<MediaAlert>,
     @InjectRepository(MediaAuditLog) private readonly auditRepo: Repository<MediaAuditLog>,
+    @InjectRepository(ApiCredential) private readonly credentialRepo: Repository<ApiCredential>,
+    @InjectRepository(SyncLog) private readonly syncLogRepo: Repository<SyncLog>,
     private readonly pacing: MediaPacingService,
     private readonly dataSource: DataSource,
   ) {}
@@ -186,6 +195,7 @@ export class MediaService {
       daysToExhaustion: result.daysToExhaustion,
       projectedExhaustionDate,
       lastSyncedAt: account.lastSyncedAt,
+      lastSyncError: account.lastSyncError,
       status: result.status,
     };
 
@@ -888,6 +898,174 @@ export class MediaService {
       nativeCampaignName: l.nativeCampaignName,
       performedBy: l.performedBy,
       createdAt: l.createdAt,
+    }));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Credenciales de API
+  // ---------------------------------------------------------------------------
+
+  async listCredentials(
+    filters: QueryCredentialsDto,
+  ): Promise<ReturnType<MediaService['serializeCredential']>[]> {
+    const where: Record<string, unknown> = {};
+    if (filters.platformId) where.platformId = filters.platformId;
+    if (!filters.includeInactive) where.isActive = true;
+
+    const credentials = await this.credentialRepo.find({
+      where,
+      relations: ['platform'],
+      order: { createdAt: 'DESC' },
+    });
+    return credentials.map((c) => this.serializeCredential(c));
+  }
+
+  async createCredential(
+    dto: CreateCredentialDto,
+    userId?: string,
+  ): Promise<ReturnType<MediaService['serializeCredential']>> {
+    const platform = await this.platformRepo.findOne({ where: { id: dto.platformId } });
+    if (!platform) throw new BadRequestException('Plataforma inválida');
+
+    const credential = this.credentialRepo.create({
+      platformId: dto.platformId,
+      name: dto.name,
+      secretArn: dto.secretArn,
+      credentialType: dto.credentialType as ApiCredential['credentialType'],
+      mccAccountId: dto.mccAccountId ?? null,
+      businessAccountId: dto.businessAccountId ?? null,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
+      notes: dto.notes ?? null,
+      isActive: true,
+      createdBy: userId ?? null,
+    });
+    const saved = await this.credentialRepo.save(credential);
+    const withPlatform = await this.credentialRepo.findOne({
+      where: { id: saved.id },
+      relations: ['platform'],
+    });
+    return this.serializeCredential(withPlatform ?? saved);
+  }
+
+  async updateCredential(
+    id: string,
+    dto: UpdateCredentialDto,
+  ): Promise<ReturnType<MediaService['serializeCredential']>> {
+    const credential = await this.credentialRepo.findOne({ where: { id } });
+    if (!credential) throw new NotFoundException('Credencial no encontrada');
+
+    if (dto.name !== undefined) credential.name = dto.name;
+    if (dto.secretArn !== undefined) credential.secretArn = dto.secretArn;
+    if (dto.credentialType !== undefined) {
+      credential.credentialType = dto.credentialType as ApiCredential['credentialType'];
+    }
+    if (dto.mccAccountId !== undefined) credential.mccAccountId = dto.mccAccountId;
+    if (dto.businessAccountId !== undefined) credential.businessAccountId = dto.businessAccountId;
+    if (dto.expiresAt !== undefined) credential.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (dto.notes !== undefined) credential.notes = dto.notes;
+    if (dto.isActive !== undefined) credential.isActive = dto.isActive;
+
+    const saved = await this.credentialRepo.save(credential);
+    const withPlatform = await this.credentialRepo.findOne({
+      where: { id: saved.id },
+      relations: ['platform'],
+    });
+    return this.serializeCredential(withPlatform ?? saved);
+  }
+
+  async deactivateCredential(id: string): Promise<{ id: string; isActive: boolean }> {
+    const credential = await this.credentialRepo.findOne({ where: { id } });
+    if (!credential) throw new NotFoundException('Credencial no encontrada');
+    credential.isActive = false;
+    await this.credentialRepo.save(credential);
+    return { id: credential.id, isActive: false };
+  }
+
+  private serializeCredential(c: ApiCredential) {
+    const now = Date.now();
+    const expiresAt = c.expiresAt ? new Date(c.expiresAt) : null;
+    const isExpired = expiresAt ? expiresAt.getTime() < now : false;
+    const daysToExpire = expiresAt
+      ? Math.ceil((expiresAt.getTime() - now) / (1000 * 60 * 60 * 24))
+      : null;
+
+    let status: 'active' | 'expired' | 'inactive';
+    if (!c.isActive) status = 'inactive';
+    else if (isExpired) status = 'expired';
+    else status = 'active';
+
+    return {
+      id: c.id,
+      platformId: c.platformId,
+      platform: c.platform
+        ? { id: c.platform.id, name: c.platform.name, slug: c.platform.slug, color: c.platform.color }
+        : null,
+      name: c.name,
+      secretArn: c.secretArn,
+      credentialType: c.credentialType,
+      mccAccountId: c.mccAccountId,
+      businessAccountId: c.businessAccountId,
+      expiresAt: c.expiresAt,
+      daysToExpire,
+      isExpired,
+      lastVerifiedAt: c.lastVerifiedAt,
+      notes: c.notes,
+      isActive: c.isActive,
+      status,
+      createdAt: c.createdAt,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Logs de sincronización
+  // ---------------------------------------------------------------------------
+
+  async getSyncLogs(filters: QuerySyncLogsDto): Promise<
+    Array<{
+      id: string;
+      platform: string | null;
+      platformSlug: string | null;
+      accountName: string | null;
+      syncType: string;
+      startedAt: Date;
+      finishedAt: Date | null;
+      durationMs: number | null;
+      status: string;
+      recordsFetched: number;
+      recordsSaved: number;
+      errorMessage: string | null;
+      httpStatus: number | null;
+    }>
+  > {
+    const qb = this.syncLogRepo
+      .createQueryBuilder('s')
+      .leftJoinAndSelect('s.platform', 'platform')
+      .leftJoinAndSelect('s.adAccount', 'account')
+      .orderBy('s.started_at', 'DESC');
+
+    if (filters.platformId) qb.andWhere('s.platform_id = :platformId', { platformId: filters.platformId });
+    if (filters.accountId) qb.andWhere('s.ad_account_id = :accountId', { accountId: filters.accountId });
+    if (filters.status) qb.andWhere('s.status = :status', { status: filters.status });
+    qb.limit(filters.limit ?? 100);
+
+    const logs = await qb.getMany();
+    return logs.map((l) => ({
+      id: l.id,
+      platform: l.platform?.name ?? null,
+      platformSlug: l.platform?.slug ?? null,
+      accountName: l.adAccount?.nativeAccountName ?? l.adAccount?.nativeAccountId ?? null,
+      syncType: l.syncType,
+      startedAt: l.startedAt,
+      finishedAt: l.finishedAt,
+      durationMs:
+        l.finishedAt && l.startedAt
+          ? new Date(l.finishedAt).getTime() - new Date(l.startedAt).getTime()
+          : null,
+      status: l.status,
+      recordsFetched: l.recordsFetched,
+      recordsSaved: l.recordsSaved,
+      errorMessage: l.errorMessage,
+      httpStatus: l.httpStatus,
     }));
   }
 }

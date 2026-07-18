@@ -6,14 +6,24 @@ import type {
   AccountPacingRow,
   CreateMediaAccountPayload,
   ErrorKind,
+  MediaCredential,
   MediaPlatform,
 } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
+import { EmployeePicker, type EmployeePickerValue } from '@/app/(dashboard)/rrhh/empleados/employee-picker';
 import { formatMoney, formatPct, STATUS_OPTIONS, StatusBadge } from '../constants';
 import { createMediaAccountAction } from './actions';
+import { ClientPicker, type ClientPickerValue } from './client-picker';
+
+const CREDENTIAL_TYPE_LABELS: Record<string, string> = {
+  system_token: 'System Token',
+  oauth2: 'OAuth 2.0',
+  oauth1a: 'OAuth 1.0a',
+  developer_token: 'Developer Token',
+};
 
 interface Props {
   accounts: AccountPacingRow[];
@@ -199,9 +209,41 @@ function CreateAccountModal({
   const [nativeAccountId, setNativeAccountId] = useState('');
   const [nativeAccountName, setNativeAccountName] = useState('');
   const [currency, setCurrency] = useState('MXN');
-  const [clientRecordId, setClientRecordId] = useState('');
+  const [client, setClient] = useState<ClientPickerValue | null>(null);
+  const [manager, setManager] = useState<EmployeePickerValue | null>(null);
+  const [credentialId, setCredentialId] = useState('');
+  const [credentials, setCredentials] = useState<MediaCredential[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const selectedPlatform = platforms.find((p) => p.id === platformId);
+  const nativeIdPlaceholder =
+    selectedPlatform?.slug === 'google'
+      ? '123-456-7890'
+      : selectedPlatform?.slug === 'meta'
+        ? 'act_1234567890'
+        : 'ID de la cuenta en la plataforma';
+
+  // Cargar credenciales de la plataforma seleccionada
+  useEffect(() => {
+    if (!platformId) {
+      setCredentials([]);
+      return;
+    }
+    let active = true;
+    setCredentialId('');
+    fetch(`/api/media/credentials?platformId=${platformId}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: MediaCredential[]) => {
+        if (active) setCredentials(Array.isArray(data) ? data.filter((c) => c.status === 'active') : []);
+      })
+      .catch(() => {
+        if (active) setCredentials([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [platformId]);
 
   async function handleSubmit() {
     if (!platformId || !nativeAccountId.trim()) {
@@ -216,7 +258,9 @@ function CreateAccountModal({
       currency,
     };
     if (nativeAccountName.trim()) payload.nativeAccountName = nativeAccountName.trim();
-    if (clientRecordId.trim()) payload.clientRecordId = clientRecordId.trim();
+    if (client) payload.clientRecordId = client.id;
+    if (manager) payload.accountManagerId = manager.id;
+    if (credentialId) payload.credentialId = credentialId;
     const res = await createMediaAccountAction(payload);
     setSubmitting(false);
     if (res.success) onCreated();
@@ -225,7 +269,7 @@ function CreateAccountModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6 shadow-xl">
         <h2 className="mb-4 text-lg font-semibold text-navy">Nueva cuenta publicitaria</h2>
         <div className="space-y-3">
           <Field label="Plataforma">
@@ -241,11 +285,41 @@ function CreateAccountModal({
               ))}
             </select>
           </Field>
-          <Field label="ID nativo de la cuenta">
+
+          <ClientPicker label="Cliente" value={client} onSelect={setClient} id="mc-client" />
+
+          <EmployeePicker
+            label="Account Manager"
+            value={manager}
+            onSelect={setManager}
+            id="mc-manager"
+          />
+
+          <Field label="Credencial de API">
+            <select
+              value={credentialId}
+              onChange={(e) => setCredentialId(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="">— Sin credencial —</option>
+              {credentials.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({CREDENTIAL_TYPE_LABELS[c.credentialType] ?? c.credentialType})
+                </option>
+              ))}
+            </select>
+            {credentials.length === 0 && (
+              <p className="mt-1 text-xs text-slate-400">
+                No hay credenciales activas para esta plataforma. Regístralas en Configuración → Credenciales de API.
+              </p>
+            )}
+          </Field>
+
+          <Field label="Cuenta publicitaria nativa (ID)">
             <input
               value={nativeAccountId}
               onChange={(e) => setNativeAccountId(e.target.value)}
-              placeholder="act_1234567890"
+              placeholder={nativeIdPlaceholder}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </Field>
@@ -257,26 +331,16 @@ function CreateAccountModal({
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Moneda">
-              <select
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              >
-                <option value="MXN">MXN</option>
-                <option value="USD">USD</option>
-              </select>
-            </Field>
-            <Field label="ID de cliente (opcional)">
-              <input
-                value={clientRecordId}
-                onChange={(e) => setClientRecordId(e.target.value)}
-                placeholder="UUID"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
-              />
-            </Field>
-          </div>
+          <Field label="Moneda">
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="w-full max-w-[10rem] rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              <option value="MXN">MXN</option>
+              <option value="USD">USD</option>
+            </select>
+          </Field>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <div className="mt-6 flex justify-end gap-2">
