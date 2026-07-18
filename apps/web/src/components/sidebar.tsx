@@ -2,12 +2,16 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
+  BellIcon,
   BroadcastIcon,
   BuildingIcon,
+  ChartDotsIcon,
   CpuIcon,
   DoorIcon,
+  GearIcon,
   HeadsetIcon,
   HomeIcon,
   IdCardIcon,
@@ -15,6 +19,7 @@ import {
   LicenseIcon,
   ListIcon,
   LogoutIcon,
+  MegaphoneIcon,
   PeopleIcon,
   PlaneIcon,
   ReportMoneyIcon,
@@ -23,9 +28,11 @@ import {
   ShoppingCartIcon,
   SpeakerphoneIcon,
   TableIcon,
+  TargetIcon,
   TicketIcon,
   TruckIcon,
   UsersGroupIcon,
+  WalletIcon,
 } from '@/components/icons';
 import type { CurrentUser } from '@/lib/api';
 
@@ -45,6 +52,7 @@ export function Sidebar({ user }: SidebarProps) {
   const showFinanzas = hasSection(user, 'finanzas');
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
+  const showMedios = hasSection(user, 'medios');
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-navy text-slate-200">
@@ -86,6 +94,50 @@ export function Sidebar({ user }: SidebarProps) {
                 <NavSubLink href="/finanzas/reportes" active={pathname.startsWith('/finanzas/reportes')}>
                   <TableIcon className="h-4 w-4" />
                   Reportes
+                </NavSubLink>
+              </SubMenu>
+            )}
+          </>
+        )}
+
+        {showMedios && (
+          <>
+            <NavLink href="/medios" active={pathname === '/medios'}>
+              <ChartDotsIcon className="h-5 w-5" />
+              Medios
+            </NavLink>
+            {pathname.startsWith('/medios') && (
+              <SubMenu>
+                <NavSubLink href="/medios/meta" active={pathname.startsWith('/medios/meta')}>
+                  <SpeakerphoneIcon className="h-4 w-4" />
+                  Meta Ads
+                </NavSubLink>
+                <NavSubLink href="/medios/google" active={pathname.startsWith('/medios/google')}>
+                  <TargetIcon className="h-4 w-4" />
+                  Google Ads
+                </NavSubLink>
+                <NavSubLink href="/medios/x" active={pathname.startsWith('/medios/x')}>
+                  <MegaphoneIcon className="h-4 w-4" />
+                  X Ads
+                </NavSubLink>
+                <NavSubLink
+                  href="/medios/presupuestos"
+                  active={pathname.startsWith('/medios/presupuestos')}
+                >
+                  <WalletIcon className="h-4 w-4" />
+                  Presupuestos
+                </NavSubLink>
+                <NavSubLink href="/medios/alertas" active={pathname.startsWith('/medios/alertas')}>
+                  <BellIcon className="h-4 w-4" />
+                  Alertas
+                  <MediaAlertsBadge />
+                </NavSubLink>
+                <NavSubLink
+                  href="/medios/configuracion"
+                  active={pathname.startsWith('/medios/configuracion')}
+                >
+                  <GearIcon className="h-4 w-4" />
+                  Configuración
                 </NavSubLink>
               </SubMenu>
             )}
@@ -252,6 +304,32 @@ function SidebarAvatar({ name, email }: { name: string; email: string | null }) 
         {initial}
       </div>
     </div>
+  );
+}
+
+function MediaAlertsBadge() {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/media/alerts/count')
+      .then((res) => (res.ok ? res.json() : { count: 0 }))
+      .then((data: { count?: number }) => {
+        if (active) setCount(data.count ?? 0);
+      })
+      .catch(() => {
+        /* silencioso: sin permisos o backend no disponible */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (count <= 0) return null;
+  return (
+    <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-semibold text-white">
+      {count}
+    </span>
   );
 }
 
