@@ -40,6 +40,15 @@ import { EquipmentType } from '../modules/inventory/entities/equipment-type.enti
 import { EmployeeLicense } from '../modules/licenses/entities/employee-license.entity';
 import { ToolAssignment } from '../modules/licenses/entities/tool-assignment.entity';
 import { ToolCatalog } from '../modules/licenses/entities/tool-catalog.entity';
+import { AdAccount } from '../modules/media/entities/ad-account.entity';
+import { ApiCredential } from '../modules/media/entities/api-credential.entity';
+import { MediaBudget } from '../modules/media/entities/budget.entity';
+import { DailySpend } from '../modules/media/entities/daily-spend.entity';
+import { MediaAlert } from '../modules/media/entities/media-alert.entity';
+import { MediaAuditLog } from '../modules/media/entities/media-audit-log.entity';
+import { PacingSnapshot } from '../modules/media/entities/pacing-snapshot.entity';
+import { Platform } from '../modules/media/entities/platform.entity';
+import { SyncLog } from '../modules/media/entities/sync-log.entity';
 import { ProjectBillingMilestone } from '../modules/projects/entities/project-billing-milestone.entity';
 import { ProjectBusinessUnit } from '../modules/projects/entities/project-business-unit.entity';
 import { ProjectDocument } from '../modules/projects/entities/project-document.entity';
@@ -117,6 +126,15 @@ const AppDataSource = new DataSource({
     VacationMovement,
     VacationPolicy,
     Holiday,
+    Platform,
+    ApiCredential,
+    AdAccount,
+    DailySpend,
+    MediaBudget,
+    PacingSnapshot,
+    MediaAlert,
+    MediaAuditLog,
+    SyncLog,
   ],
   migrations: ['src/database/migrations/*.ts'],
   migrationsTableName: 'migrations',

@@ -2921,3 +2921,281 @@ export function getVacationReport(startDate: string, endDate: string): Promise<V
   const qs = new URLSearchParams({ startDate, endDate }).toString();
   return apiFetchWithRetry<VacationReportRow[]>(`/vacations/report?${qs}`);
 }
+
+// --- Medios (Control de Pauta) ---
+
+export type PacingStatus = 'green' | 'yellow' | 'red' | 'gray';
+
+export interface MediaPlatform {
+  id: string;
+  name: string;
+  slug: string;
+  icon: string | null;
+  color: string | null;
+  phase: number;
+  isActive: boolean;
+  dataLatencyHours: number;
+  supportsPause: boolean;
+}
+
+export interface AccountPacingRow {
+  accountId: string;
+  nativeAccountId: string;
+  nativeAccountName: string | null;
+  platform: { id: string; slug: string; name: string; color: string | null; icon: string | null };
+  client: { id: string; name: string } | null;
+  accountManager: { id: string; name: string } | null;
+  currency: string;
+  budgetAmount: number | null;
+  spendAccumulated: number;
+  spendExpected: number | null;
+  pctConsumed: number | null;
+  pacingPct: number | null;
+  spendDailyAvg: number;
+  spendDailyIdeal: number | null;
+  spendDailyRemaining: number | null;
+  projectedClose: number | null;
+  daysRemaining: number;
+  daysToExhaustion: number | null;
+  projectedExhaustionDate: string | null;
+  lastSyncedAt: string | null;
+  status: PacingStatus;
+}
+
+export interface MediaStats {
+  totalBudget: number;
+  totalSpend: number;
+  pctConsumed: number;
+  accountsAtRisk: number;
+  totalAccounts: number;
+  accountsWithoutBudget: number;
+  month: string;
+}
+
+export interface MediaSummary {
+  stats: MediaStats;
+  needsAttention: AccountPacingRow[];
+  byClient: Array<{
+    clientId: string | null;
+    clientName: string;
+    accounts: AccountPacingRow[];
+    worstStatus: PacingStatus;
+  }>;
+  platformFreshness: Array<{ slug: string; name: string; lastSyncedAt: string | null }>;
+  accountsWithoutBudget: number;
+}
+
+export interface MediaBudgetItem {
+  id: string;
+  adAccountId: string;
+  budgetMonth: string;
+  amount: number;
+  currency: string;
+  amountMxn: number | null;
+  version: number;
+  isCurrent: boolean;
+  notes: string | null;
+  source: string;
+  createdAt: string;
+  account?: {
+    id: string;
+    nativeAccountName: string | null;
+    nativeAccountId: string;
+    platform: string | null;
+    client: string | null;
+  };
+}
+
+export interface MediaAlertItem {
+  id: string;
+  adAccountId: string;
+  alertType: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  message: string;
+  details: Record<string, unknown> | null;
+  status: 'active' | 'acknowledged' | 'resolved';
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  account?: {
+    id: string;
+    nativeAccountName: string | null;
+    platform: string | null;
+    platformSlug: string | null;
+    client: string | null;
+  };
+}
+
+export interface MediaDailySpend {
+  date: string;
+  spendMxn: number;
+  spendNative: number;
+  currency: string;
+  source: string;
+}
+
+export interface MediaAccountDetail {
+  account: AccountPacingRow;
+  raw: {
+    id: string;
+    platformId: string;
+    credentialId: string | null;
+    clientRecordId: string | null;
+    timezone: string;
+    syncEnabled: boolean;
+    lastSyncError: string | null;
+    createdAt: string;
+  };
+  dailySpend: MediaDailySpend[];
+  budgetHistory: MediaBudgetItem[];
+  alerts: MediaAlertItem[];
+}
+
+export interface MediaAuditEntry {
+  id: string;
+  adAccountId: string | null;
+  actionType: string;
+  reason: string | null;
+  success: boolean | null;
+  errorMessage: string | null;
+  nativeCampaignName: string | null;
+  performedBy: string | null;
+  createdAt: string;
+}
+
+export interface ListMediaAccountsParams {
+  platform?: string;
+  clientRecordId?: string;
+  status?: string;
+  month?: string;
+  search?: string;
+}
+
+export interface CreateMediaAccountPayload {
+  platformId: string;
+  credentialId?: string;
+  clientRecordId?: string;
+  nativeAccountId: string;
+  nativeAccountName?: string;
+  currency?: string;
+  timezone?: string;
+  accountManagerId?: string;
+  isActive?: boolean;
+  syncEnabled?: boolean;
+}
+
+export interface UpsertMediaBudgetPayload {
+  adAccountId: string;
+  budgetMonth: string;
+  amount: number;
+  currency?: string;
+  amountMxn?: number;
+  approvedBy?: string;
+  notes?: string;
+  source?: string;
+}
+
+export function getMediaSummary(): Promise<MediaSummary> {
+  return apiFetchWithRetry<MediaSummary>('/media/summary');
+}
+
+export function getMediaStats(): Promise<MediaStats> {
+  return apiFetchWithRetry<MediaStats>('/media/stats');
+}
+
+export function listMediaPlatforms(): Promise<MediaPlatform[]> {
+  return apiFetchWithRetry<MediaPlatform[]>('/media/platforms');
+}
+
+export function listMediaAccounts(params: ListMediaAccountsParams = {}): Promise<AccountPacingRow[]> {
+  const query = new URLSearchParams();
+  if (params.platform) query.set('platform', params.platform);
+  if (params.clientRecordId) query.set('clientRecordId', params.clientRecordId);
+  if (params.status) query.set('status', params.status);
+  if (params.month) query.set('month', params.month);
+  if (params.search) query.set('search', params.search);
+  const qs = query.toString();
+  return apiFetchWithRetry<AccountPacingRow[]>(`/media/accounts${qs ? `?${qs}` : ''}`);
+}
+
+export function getMediaAccount(id: string): Promise<MediaAccountDetail> {
+  return apiFetchWithRetry<MediaAccountDetail>(`/media/accounts/${id}`);
+}
+
+export function createMediaAccount(payload: CreateMediaAccountPayload): Promise<unknown> {
+  return apiFetchWithRetry('/media/accounts', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateMediaAccount(
+  id: string,
+  payload: Partial<CreateMediaAccountPayload>,
+): Promise<unknown> {
+  return apiFetchWithRetry(`/media/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+}
+
+export function getMediaAccountSpend(id: string, days = 30): Promise<MediaDailySpend[]> {
+  return apiFetchWithRetry<MediaDailySpend[]>(`/media/accounts/${id}/spend?days=${days}`);
+}
+
+export function listMediaBudgets(params: { adAccountId?: string; month?: string } = {}): Promise<
+  MediaBudgetItem[]
+> {
+  const query = new URLSearchParams();
+  if (params.adAccountId) query.set('adAccountId', params.adAccountId);
+  if (params.month) query.set('month', params.month);
+  const qs = query.toString();
+  return apiFetchWithRetry<MediaBudgetItem[]>(`/media/budgets${qs ? `?${qs}` : ''}`);
+}
+
+export function upsertMediaBudget(payload: UpsertMediaBudgetPayload): Promise<MediaBudgetItem> {
+  return apiFetchWithRetry<MediaBudgetItem>('/media/budgets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMediaBudget(
+  id: string,
+  payload: { amount?: number; currency?: string; notes?: string },
+): Promise<MediaBudgetItem> {
+  return apiFetchWithRetry<MediaBudgetItem>(`/media/budgets/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function listMediaAlerts(
+  params: { status?: string; severity?: string; adAccountId?: string; alertType?: string } = {},
+): Promise<MediaAlertItem[]> {
+  const query = new URLSearchParams();
+  if (params.status) query.set('status', params.status);
+  if (params.severity) query.set('severity', params.severity);
+  if (params.adAccountId) query.set('adAccountId', params.adAccountId);
+  if (params.alertType) query.set('alertType', params.alertType);
+  const qs = query.toString();
+  return apiFetchWithRetry<MediaAlertItem[]>(`/media/alerts${qs ? `?${qs}` : ''}`);
+}
+
+export function getMediaAlertsCount(): Promise<{ count: number }> {
+  return apiFetchWithRetry<{ count: number }>('/media/alerts/count');
+}
+
+export function acknowledgeMediaAlert(id: string): Promise<MediaAlertItem> {
+  return apiFetchWithRetry<MediaAlertItem>(`/media/alerts/${id}/acknowledge`, { method: 'PATCH' });
+}
+
+export function getMediaAuditLog(
+  params: { adAccountId?: string; actionType?: string; limit?: number } = {},
+): Promise<MediaAuditEntry[]> {
+  const query = new URLSearchParams();
+  if (params.adAccountId) query.set('adAccountId', params.adAccountId);
+  if (params.actionType) query.set('actionType', params.actionType);
+  if (params.limit) query.set('limit', String(params.limit));
+  const qs = query.toString();
+  return apiFetchWithRetry<MediaAuditEntry[]>(`/media/audit-log${qs ? `?${qs}` : ''}`);
+}
+
+export function triggerMediaSync(): Promise<{ synced: number }> {
+  return apiFetchWithRetry<{ synced: number }>('/media/sync/trigger', { method: 'POST' });
+}
