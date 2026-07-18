@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -16,13 +17,17 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   CreateAdAccountDto,
+  CreateCredentialDto,
   QueryAccountsDto,
   QueryAlertsDto,
   QueryAuditLogDto,
   QueryBudgetsDto,
+  QueryCredentialsDto,
   QuerySpendDto,
+  QuerySyncLogsDto,
   UpdateAdAccountDto,
   UpdateBudgetDto,
+  UpdateCredentialDto,
   UpsertBudgetDto,
 } from './dto/media.dto';
 import { MediaService } from './media.service';
@@ -136,6 +141,40 @@ export class MediaController {
   @RequirePermission('medios', 'alertas', 'read')
   acknowledgeAlert(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     return this.service.acknowledgeAlert(id, user.id);
+  }
+
+  // --- Credenciales de API ---
+
+  @Get('credentials')
+  @RequirePermission('medios', 'configuracion', 'write')
+  listCredentials(@Query() query: QueryCredentialsDto) {
+    return this.service.listCredentials(query);
+  }
+
+  @Post('credentials')
+  @RequirePermission('medios', 'configuracion', 'write')
+  createCredential(@Body() dto: CreateCredentialDto, @CurrentUser() user: User) {
+    return this.service.createCredential(dto, user.id);
+  }
+
+  @Patch('credentials/:id')
+  @RequirePermission('medios', 'configuracion', 'write')
+  updateCredential(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateCredentialDto) {
+    return this.service.updateCredential(id, dto);
+  }
+
+  @Delete('credentials/:id')
+  @RequirePermission('medios', 'configuracion', 'write')
+  deactivateCredential(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deactivateCredential(id);
+  }
+
+  // --- Logs de sincronización ---
+
+  @Get('sync-logs')
+  @RequirePermission('medios', 'auditoria', 'read')
+  getSyncLogs(@Query() query: QuerySyncLogsDto) {
+    return this.service.getSyncLogs(query);
   }
 
   // --- Bitácora ---

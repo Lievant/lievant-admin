@@ -2959,6 +2959,7 @@ export interface AccountPacingRow {
   daysToExhaustion: number | null;
   projectedExhaustionDate: string | null;
   lastSyncedAt: string | null;
+  lastSyncError: string | null;
   status: PacingStatus;
 }
 
@@ -3198,4 +3199,113 @@ export function getMediaAuditLog(
 
 export function triggerMediaSync(): Promise<{ synced: number }> {
   return apiFetchWithRetry<{ synced: number }>('/media/sync/trigger', { method: 'POST' });
+}
+
+// --- Medios: credenciales de API ---
+
+export type MediaCredentialType = 'system_token' | 'oauth2' | 'oauth1a' | 'developer_token';
+export type MediaCredentialStatus = 'active' | 'expired' | 'inactive';
+
+export interface MediaCredential {
+  id: string;
+  platformId: string;
+  platform: { id: string; name: string; slug: string; color: string | null } | null;
+  name: string;
+  secretArn: string;
+  credentialType: MediaCredentialType;
+  mccAccountId: string | null;
+  businessAccountId: string | null;
+  expiresAt: string | null;
+  daysToExpire: number | null;
+  isExpired: boolean;
+  lastVerifiedAt: string | null;
+  notes: string | null;
+  isActive: boolean;
+  status: MediaCredentialStatus;
+  createdAt: string;
+}
+
+export interface CreateMediaCredentialPayload {
+  platformId: string;
+  name: string;
+  secretArn: string;
+  credentialType: MediaCredentialType;
+  mccAccountId?: string;
+  businessAccountId?: string;
+  expiresAt?: string;
+  notes?: string;
+}
+
+export interface UpdateMediaCredentialPayload {
+  name?: string;
+  secretArn?: string;
+  credentialType?: MediaCredentialType;
+  mccAccountId?: string;
+  businessAccountId?: string;
+  expiresAt?: string;
+  notes?: string;
+  isActive?: boolean;
+}
+
+export function listMediaCredentials(
+  params: { platformId?: string; includeInactive?: boolean } = {},
+): Promise<MediaCredential[]> {
+  const query = new URLSearchParams();
+  if (params.platformId) query.set('platformId', params.platformId);
+  if (params.includeInactive) query.set('includeInactive', 'true');
+  const qs = query.toString();
+  return apiFetchWithRetry<MediaCredential[]>(`/media/credentials${qs ? `?${qs}` : ''}`);
+}
+
+export function createMediaCredential(payload: CreateMediaCredentialPayload): Promise<MediaCredential> {
+  return apiFetchWithRetry<MediaCredential>('/media/credentials', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateMediaCredential(
+  id: string,
+  payload: UpdateMediaCredentialPayload,
+): Promise<MediaCredential> {
+  return apiFetchWithRetry<MediaCredential>(`/media/credentials/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateMediaCredential(id: string): Promise<{ id: string; isActive: boolean }> {
+  return apiFetchWithRetry<{ id: string; isActive: boolean }>(`/media/credentials/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// --- Medios: logs de sincronización ---
+
+export interface MediaSyncLog {
+  id: string;
+  platform: string | null;
+  platformSlug: string | null;
+  accountName: string | null;
+  syncType: string;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  status: 'running' | 'success' | 'error' | 'partial';
+  recordsFetched: number;
+  recordsSaved: number;
+  errorMessage: string | null;
+  httpStatus: number | null;
+}
+
+export function getMediaSyncLogs(
+  params: { platformId?: string; accountId?: string; status?: string; limit?: number } = {},
+): Promise<MediaSyncLog[]> {
+  const query = new URLSearchParams();
+  if (params.platformId) query.set('platformId', params.platformId);
+  if (params.accountId) query.set('accountId', params.accountId);
+  if (params.status) query.set('status', params.status);
+  if (params.limit) query.set('limit', String(params.limit));
+  const qs = query.toString();
+  return apiFetchWithRetry<MediaSyncLog[]>(`/media/sync-logs${qs ? `?${qs}` : ''}`);
 }

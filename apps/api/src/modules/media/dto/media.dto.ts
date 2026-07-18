@@ -229,3 +229,111 @@ export class QuerySpendDto {
   @IsString()
   month?: string;
 }
+
+// --- Credenciales de API ---
+
+const CREDENTIAL_TYPES = ['system_token', 'oauth2', 'oauth1a', 'developer_token'];
+
+export class CreateCredentialDto {
+  @IsUUID()
+  platformId!: string;
+
+  @IsString()
+  @Length(1, 200)
+  name!: string;
+
+  @IsString()
+  @Length(1, 500)
+  secretArn!: string;
+
+  @IsIn(CREDENTIAL_TYPES)
+  credentialType!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  mccAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  businessAccountId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+
+export class UpdateCredentialDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 200)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  secretArn?: string;
+
+  @IsOptional()
+  @IsIn(CREDENTIAL_TYPES)
+  credentialType?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  mccAccountId?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 100)
+  businessAccountId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class QueryCredentialsDto {
+  @IsOptional()
+  @IsUUID()
+  platformId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  includeInactive?: boolean;
+}
+
+// --- Logs de sincronización ---
+
+export class QuerySyncLogsDto {
+  @IsOptional()
+  @IsUUID()
+  platformId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  accountId?: string;
+
+  @IsOptional()
+  @IsIn(['running', 'success', 'error', 'partial'])
+  status?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  limit?: number;
+}
