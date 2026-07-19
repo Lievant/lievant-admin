@@ -157,16 +157,16 @@ function countryForLocation(loc: string | null): string {
 // ── component ─────────────────────────────────────────────────────────────────
 
 interface Props {
-  birthdays: BirthdayChip[];
   announcements: Announcement[];
   canCreateEvents: boolean;
   userLocation: string | null;
 }
 
-export function CalendarWidget({ birthdays, announcements, canCreateEvents, userLocation }: Props) {
+export function CalendarWidget({ announcements, canCreateEvents, userLocation }: Props) {
   const today = new Date();
   const [year, setYear]           = useState(today.getFullYear());
   const [month, setMonth]         = useState(today.getMonth());
+  const [birthdays, setBirthdays] = useState<BirthdayChip[]>([]);
   const [holidays, setHolidays]   = useState<PublicHoliday[]>([]);
   const [localAnn, setLocalAnn]   = useState<Announcement[]>(announcements);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -183,6 +183,22 @@ export function CalendarWidget({ birthdays, announcements, canCreateEvents, user
   useEffect(() => { setLocalAnn(announcements); }, [announcements]);
 
   const country = countryForLocation(userLocation);
+
+  // Cumpleaños del mes visible: se re-consulta al navegar de mes.
+  useEffect(() => {
+    let active = true;
+    fetch(`/api/employees/birthdays?month=${month + 1}`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (active) setBirthdays(Array.isArray(data) ? (data as BirthdayChip[]) : []);
+      })
+      .catch(() => {
+        if (active) setBirthdays([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [month]);
 
   useEffect(() => {
     const countries = country === 'MX' ? ['MX'] : ['MX', country];

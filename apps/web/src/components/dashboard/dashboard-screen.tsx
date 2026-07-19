@@ -134,19 +134,6 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
     ? [...SECTION_CHIPS, ...SUPER_ADMIN_CHIPS]
     : SECTION_CHIPS.filter((s) => s.section === 'herramientas' || hasSectionPerm(user, s.section));
 
-  const allBirthdays = [
-    ...(dashboardData?.todayBirthdays ?? []).map((b) => ({
-      id: b.id,
-      fullName: b.fullName,
-      birthDate: `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
-    })),
-    ...(dashboardData?.upcomingBirthdays ?? []).map((b) => ({
-      id: b.id,
-      fullName: b.fullName,
-      birthDate: b.birthDate,
-    })),
-  ];
-
   return (
     <div className="mx-auto max-w-6xl px-6 py-8 space-y-5">
 
@@ -220,7 +207,6 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
 
       {/* ── Calendario ──────────────────────────────────────────────────── */}
       <CalendarWidget
-        birthdays={allBirthdays}
         announcements={announcements}
         canCreateEvents={canManage}
         userLocation={user?.location ?? null}
