@@ -1,5 +1,5 @@
 import type { EmployeeDetail } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDateLocal } from '@/lib/utils';
 import {
   EMPLOYEE_STATUS_LABELS,
   MODALITY_LABELS,
@@ -75,10 +75,10 @@ export function GeneralTab({ employee }: { employee: EmployeeDetail }) {
       </Section>
 
       <Section title="Datos laborales">
-        <Field label="Fecha de antigüedad" value={employee.seniorityDate ? formatDate(employee.seniorityDate) : '—'} />
+        <Field label="Fecha de antigüedad" value={formatDateLocal(employee.seniorityDate)} />
         <Field label="Antigüedad" value={calculateSeniority(employee.seniorityDate)} />
         <Field label="Tipo de contrato" value={employee.contractType ?? '—'} />
-        <Field label="Fin de contrato" value={employee.contractEndDate ? formatDate(employee.contractEndDate) : '—'} />
+        <Field label="Fin de contrato" value={formatDateLocal(employee.contractEndDate)} />
         <Field label="Horario" value={employee.schedule ?? '—'} />
         <Field label="Horario de comida" value={employee.lunchTime ?? '—'} />
         <Field label="Género" value={employee.gender ?? '—'} />

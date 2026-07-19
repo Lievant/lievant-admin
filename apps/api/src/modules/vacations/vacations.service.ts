@@ -199,7 +199,7 @@ export class VacationsService {
   // Saldos
   // ==========================================================================
 
-  async getOrCreateCurrentBalance(employeeId: string): Promise<VacationBalance> {
+  async getOrCreateCurrentBalance(employeeId: string): Promise<VacationBalance | null> {
     const existing = await this.balancesRepo.findOne({
       where: { employeeId, isCurrent: true },
       order: { periodStart: 'DESC' },
@@ -213,6 +213,13 @@ export class VacationsService {
     }
 
     const { periodStart, periodEnd, yearsOfService } = this.computeCurrentPeriod(employee.seniorityDate);
+
+    // No se crea balance para empleados con menos de 1 año completo de servicio.
+    // (yearsOfService equivale a differenceInYears(hoy, antigüedad), calculado en UTC.)
+    if (yearsOfService < 1) {
+      return null;
+    }
+
     const entitledDays = await this.getVacationDaysEntitled(yearsOfService);
 
     const balance = this.balancesRepo.create({
@@ -260,6 +267,11 @@ export class VacationsService {
       if (s.m !== tm || s.d !== td) continue; // no es su aniversario hoy
 
       const { periodStart, periodEnd, yearsOfService } = this.computeCurrentPeriod(employee.seniorityDate, today);
+
+      // Solo procesar si hoy ES su aniversario Y ya completó al menos 1 año.
+      // (En el propio día de alta, yearsOfService = 0 → no se crea balance.)
+      if (yearsOfService < 1) continue;
+
       const entitledDays = await this.getVacationDaysEntitled(yearsOfService);
 
       await this.dataSource.transaction(async (mgr) => {
@@ -349,6 +361,11 @@ export class VacationsService {
     }
 
     const balance = await this.getOrCreateCurrentBalance(employee.id);
+    if (!balance) {
+      throw new BadRequestException(
+        'Aún no has completado tu primer año de servicio, por lo que todavía no puedes solicitar vacaciones.',
+      );
+    }
 
     const workingDays = await this.calculateWorkingDays(dto.startDate, dto.endDate, employee.workDays);
     if (workingDays <= 0) {
@@ -499,13 +516,25 @@ export class VacationsService {
   async getMyBalance(userId: string) {
     const employee = await this.getEmployeeByUserId(userId);
     const balance = await this.getOrCreateCurrentBalance(employee.id);
+
+    // Si aún no cumple 1 año, el frontend muestra la fecha de su primer aniversario.
+    const firstAnniversary =
+      !balance && employee.seniorityDate ? this.firstAnniversaryOf(employee.seniorityDate) : null;
+
     return {
       employeeId: employee.id,
       fullName: employee.fullName,
       seniorityDate: employee.seniorityDate,
       workDays: employee.workDays ?? DEFAULT_WORK_DAYS,
-      balance: this.serializeBalance(balance),
+      balance: balance ? this.serializeBalance(balance) : null,
+      firstAnniversary,
     };
+  }
+
+  /** Primer aniversario (antigüedad + 1 año) como string YYYY-MM-DD, sin timezone. */
+  private firstAnniversaryOf(seniorityDate: string): string {
+    const { y, m, d } = ymd(seniorityDate);
+    return `${y + 1}-${pad2(m)}-${pad2(d)}`;
   }
 
   private serializeBalance(balance: VacationBalance) {

@@ -32,7 +32,7 @@ export function NewVacationForm({ balance }: Props) {
   const [error, setError] = useState<string | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const available = balance?.balance.availableDays ?? 0;
+  const available = balance?.balance?.availableDays ?? 0;
 
   useEffect(() => {
     if (!startDate || !endDate || endDate < startDate) {
@@ -113,6 +113,17 @@ export function NewVacationForm({ balance }: Props) {
         </div>
       </div>
 
+      {!balance?.balance ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <PlaneIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm font-semibold text-navy">
+            Aún no has completado tu primer año de servicio.
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Todavía no puedes solicitar vacaciones. Tu saldo se generará al cumplir tu primer aniversario.
+          </p>
+        </div>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-5 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
@@ -230,6 +241,7 @@ export function NewVacationForm({ balance }: Props) {
           </button>
         </div>
       </form>
+      )}
     </div>
   );
 }

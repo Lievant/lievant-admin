@@ -2814,7 +2814,8 @@ export interface MyVacationBalance {
   fullName: string;
   seniorityDate: string | null;
   workDays: number[];
-  balance: VacationBalanceSummary;
+  balance: VacationBalanceSummary | null;
+  firstAnniversary: string | null;
 }
 
 export interface VacationRequestItem {
