@@ -75,6 +75,17 @@ export class EmployeesController {
     return this.employeesService.create(dto);
   }
 
+  // Público (cualquier usuario autenticado) — usado por el calendario del home.
+  @Get('birthdays')
+  @SetMetadata(PERMISSION_KEY, null)
+  getBirthdaysByMonth(@Query('month') month: string) {
+    const monthNum = parseInt(month, 10);
+    if (!monthNum || monthNum < 1 || monthNum > 12) {
+      throw new BadRequestException('month debe ser 1-12');
+    }
+    return this.employeesService.getBirthdaysByMonth(monthNum);
+  }
+
   @Get('reports/birthdays')
   @RequirePermission('rrhh', 'empleados.personal', 'read')
   getBirthdayReport(@Query() dto: GetBirthdayReportDto) {

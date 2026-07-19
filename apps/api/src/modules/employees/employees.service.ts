@@ -501,6 +501,31 @@ export class EmployeesService {
     return rows as BirthdayReportItem[];
   }
 
+  /**
+   * Cumpleaños de un mes (para el calendario del home). Público/JWT.
+   * Devuelve solo id, fullName, birthDate ('MM-DD') y area. Timezone-safe
+   * (compara únicamente el mes de la fecha DATE).
+   */
+  async getBirthdaysByMonth(
+    month: number,
+  ): Promise<{ id: string; fullName: string; birthDate: string; area: string | null }[]> {
+    const rows = await this.employeesRepository.manager.query(
+      `SELECT
+        e.id,
+        e.full_name AS "fullName",
+        TO_CHAR(pd.birth_date, 'MM-DD') AS "birthDate",
+        e.area
+      FROM employees.employee_records e
+      INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
+      WHERE EXTRACT(MONTH FROM pd.birth_date) = $1
+        AND e.deleted_at IS NULL
+        AND e.status = 'active'
+      ORDER BY EXTRACT(DAY FROM pd.birth_date)`,
+      [month],
+    );
+    return rows as { id: string; fullName: string; birthDate: string; area: string | null }[];
+  }
+
   private async buildListItems(records: EmployeeRecord[]): Promise<EmployeeListItem[]> {
     if (records.length === 0) return [];
 
