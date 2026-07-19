@@ -70,6 +70,35 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
 
   const b = balance.balance;
 
+  // Empleado con menos de 1 año de servicio: aún no tiene balance de vacaciones.
+  if (!b) {
+    return (
+      <div className="space-y-6">
+        <header className="flex items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-terracota-bg text-terracota">
+            <PlaneIcon className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-medium uppercase tracking-wide text-terracota">Herramientas</p>
+            <h1 className="text-2xl font-bold text-navy">Mis vacaciones</h1>
+          </div>
+        </header>
+
+        <div className="rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+          <PlaneIcon className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+          <p className="text-sm font-semibold text-navy">
+            Aún no has completado tu primer año de servicio.
+          </p>
+          <p className="mt-1 text-sm text-slate-500">
+            {balance.firstAnniversary
+              ? `Tus vacaciones comenzarán el ${formatDate(balance.firstAnniversary)}.`
+              : 'Tus vacaciones comenzarán al cumplir tu primer aniversario.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">

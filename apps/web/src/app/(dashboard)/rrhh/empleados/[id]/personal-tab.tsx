@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import type { EmployeeDetail, EmployeePersonalData } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import { calculateAge, formatDate } from '../constants';
+import { cn, formatDateLocal } from '@/lib/utils';
+import { calculateAge } from '../constants';
 import { EditPersonalDialog } from './edit-personal-dialog';
 
 const RFC_LENGTH = 13;
@@ -110,7 +110,7 @@ export function PersonalTab({
         </Section>
 
         <Section title="Datos personales">
-          <Field label="Fecha de nacimiento" value={personal?.birthDate ? formatDate(personal.birthDate) : '—'} />
+          <Field label="Fecha de nacimiento" value={formatDateLocal(personal?.birthDate)} />
           <Field label="Edad" value={age != null ? `${age} años` : '—'} />
           <Field label="Estado civil" value={personal?.maritalStatus ?? '—'} />
           <Field label="Hijos" value={personal?.children != null ? String(personal.children) : '—'} />

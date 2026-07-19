@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import type { EmployeeCompensation, EmployeeDetail } from '@/lib/api';
-import { formatCurrency, formatDate } from '../constants';
+import { formatDateLocal } from '@/lib/utils';
+import { formatCurrency } from '../constants';
 import { EditCompensationDialog } from './edit-compensation-dialog';
 
 function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -62,7 +63,7 @@ export function CompensationTab({
           <Field label="Pago por servicios" value={formatCurrency(compensation?.servicePayment ?? null)} />
           <Field
             label="Último cambio de sueldo"
-            value={compensation?.lastSalaryChange ? formatDate(compensation.lastSalaryChange) : '—'}
+            value={formatDateLocal(compensation?.lastSalaryChange)}
           />
         </Section>
 

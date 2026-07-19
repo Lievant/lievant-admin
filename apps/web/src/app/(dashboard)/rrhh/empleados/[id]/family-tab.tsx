@@ -4,7 +4,8 @@ import { useState } from 'react';
 import type { EmployeeDetail, EmployeeEmergencyContact, EmployeeTermination } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon } from '@/components/icons';
-import { formatCurrency, formatDate } from '../constants';
+import { formatDateLocal } from '@/lib/utils';
+import { formatCurrency } from '../constants';
 import { EmergencyContactDialog } from './emergency-contact-dialog';
 import { TerminationDialog } from './termination-dialog';
 
@@ -87,7 +88,7 @@ export function FamilyTab({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-red-400">Fecha de baja</p>
-                <p className="mt-1 text-sm text-red-700">{formatDate(termination.terminationDate)}</p>
+                <p className="mt-1 text-sm text-red-700">{formatDateLocal(termination.terminationDate)}</p>
               </div>
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-red-400">Motivo</p>
