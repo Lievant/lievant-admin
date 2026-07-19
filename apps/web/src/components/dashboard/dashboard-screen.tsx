@@ -138,7 +138,7 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
     ...(dashboardData?.todayBirthdays ?? []).map((b) => ({
       id: b.id,
       fullName: b.fullName,
-      birthDate: new Date().toISOString().slice(5, 10),
+      birthDate: `${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`,
     })),
     ...(dashboardData?.upcomingBirthdays ?? []).map((b) => ({
       id: b.id,
