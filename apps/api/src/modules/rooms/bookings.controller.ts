@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BookingsService } from './bookings.service';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
+import { UpdateBookingDto } from './dto/update-booking.dto';
 import { BookingStatus } from './entities/booking.entity';
 
 @UseGuards(JwtAuthGuard)
@@ -40,6 +41,11 @@ export class BookingsController {
     return this.bookingsService.findPendingApproval(user);
   }
 
+  @Get('calendar')
+  findForCalendar(@Query('office_id') officeId: string, @Query('date') date: string) {
+    return this.bookingsService.findForCalendar(officeId, date);
+  }
+
   @Post()
   create(@Body() dto: CreateBookingDto, @CurrentUser() user: User) {
     return this.bookingsService.create(dto, user);
@@ -48,6 +54,11 @@ export class BookingsController {
   @Delete(':id')
   cancel(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelBookingDto, @CurrentUser() user: User) {
     return this.bookingsService.cancel(id, user, dto);
+  }
+
+  @Patch(':id')
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateBookingDto, @CurrentUser() user: User) {
+    return this.bookingsService.update(id, user, dto);
   }
 
   @Patch(':id/approve')

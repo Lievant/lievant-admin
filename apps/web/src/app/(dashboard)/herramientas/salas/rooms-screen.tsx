@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -51,11 +51,70 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
   const [roomType, setRoomType] = useState(filters.room_type);
   const [bookingRoom, setBookingRoom] = useState<RoomAvailability | null>(null);
 
+  // Mantener los selects sincronizados con la URL (filters). Necesario para que las
+  // opciones pre-seleccionadas por el cascade de auto-selección se reflejen en los
+  // dropdowns (el estado local se inicializa una sola vez y no sigue a las props solo).
+  useEffect(() => {
+    setCountryId(filters.country_id);
+  }, [filters.country_id]);
+  useEffect(() => {
+    setCityId(filters.city_id);
+  }, [filters.city_id]);
+  useEffect(() => {
+    setOfficeId(filters.office_id);
+  }, [filters.office_id]);
+
+  // Auto-selección México / León / León al entrar (solo si no hay filtros previos
+  // y el usuario no ha interactuado). Se desactiva si algún catálogo no tiene el destino.
+  const autoRef = useRef(true);
+
+  // Paso 1: País → México (una sola vez, al montar).
+  useEffect(() => {
+    if (filters.country_id || filters.city_id || filters.office_id) {
+      autoRef.current = false; // ya venía con filtros (p. ej. link compartido)
+      return;
+    }
+    const mx = countries.find((c) => c.code === 'MX' || /m[eé]xico/i.test(c.name));
+    if (mx) {
+      navigate({ country_id: mx.id, city_id: '', office_id: '' });
+    } else {
+      autoRef.current = false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Paso 2: Ciudad → León (cuando cargan las ciudades de México).
+  useEffect(() => {
+    if (!autoRef.current || filters.city_id) return;
+    const mxSelected = countries.some(
+      (c) => c.id === filters.country_id && (c.code === 'MX' || /m[eé]xico/i.test(c.name)),
+    );
+    if (!mxSelected || cities.length === 0) return;
+    const leon = cities.find((c) => /le[oó]n/i.test(c.name));
+    if (leon) navigate({ city_id: leon.id, office_id: '' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cities]);
+
+  // Paso 3: Oficina → León (cuando cargan las oficinas de la ciudad de León).
+  useEffect(() => {
+    if (!autoRef.current || filters.office_id || !filters.city_id) return;
+    if (offices.length === 0) return;
+    const leonOffice = offices.find((o) => /le[oó]n/i.test(o.name));
+    if (leonOffice) navigate({ office_id: leonOffice.id });
+    autoRef.current = false; // fin del cascade
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offices]);
+
   function navigate(overrides: Partial<RoomsFilters>) {
+    // País/ciudad/oficina se toman de `filters` (la verdad de la URL) y no del
+    // estado local, que queda desincronizado durante el cascade de auto-selección
+    // (el estado no se actualiza en el mismo render en que llegan las props nuevas).
+    // Fecha/hora/duración/tipo sí vienen del estado local: son campos de formulario
+    // pendientes que aún no están en la URL hasta pulsar "Buscar".
     const next: RoomsFilters = {
-      country_id: countryId,
-      city_id: cityId,
-      office_id: officeId,
+      country_id: filters.country_id,
+      city_id: filters.city_id,
+      office_id: filters.office_id,
       date,
       start_time: startTime,
       duration_hours: durationHours,
@@ -70,6 +129,7 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
   }
 
   function handleCountryChange(value: string) {
+    autoRef.current = false;
     setCountryId(value);
     setCityId('');
     setOfficeId('');
@@ -77,12 +137,14 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
   }
 
   function handleCityChange(value: string) {
+    autoRef.current = false;
     setCityId(value);
     setOfficeId('');
     navigate({ city_id: value, office_id: '' });
   }
 
   function handleOfficeChange(value: string) {
+    autoRef.current = false;
     setOfficeId(value);
     navigate({ office_id: value });
   }
@@ -105,6 +167,12 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
           <p className="mt-1 text-sm text-slate-500">Herramientas · Espacios de trabajo</p>
         </div>
         <div className="flex gap-2">
+          <Link
+            href="/herramientas/salas/calendario"
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+          >
+            Vista calendario
+          </Link>
           <Link
             href="/herramientas/salas/mis-reservas"
             className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"

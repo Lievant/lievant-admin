@@ -1516,12 +1516,18 @@ export interface Booking {
   recurrenceGroupId: string | null;
   msEventId: string | null;
   notes: string | null;
+  attendees: BookingAttendee[];
   createdAt: string;
   updatedAt: string;
   cancelledAt: string | null;
   cancelledBy: string | null;
   room?: Room;
   user?: BookingUserSummary;
+}
+
+export interface BookingAttendee {
+  email: string;
+  name?: string;
 }
 
 export interface AdminScopeInfo {
@@ -1621,11 +1627,27 @@ export interface CreateBookingPayload {
   recurrence_rule?: string;
   recurrence_end_date?: string;
   notes?: string;
+  attendees?: BookingAttendee[];
 }
 
 export function createBooking(payload: CreateBookingPayload): Promise<Booking[]> {
   return apiFetchWithRetry<Booking[]>('/bookings', {
     method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export interface UpdateBookingPayload {
+  title?: string;
+  start_time?: string;
+  end_time?: string;
+  notes?: string;
+  attendees?: BookingAttendee[];
+}
+
+export function updateBooking(id: string, payload: UpdateBookingPayload): Promise<Booking> {
+  return apiFetchWithRetry<Booking>(`/bookings/${id}`, {
+    method: 'PATCH',
     body: JSON.stringify(payload),
   });
 }
@@ -1689,6 +1711,17 @@ export function listAdminBookings(params: ListAdminBookingsParams = {}): Promise
 
 export function listPendingApprovals(): Promise<Booking[]> {
   return apiFetchWithRetry<Booking[]>('/bookings/pending-approval');
+}
+
+/**
+ * Reservas de todas las salas de una oficina para un día, accesible a cualquier
+ * usuario autenticado (no requiere permisos de admin). Alimenta la vista de calendario.
+ */
+export function listCalendarBookings(officeId: string, date: string): Promise<Booking[]> {
+  const query = new URLSearchParams();
+  query.set('office_id', officeId);
+  query.set('date', date);
+  return apiFetchWithRetry<Booking[]>(`/bookings/calendar?${query.toString()}`);
 }
 
 export interface CreateRoomCountryPayload {
