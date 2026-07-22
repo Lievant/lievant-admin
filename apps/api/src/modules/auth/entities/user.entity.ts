@@ -5,10 +5,12 @@ import {
   Entity,
   JoinTable,
   ManyToMany,
+  OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Role } from './role.entity';
+import { UserPermission } from './user-permission.entity';
 
 @Entity({ name: 'users', schema: 'auth' })
 export class User {
@@ -26,6 +28,15 @@ export class User {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
+
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  location!: string | null;
+
+  @Column({ name: 'mfa_enabled', type: 'boolean', default: false })
+  mfaEnabled!: boolean;
+
+  @Column({ name: 'last_login_at', type: 'timestamptz', nullable: true })
+  lastLoginAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
@@ -50,4 +61,7 @@ export class User {
     inverseJoinColumn: { name: 'role_id', referencedColumnName: 'id' },
   })
   roles!: Role[];
+
+  @OneToMany(() => UserPermission, (up) => up.user)
+  userPermissions!: UserPermission[];
 }

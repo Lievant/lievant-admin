@@ -9,6 +9,7 @@ node_modules
 dist
 build
 out
+**/*.tsbuildinfo
 
 # Environment files — NUNCA commitear .env con valores reales
 .env
@@ -42,6 +43,10 @@ Thumbs.db
 *.tfvars
 !*.tfvars.example
 .terraform.lock.hcl
+
+# Terraform plan files
+*.tfplan
+plan_*.txt
 
 # Coverage
 coverage

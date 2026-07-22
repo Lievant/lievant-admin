@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Sistema Administrativo de Lievant — Monorepo",
+  "packageManager": "npm@11.13.0",
   "workspaces": [
     "apps/*",
     "packages/*"

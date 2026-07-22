@@ -1,0 +1,44 @@
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { User } from '../auth/entities/user.entity';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CreateRoomDto } from './dto/create-room.dto';
+import { QueryAvailabilityDto } from './dto/query-availability.dto';
+import { UpdateRoomDto } from './dto/update-room.dto';
+import { RoomsService } from './rooms.service';
+
+@UseGuards(JwtAuthGuard)
+@Controller('rooms')
+export class RoomsController {
+  constructor(private readonly roomsService: RoomsService) {}
+
+  @Get()
+  findWithAvailability(@Query() query: QueryAvailabilityDto) {
+    return this.roomsService.findWithAvailability(query);
+  }
+
+  @Get('admin')
+  findAllByOffice(@Query('office_id', ParseUUIDPipe) officeId: string, @CurrentUser() user: User) {
+    return this.roomsService.findAllByOffice(officeId, user);
+  }
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.roomsService.findOne(id);
+  }
+
+  @Post()
+  create(@Body() dto: CreateRoomDto, @CurrentUser() user: User) {
+    return this.roomsService.create(dto, user);
+  }
+
+  @Patch(':id')
+  update(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpdateRoomDto, @CurrentUser() user: User) {
+    return this.roomsService.update(id, dto, user);
+  }
+
+  @Patch(':id/toggle-active')
+  toggleActive(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.roomsService.toggleActive(id, user);
+  }
+}

@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: lievant-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lievant_admin
+      POSTGRES_PASSWORD: Lievant2026!Secure
+      POSTGRES_DB: lievant_dev
+    ports:
+      - '5434:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U lievant_admin -d lievant_dev']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

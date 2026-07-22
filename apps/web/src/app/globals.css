@@ -1,0 +1,20 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+@theme {
+  --color-terracota: #c2714f;
+  --color-terracota-dark: #a85e3c;
+  --color-terracota-bg: #fff7f4;
+  --color-navy: #0f1623;
+  --color-navy-light: #1c2735;
+  --color-surface: #f8f9fc;
+  --color-teal: #2dd4bf;
+}
+
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+}

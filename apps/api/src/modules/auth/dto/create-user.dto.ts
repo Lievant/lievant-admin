@@ -1,4 +1,5 @@
-import { IsArray, IsBoolean, IsEmail, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { UserLocation } from '../constants/locations.constant';
 
 export class CreateUserDto {
   @IsEmail()
@@ -15,6 +16,10 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @IsOptional()
+  @IsEnum(UserLocation)
+  location?: UserLocation;
 
   @IsOptional()
   @IsArray()
