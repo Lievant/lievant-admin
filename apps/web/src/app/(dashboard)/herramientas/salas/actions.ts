@@ -6,6 +6,7 @@ import {
   approveBooking,
   cancelBooking,
   createBooking,
+  updateBooking,
   createRoom,
   createRoomCity,
   createRoomCountry,
@@ -25,6 +26,7 @@ import {
   type CreateRoomPayload,
   type ListAdminBookingsParams,
   type Room,
+  type UpdateBookingPayload,
   type UpdateRoomOfficePayload,
   type UpdateRoomPayload,
 } from '@/lib/api';
@@ -60,6 +62,16 @@ export async function createBookingAction(payload: CreateBookingPayload): Promis
 export async function cancelBookingAction(id: string, payload: CancelBookingPayload = {}): Promise<ActionResult> {
   try {
     await cancelBooking(id, payload);
+    revalidateAll();
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function updateBookingAction(id: string, payload: UpdateBookingPayload): Promise<ActionResult> {
+  try {
+    await updateBooking(id, payload);
     revalidateAll();
     return { success: true };
   } catch (err) {

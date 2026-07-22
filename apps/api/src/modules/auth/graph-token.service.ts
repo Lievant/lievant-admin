@@ -5,12 +5,22 @@ import { RedisService } from '../redis/redis.service';
 const APP_TOKEN_CACHE_KEY = 'graph:app-token';
 const APP_TOKEN_CACHE_TTL_SECONDS = 55 * 60; // El token de Azure AD expira a los 60 minutos
 
+export interface GraphAttendee {
+  emailAddress: { address: string; name?: string };
+  type: 'required' | 'optional';
+}
+
 export interface CalendarEventDto {
   subject: string;
   start: { dateTime: string; timeZone: string };
   end: { dateTime: string; timeZone: string };
   body?: { contentType: 'HTML' | 'Text'; content: string };
   location?: { displayName: string };
+  attendees?: GraphAttendee[];
+  // Cuando es true, Graph genera automáticamente una reunión de Teams (con link)
+  // que los invitados reciben en la invitación, igual que al agendar desde Outlook.
+  isOnlineMeeting?: boolean;
+  onlineMeetingProvider?: 'teamsForBusiness';
 }
 
 interface AzureAdTokenResponse {
@@ -100,11 +110,37 @@ export class GraphTokenService {
     });
 
     if (!response.ok) {
-      throw new InternalServerErrorException('No se pudo crear el evento en el calendario de Microsoft');
+      const errBody = await response.text().catch(() => '');
+      // Logging explícito del error real de Graph para diagnóstico (Ajuste 6).
+      console.error(`[Graph] createCalendarEvent ${userEmail} → ${response.status}: ${errBody}`);
+      throw new InternalServerErrorException(
+        `No se pudo crear el evento en el calendario de Microsoft (Graph ${response.status})`,
+      );
     }
 
     const data = (await response.json()) as GraphCalendarEventResponse;
     return data.id;
+  }
+
+  async updateCalendarEvent(userEmail: string, eventId: string, event: Partial<CalendarEventDto>): Promise<void> {
+    const token = await this.getAppToken();
+
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userEmail}/calendar/events/${eventId}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(event),
+      },
+    );
+
+    if (!response.ok && response.status !== 404) {
+      const errBody = await response.text().catch(() => '');
+      console.error(`[Graph] updateCalendarEvent ${userEmail} → ${response.status}: ${errBody}`);
+      throw new InternalServerErrorException(
+        `No se pudo actualizar el evento en el calendario de Microsoft (Graph ${response.status})`,
+      );
+    }
   }
 
   async getUserPhoto(userEmail: string): Promise<Buffer | null> {
@@ -125,6 +161,35 @@ export class GraphTokenService {
       console.error(`[Graph] getUserPhoto error:`, err);
       return null;
     }
+  }
+
+  /**
+   * Cancela un evento notificando a los invitados. A diferencia de DELETE (que borra
+   * silenciosamente), la acción /cancel hace que M365 envíe el correo de cancelación
+   * a todos los asistentes. Solo aplica cuando el usuario es el organizador (que es
+   * nuestro caso: el evento se creó en su calendario). Si /cancel falla, cae a DELETE
+   * para no dejar el evento colgado.
+   */
+  async cancelCalendarEvent(userEmail: string, eventId: string, comment?: string): Promise<void> {
+    const token = await this.getAppToken();
+
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/users/${userEmail}/events/${eventId}/cancel`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment: comment ?? 'La reserva de sala ha sido cancelada.' }),
+      },
+    );
+
+    if (response.ok || response.status === 404) {
+      return;
+    }
+
+    const errBody = await response.text().catch(() => '');
+    console.error(`[Graph] cancelCalendarEvent ${userEmail} → ${response.status}: ${errBody}`);
+    // Fallback: eliminar el evento directamente (sin notificación) para no dejarlo colgado.
+    await this.deleteCalendarEvent(userEmail, eventId);
   }
 
   async deleteCalendarEvent(userEmail: string, eventId: string): Promise<void> {

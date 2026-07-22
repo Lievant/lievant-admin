@@ -16,6 +16,11 @@ export enum BookingStatus {
   PENDIENTE_APROBACION = 'pendiente_aprobacion',
 }
 
+export interface BookingAttendee {
+  email: string;
+  name?: string;
+}
+
 @Entity({ schema: 'rooms', name: 'bookings' })
 export class Booking {
   @PrimaryGeneratedColumn('uuid')
@@ -61,6 +66,9 @@ export class Booking {
 
   @Column({ name: 'ms_event_id', type: 'varchar', length: 500, nullable: true })
   msEventId!: string | null;
+
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  attendees!: BookingAttendee[];
 
   @Column({ type: 'text', nullable: true })
   notes!: string | null;

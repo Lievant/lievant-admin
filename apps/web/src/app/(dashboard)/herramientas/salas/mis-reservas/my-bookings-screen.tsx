@@ -11,6 +11,7 @@ import {
   formatDurationLabel,
 } from '../constants';
 import { CancelBookingDialog } from './cancel-booking-dialog';
+import { BookRoomDialog } from '../book-room-dialog';
 
 type Tab = 'proximas' | 'pasadas' | 'canceladas';
 
@@ -34,11 +35,14 @@ interface MyBookingsScreenProps {
 export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps) {
   const [tab, setTab] = useState<Tab>('proximas');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
+  const [editTarget, setEditTarget] = useState<Booking | null>(null);
 
-  const now = Date.now();
+  // Referencia "ahora" en zona horaria de México (America/Mexico_City).
+  const nowCDMX = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' })).getTime();
 
   const filtered = bookings.filter((booking) => {
-    const isFuture = new Date(booking.startTime).getTime() >= now;
+    // Una reserva es "futura" mientras no haya terminado (endTime), no desde que empieza.
+    const isFuture = new Date(booking.endTime).getTime() > nowCDMX;
     if (tab === 'canceladas') return booking.status === 'cancelada';
     if (tab === 'proximas') return booking.status !== 'cancelada' && isFuture;
     return booking.status !== 'cancelada' && !isFuture;
@@ -87,9 +91,10 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
             const room = booking.room;
             const office = room?.office;
             const city = office?.city;
-            const isFuture = new Date(booking.startTime).getTime() >= now;
+            const isFuture = new Date(booking.endTime).getTime() > nowCDMX;
             const canCancel =
               isFuture && (booking.status === 'confirmada' || booking.status === 'pendiente_aprobacion');
+            const canEdit = canCancel && Boolean(room);
 
             return (
               <div
@@ -115,15 +120,26 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
                   >
                     {BOOKING_STATUS_LABELS[booking.status]}
                   </span>
-                  {canCancel && (
-                    <button
-                      type="button"
-                      onClick={() => setCancelTarget(booking)}
-                      className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
-                    >
-                      Cancelar
-                    </button>
-                  )}
+                  <div className="flex gap-2">
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setEditTarget(booking)}
+                        className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+                      >
+                        Modificar
+                      </button>
+                    )}
+                    {canCancel && (
+                      <button
+                        type="button"
+                        onClick={() => setCancelTarget(booking)}
+                        className="rounded-md border border-red-200 px-3 py-1 text-xs font-medium text-red-600 hover:border-red-300"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -132,6 +148,20 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
       )}
 
       {cancelTarget && <CancelBookingDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} />}
+
+      {editTarget && editTarget.room && (
+        <BookRoomDialog
+          room={editTarget.room}
+          officeName={editTarget.room.office?.name ?? ''}
+          date={editTarget.startTime.slice(0, 10)}
+          startTime={editTarget.startTime.slice(11, 16)}
+          durationHours={
+            (new Date(editTarget.endTime).getTime() - new Date(editTarget.startTime).getTime()) / 3600000
+          }
+          booking={editTarget}
+          onClose={() => setEditTarget(null)}
+        />
+      )}
     </div>
   );
 }
