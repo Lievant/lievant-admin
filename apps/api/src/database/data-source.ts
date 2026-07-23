@@ -74,6 +74,7 @@ const AppDataSource = new DataSource({
   type: 'postgres',
   url: process.env.DATABASE_URL,
   schema: process.env.DATABASE_SCHEMA ?? 'auth',
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   entities: [
     User,
     Role,
