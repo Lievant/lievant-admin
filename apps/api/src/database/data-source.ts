@@ -136,7 +136,7 @@ const AppDataSource = new DataSource({
     MediaAuditLog,
     SyncLog,
   ],
-  migrations: ['src/database/migrations/*.ts'],
+  migrations: [__dirname + '/migrations/*{.js,.ts}'],
   migrationsTableName: 'migrations',
 });
 
