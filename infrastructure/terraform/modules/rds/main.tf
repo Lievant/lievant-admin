@@ -19,9 +19,45 @@ variable "db_password" {
   sensitive = true
 }
 
+# Overrides opcionales. Si se dejan en null, se mantiene el comportamiento
+# original por-entorno (retrocompatible con staging/dev, que no los pasan).
+variable "instance_class" {
+  type    = string
+  default = null
+}
+
+variable "multi_az" {
+  type    = bool
+  default = null
+}
+
+variable "allocated_storage" {
+  type    = number
+  default = null
+}
+
+variable "deletion_protection" {
+  type    = bool
+  default = null
+}
+
+variable "backup_retention_period" {
+  type    = number
+  default = null
+}
+
+variable "skip_final_snapshot" {
+  type    = bool
+  default = null
+}
+
 locals {
-  instance_class = var.environment == "prod" ? "db.r6g.large" : "db.t3.micro"
-  multi_az       = var.environment == "prod" ? true : false
+  instance_class          = var.instance_class != null ? var.instance_class : (var.environment == "prod" ? "db.r6g.large" : "db.t3.micro")
+  multi_az                = var.multi_az != null ? var.multi_az : (var.environment == "prod")
+  allocated_storage       = var.allocated_storage != null ? var.allocated_storage : (var.environment == "prod" ? 100 : 20)
+  deletion_protection     = var.deletion_protection != null ? var.deletion_protection : (var.environment == "prod")
+  skip_final_snapshot     = var.skip_final_snapshot != null ? var.skip_final_snapshot : (var.environment != "prod")
+  backup_retention_period = var.backup_retention_period != null ? var.backup_retention_period : (var.environment == "prod" ? 7 : 1)
 }
 
 resource "aws_db_subnet_group" "main" {
@@ -53,7 +89,7 @@ resource "aws_db_instance" "main" {
   engine            = "postgres"
   engine_version    = "16"
   instance_class    = local.instance_class
-  allocated_storage = var.environment == "prod" ? 100 : 20
+  allocated_storage = local.allocated_storage
   storage_encrypted = true
 
   db_name  = "lievant_dev"
@@ -64,9 +100,9 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids  = [aws_security_group.rds.id]
   multi_az                = local.multi_az
   publicly_accessible     = false
-  deletion_protection     = var.environment == "prod" ? true : false
-  skip_final_snapshot     = var.environment != "prod" ? true : false
-  backup_retention_period = var.environment == "prod" ? 7 : 1
+  deletion_protection     = local.deletion_protection
+  skip_final_snapshot     = local.skip_final_snapshot
+  backup_retention_period = local.backup_retention_period
 
   tags = {
     Name = "${var.name_prefix}-postgres"

@@ -30,6 +30,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "datalake" {
       sse_algorithm = "aws:kms"
     }
   }
+
+  # El bucket de prod se creó por CLI con cifrado por defecto AES256. No vale la
+  # pena recrearlo/cambiarlo solo por el algoritmo, así que ignoramos el diff en
+  # la regla de cifrado (aplica a buckets importados con AES256).
+  lifecycle {
+    ignore_changes = [rule]
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "datalake" {
