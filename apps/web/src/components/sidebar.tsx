@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
   BellIcon,
-  BroadcastIcon,
   BuildingIcon,
   ChartDotsIcon,
   CpuIcon,
@@ -25,7 +24,6 @@ import {
   ReportMoneyIcon,
   RobotIcon,
   ShieldLockIcon,
-  ShoppingCartIcon,
   SpeakerphoneIcon,
   TableIcon,
   TargetIcon,
@@ -40,19 +38,55 @@ interface SidebarProps {
   user: CurrentUser | null;
 }
 
+function isSuperAdmin(user: CurrentUser | null): boolean {
+  return user?.roles.some((r) => r.name === 'SUPER_ADMIN') ?? false;
+}
+
+// Sin usuario (fallo de /auth/me o sesión aún no resuelta) se muestra todo, para
+// que el sidebar no quede vacío por una caída de la API.
 function hasSection(user: CurrentUser | null, section: string): boolean {
   if (!user) return true;
-  if (user.roles.some((r) => r.name === 'SUPER_ADMIN')) return true;
+  if (isSuperAdmin(user)) return true;
   return user.permissions.some((p) => p.section === section);
+}
+
+// `action` es opcional porque no todos los módulos tienen permiso de lectura:
+// admin.roles y admin.catalogos solo existen con acción 'write', así que exigir
+// 'read' los ocultaría siempre. Sin `action` basta cualquier permiso del módulo.
+function hasModule(
+  user: CurrentUser | null,
+  section: string,
+  module: string,
+  action?: string,
+): boolean {
+  if (!user) return true;
+  if (isSuperAdmin(user)) return true;
+  return user.permissions.some(
+    (p) => p.section === section && p.module === module && (!action || p.action === action),
+  );
 }
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const isSuperAdmin = (user?.roles.some((r) => r.name === 'SUPER_ADMIN') ?? false) || !user;
   const showFinanzas = hasSection(user, 'finanzas');
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
   const showMedios = hasSection(user, 'medios');
+  const showModulos = showFinanzas || showMedios || showRrhh || showTransformacion;
+
+  // Herramientas: cada link se controla por su módulo y la sección entera se
+  // oculta si el usuario no conserva ninguno.
+  const showSalas = hasModule(user, 'herramientas', 'salas');
+  const showSoporte = hasModule(user, 'herramientas', 'tickets');
+  const showIsobot = hasModule(user, 'herramientas', 'isobot');
+  const showVacaciones = hasModule(user, 'herramientas', 'vacaciones', 'read');
+  const showHerramientas = showSalas || showSoporte || showIsobot || showVacaciones;
+
+  // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
+  const showUsuarios = hasModule(user, 'admin', 'usuarios');
+  const showPermisos = hasModule(user, 'admin', 'roles');
+  const showCatalogos = hasModule(user, 'admin', 'catalogos');
+  const showAdmin = showUsuarios || showPermisos || showCatalogos;
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-navy text-slate-200">
@@ -69,7 +103,7 @@ export function Sidebar({ user }: SidebarProps) {
           Inicio
         </NavLink>
 
-        <SectionLabel>Módulos</SectionLabel>
+        {showModulos && <SectionLabel>Módulos</SectionLabel>}
 
         {showFinanzas && (
           <>
@@ -165,20 +199,10 @@ export function Sidebar({ user }: SidebarProps) {
           </>
         )}
 
-        <NavLink href="/ecommerce" active={pathname.startsWith('/ecommerce')}>
-          <ShoppingCartIcon className="h-5 w-5" />
-          Ecommerce
-        </NavLink>
-
-        <NavLink href="/marketing" active={pathname.startsWith('/marketing')}>
-          <SpeakerphoneIcon className="h-5 w-5" />
-          Marketing Digital
-        </NavLink>
-
-        <NavLink href="/omnicanalidad" active={pathname.startsWith('/omnicanalidad')}>
-          <BroadcastIcon className="h-5 w-5" />
-          Omnicanalidad
-        </NavLink>
+        {/* Ecommerce, Marketing Digital y Omnicanalidad no tienen módulos ni
+            permisos definidos todavía (no existe ninguna fila en
+            auth.permissions con esas secciones), así que no se listan. Al
+            desarrollarlos, volver a agregarlos envueltos en hasSection(). */}
 
         {showTransformacion && (
           <>
@@ -221,39 +245,63 @@ export function Sidebar({ user }: SidebarProps) {
           </>
         )}
 
-        <SectionLabel>Herramientas</SectionLabel>
-        <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
-          <DoorIcon className="h-5 w-5" />
-          Reserva de salas
-        </NavLink>
-        <NavLink href="/herramientas/soporte" active={pathname.startsWith('/herramientas/soporte')}>
-          <HeadsetIcon className="h-5 w-5" />
-          Soporte TI
-        </NavLink>
-        <NavLink href="/herramientas/isobot" active={pathname.startsWith('/herramientas/isobot')}>
-          <RobotIcon className="h-5 w-5" />
-          ISOBOT
-        </NavLink>
-        <NavLink href="/herramientas/vacaciones" active={pathname.startsWith('/herramientas/vacaciones')}>
-          <PlaneIcon className="h-5 w-5" />
-          Vacaciones
-        </NavLink>
+        {showHerramientas && (
+          <>
+            <SectionLabel>Herramientas</SectionLabel>
+            {showSalas && (
+              <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
+                <DoorIcon className="h-5 w-5" />
+                Reserva de salas
+              </NavLink>
+            )}
+            {showSoporte && (
+              <NavLink
+                href="/herramientas/soporte"
+                active={pathname.startsWith('/herramientas/soporte')}
+              >
+                <HeadsetIcon className="h-5 w-5" />
+                Soporte TI
+              </NavLink>
+            )}
+            {showIsobot && (
+              <NavLink href="/herramientas/isobot" active={pathname.startsWith('/herramientas/isobot')}>
+                <RobotIcon className="h-5 w-5" />
+                ISOBOT
+              </NavLink>
+            )}
+            {showVacaciones && (
+              <NavLink
+                href="/herramientas/vacaciones"
+                active={pathname.startsWith('/herramientas/vacaciones')}
+              >
+                <PlaneIcon className="h-5 w-5" />
+                Vacaciones
+              </NavLink>
+            )}
+          </>
+        )}
 
-        {isSuperAdmin && (
+        {showAdmin && (
           <>
             <SectionLabel>Configuración</SectionLabel>
-            <NavLink href="/admin/usuarios" active={pathname.startsWith('/admin/usuarios')}>
-              <UsersGroupIcon className="h-5 w-5" />
-              Usuarios
-            </NavLink>
-            <NavLink href="/admin/permisos" active={pathname.startsWith('/admin/permisos')}>
-              <ShieldLockIcon className="h-5 w-5" />
-              Permisos
-            </NavLink>
-            <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
-              <ListIcon className="h-5 w-5" />
-              Catálogos
-            </NavLink>
+            {showUsuarios && (
+              <NavLink href="/admin/usuarios" active={pathname.startsWith('/admin/usuarios')}>
+                <UsersGroupIcon className="h-5 w-5" />
+                Usuarios
+              </NavLink>
+            )}
+            {showPermisos && (
+              <NavLink href="/admin/permisos" active={pathname.startsWith('/admin/permisos')}>
+                <ShieldLockIcon className="h-5 w-5" />
+                Permisos
+              </NavLink>
+            )}
+            {showCatalogos && (
+              <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
+                <ListIcon className="h-5 w-5" />
+                Catálogos
+              </NavLink>
+            )}
           </>
         )}
       </nav>
