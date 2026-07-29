@@ -1416,6 +1416,8 @@ export interface EmployeeDocument {
   fileSize: number | null;
   uploadedAt: string;
   uploadedBy: string;
+  /** Nombre en auth.users de quien subió el documento; null si el usuario ya no existe. */
+  uploadedByName: string | null;
   downloadUrl?: string;
 }
 
