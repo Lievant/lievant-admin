@@ -371,11 +371,26 @@ export class EmployeesService {
     return saved;
   }
 
-  async getDocuments(employeeId: string): Promise<(EmployeeDocument & { downloadUrl?: string })[]> {
+  async getDocuments(
+    employeeId: string,
+  ): Promise<(EmployeeDocument & { downloadUrl?: string; uploadedByName: string | null })[]> {
     await this.getEmployeeOrFail(employeeId);
     const docs = await this.documentsRepository.find({ where: { employeeId }, order: { uploadedAt: 'DESC' } });
+
+    // uploaded_by guarda el UUID de auth.users; se resuelve a nombre para que el
+    // frontend no tenga que mostrar el identificador. Una sola consulta por lote.
+    const uploaderIds = [...new Set(docs.map((d) => d.uploadedBy).filter(Boolean))];
+    const uploaders = uploaderIds.length
+      ? await this.usersRepository.find({ where: { id: In(uploaderIds) }, select: { id: true, name: true } })
+      : [];
+    const nameById = new Map(uploaders.map((u) => [u.id, u.name]));
+
     return Promise.all(
-      docs.map(async (doc) => ({ ...doc, downloadUrl: await this.storageService.getPresignedUrl(doc.s3Key) })),
+      docs.map(async (doc) => ({
+        ...doc,
+        uploadedByName: nameById.get(doc.uploadedBy) ?? null,
+        downloadUrl: await this.storageService.getPresignedUrl(doc.s3Key),
+      })),
     );
   }
 
@@ -384,7 +399,7 @@ export class EmployeesService {
     file: Express.Multer.File,
     dto: UploadEmployeeDocumentDto,
     userId: string,
-  ): Promise<EmployeeDocument & { downloadUrl?: string }> {
+  ): Promise<EmployeeDocument & { downloadUrl?: string; uploadedByName: string | null }> {
     await this.getEmployeeOrFail(employeeId);
     const s3Key = await this.storageService.uploadDocument(file, employeeId, dto.type);
     const doc = await this.documentsRepository.save(
@@ -398,7 +413,11 @@ export class EmployeesService {
       }),
     );
     const downloadUrl = await this.storageService.getPresignedUrl(doc.s3Key);
-    return { ...doc, downloadUrl };
+    const uploader = await this.usersRepository.findOne({
+      where: { id: userId },
+      select: { id: true, name: true },
+    });
+    return { ...doc, uploadedByName: uploader?.name ?? null, downloadUrl };
   }
 
   async removeDocument(docId: string): Promise<void> {

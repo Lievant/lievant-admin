@@ -78,7 +78,16 @@ export function DocumentsTab({
                 <td className="px-4 py-3 text-slate-600">{doc.type}</td>
                 <td className="px-4 py-3 font-medium text-navy">{doc.name}</td>
                 <td className="px-4 py-3 text-slate-600">{formatDate(doc.uploadedAt)}</td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-400">{doc.uploadedBy.slice(0, 8)}</td>
+                <td className="px-4 py-3 text-slate-600">
+                  {doc.uploadedByName ?? (
+                    <span
+                      className="font-mono text-xs text-slate-400"
+                      title="Usuario no encontrado en el directorio"
+                    >
+                      {doc.uploadedBy.slice(0, 8)}
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {doc.downloadUrl ? (
