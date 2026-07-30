@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { Booking, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
@@ -86,9 +87,17 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
 
   return (
     <div>
-      <header>
-        <h1 className="text-2xl font-bold text-navy">Mis reservas</h1>
-        <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-navy">Mis reservas</h1>
+          <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
+        </div>
+        <Link
+          href="/herramientas/salas"
+          className="shrink-0 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+        >
+          ← Reserva de salas
+        </Link>
       </header>
 
       {errorKind === 'unavailable' && (
