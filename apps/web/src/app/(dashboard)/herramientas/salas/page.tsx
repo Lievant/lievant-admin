@@ -1,15 +1,20 @@
 import {
   errorKindOf,
+  getCurrentUser,
   getRoomAdminScope,
+  listAdminBookings,
   listRoomCitiesByCountry,
   listRoomCountries,
   listRoomOfficesByCity,
   searchRooms,
+  type Booking,
+  type CurrentUser,
   type ErrorKind,
   type RoomAvailability,
   type RoomType,
   type SearchRoomsParams,
 } from '@/lib/api';
+import { hasPermission } from '@/lib/permissions';
 import { todayDateString } from './constants';
 import { RoomsScreen } from './rooms-screen';
 
@@ -61,6 +66,20 @@ export default async function SalasPage({ searchParams }: SalasPageProps) {
   const adminScope = adminScopeResult.data;
   const isAdmin = Boolean(adminScope?.isGlobalAdmin || (adminScope?.officeIds.length ?? 0) > 0);
 
+  let user: CurrentUser | null = null;
+  try {
+    user = await getCurrentUser();
+  } catch {
+    user = null;
+  }
+
+  // La pestaña "Todas las reservas" y su carga solo existen con salas.manage.
+  const canManageAll = hasPermission(user, 'herramientas', 'salas', 'manage');
+  let allBookings: Booking[] = [];
+  if (canManageAll) {
+    allBookings = (await safe(listAdminBookings())).data ?? [];
+  }
+
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <RoomsScreen
@@ -70,6 +89,9 @@ export default async function SalasPage({ searchParams }: SalasPageProps) {
         rooms={rooms}
         errorKind={countriesResult.errorKind}
         isAdmin={isAdmin}
+        canManageAll={canManageAll}
+        allBookings={allBookings}
+        currentUserId={user?.id ?? null}
         filters={{
           country_id: countryId ?? '',
           city_id: cityId ?? '',

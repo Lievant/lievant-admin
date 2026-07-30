@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { City, Country, ErrorKind, Office, RoomAvailability } from '@/lib/api';
+import type { Booking, City, Country, ErrorKind, Office, RoomAvailability } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { PeopleIcon } from '@/components/icons';
+import { AllBookingsPanel } from './all-bookings-panel';
 import { BookRoomDialog } from './book-room-dialog';
 import {
   AMENITY_ICONS,
@@ -35,13 +36,29 @@ interface RoomsScreenProps {
   errorKind: ErrorKind | null;
   isAdmin: boolean;
   filters: RoomsFilters;
+  /** herramientas.salas.manage: habilita la pestaña "Todas las reservas". */
+  canManageAll?: boolean;
+  allBookings?: Booking[];
+  currentUserId?: string | null;
 }
 
 const TIME_SLOTS = generateTimeSlots();
 const MAX_VISIBLE_AMENITIES = 4;
 
-export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAdmin, filters }: RoomsScreenProps) {
+export function RoomsScreen({
+  countries,
+  cities,
+  offices,
+  rooms,
+  errorKind,
+  isAdmin,
+  filters,
+  canManageAll = false,
+  allBookings = [],
+  currentUserId = null,
+}: RoomsScreenProps) {
   const router = useRouter();
+  const [view, setView] = useState<'buscar' | 'todas'>('buscar');
   const [countryId, setCountryId] = useState(filters.country_id);
   const [cityId, setCityId] = useState(filters.city_id);
   const [officeId, setOfficeId] = useState(filters.office_id);
@@ -196,6 +213,35 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
         </div>
       )}
 
+      {canManageAll && (
+        <div className="mt-6 flex gap-2 border-b border-slate-200">
+          {([
+            { id: 'buscar', label: 'Buscar salas' },
+            { id: 'todas', label: 'Todas las reservas' },
+          ] as const).map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setView(t.id)}
+              className={cn(
+                'border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                view === t.id
+                  ? 'border-terracota text-terracota'
+                  : 'border-transparent text-slate-500 hover:text-navy',
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {canManageAll && view === 'todas' && (
+        <AllBookingsPanel bookings={allBookings} currentUserId={currentUserId} />
+      )}
+
+      {view === 'buscar' && (
+        <>
       {/* Filters */}
       <div className="mt-6 grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-3 lg:grid-cols-7">
         <div className="flex flex-col gap-1">
@@ -429,6 +475,8 @@ export function RoomsScreen({ countries, cities, offices, rooms, errorKind, isAd
             );
           })}
         </div>
+      )}
+        </>
       )}
 
       {bookingRoom && (
