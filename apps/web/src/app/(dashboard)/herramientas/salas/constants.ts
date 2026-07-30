@@ -60,6 +60,7 @@ export const WEEKDAYS: Array<{ key: string; label: string; rrule: string; isoDay
   { key: 'D', label: 'D', rrule: 'SU', isoDay: 0 },
 ];
 
+/** Slots de 30 min usados por el filtro de disponibilidad en rooms-screen. */
 export function generateTimeSlots(): string[] {
   const slots: string[] = [];
   for (let hour = 7; hour <= 20; hour++) {
@@ -69,6 +70,48 @@ export function generateTimeSlots(): string[] {
     }
   }
   return slots;
+}
+
+/** Opciones de 15 min entre 07:00 y 21:00 para los selectores de reserva. */
+export function generateTimeOptions(): string[] {
+  const options: string[] = [];
+  for (let hour = 7; hour <= 21; hour++) {
+    for (let minute = 0; minute < 60; minute += 15) {
+      if (hour === 21 && minute > 0) break;
+      options.push(`${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`);
+    }
+  }
+  return options;
+}
+
+export const MIN_BOOKING_MINUTES = 15;
+export const MAX_BOOKING_MINUTES = 4 * 60;
+
+/** Minutos desde medianoche para un "HH:mm". */
+export function timeToMinutes(time: string): number {
+  const [hours = 0, minutes = 0] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
+export function minutesToTime(totalMinutes: number): string {
+  const clamped = Math.max(0, Math.min(24 * 60 - 1, totalMinutes));
+  return `${String(Math.floor(clamped / 60)).padStart(2, '0')}:${String(clamped % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Hora de fin inicial a partir de una duración en horas, ajustada a la opción
+ * válida más cercana para que el <select> no arranque con un valor inexistente.
+ */
+export function defaultEndTime(startTime: string, durationHours: number, options: string[]): string {
+  const target = timeToMinutes(startTime) + Math.round(durationHours * 60);
+  const candidates = options.filter((option) => timeToMinutes(option) > timeToMinutes(startTime));
+  const fallback = options[options.length - 1] ?? startTime;
+  if (candidates.length === 0) return fallback;
+  return candidates.reduce(
+    (best, option) =>
+      Math.abs(timeToMinutes(option) - target) < Math.abs(timeToMinutes(best) - target) ? option : best,
+    candidates[0] ?? fallback,
+  );
 }
 
 export function todayDateString(): string {

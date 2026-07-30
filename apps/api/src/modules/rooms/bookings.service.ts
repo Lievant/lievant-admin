@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GraphAttendee, GraphTokenService } from '../auth/graph-token.service';
 import { User } from '../auth/entities/user.entity';
+import { userHasPermission } from '../auth/permissions.util';
 import { CancelBookingDto } from './dto/cancel-booking.dto';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingDto } from './dto/update-booking.dto';
@@ -127,9 +128,10 @@ export class BookingsService {
 
     const isOwner = booking.userId === currentUser.id;
     const isAdmin = await this.isOfficeAdmin(currentUser, booking.room.officeId);
+    const canManageAll = this.canManageAllBookings(currentUser);
 
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException('No tienes permisos para cancelar esta reserva');
+    if (!isOwner && !isAdmin && !canManageAll) {
+      throw new ForbiddenException('Solo puedes cancelar tus propias reservas');
     }
 
     let bookingsToCancel = [booking];
@@ -179,8 +181,9 @@ export class BookingsService {
 
     const isOwner = booking.userId === currentUser.id;
     const isAdmin = await this.isOfficeAdmin(currentUser, booking.room.officeId);
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException('No tienes permisos para modificar esta reserva');
+    const canManageAll = this.canManageAllBookings(currentUser);
+    if (!isOwner && !isAdmin && !canManageAll) {
+      throw new ForbiddenException('Solo puedes modificar tus propias reservas');
     }
 
     if (booking.status === BookingStatus.CANCELADA) {
@@ -307,13 +310,16 @@ export class BookingsService {
 
   async findAdmin(currentUser: User, query: AdminBookingsQuery): Promise<Booking[]> {
     const isSuperAdmin = currentUser.roles.some((role) => role.name === 'SUPER_ADMIN');
+    const canManageAll = this.canManageAllBookings(currentUser);
     const adminEntries = await this.officeAdminsRepository.find({ where: { userId: currentUser.id } });
 
-    if (!isSuperAdmin && adminEntries.length === 0) {
+    if (!isSuperAdmin && !canManageAll && adminEntries.length === 0) {
       throw new ForbiddenException('No tienes permisos de administrador de salas');
     }
 
-    const isGlobalAdmin = isSuperAdmin || adminEntries.some((entry) => entry.scope === AdminScope.GLOBAL);
+    // salas.manage da alcance global: ve las reservas de todas las oficinas.
+    const isGlobalAdmin =
+      isSuperAdmin || canManageAll || adminEntries.some((entry) => entry.scope === AdminScope.GLOBAL);
     const officeIds = adminEntries
       .filter((entry) => entry.scope === AdminScope.OFFICE && entry.officeId)
       .map((entry) => entry.officeId as string);
@@ -356,6 +362,11 @@ export class BookingsService {
 
   async findPendingApproval(currentUser: User): Promise<Booking[]> {
     return this.findAdmin(currentUser, { status: BookingStatus.PENDIENTE_APROBACION });
+  }
+
+  /** herramientas.salas.manage → puede editar/cancelar reservas de cualquiera. */
+  canManageAllBookings(user: User): boolean {
+    return userHasPermission(user, 'herramientas', 'salas', 'manage');
   }
 
   async isOfficeAdmin(user: User, officeId?: string): Promise<boolean> {
