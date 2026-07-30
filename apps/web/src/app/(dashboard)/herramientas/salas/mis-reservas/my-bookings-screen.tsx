@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { Booking, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
@@ -27,6 +28,9 @@ const EMPTY_MESSAGES: Record<Tab, string> = {
   canceladas: 'No tienes reservas canceladas.',
 };
 
+/** Pasadas y canceladas muestran solo las más recientes. */
+const HISTORY_LIMIT = 20;
+
 interface MyBookingsScreenProps {
   bookings: Booking[];
   errorKind: ErrorKind | null;
@@ -37,16 +41,45 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [editTarget, setEditTarget] = useState<Booking | null>(null);
 
-  // Referencia "ahora" en zona horaria de México (America/Mexico_City).
-  const nowCDMX = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Mexico_City' })).getTime();
+  const source = bookings;
 
-  const filtered = bookings.filter((booking) => {
-    // Una reserva es "futura" mientras no haya terminado (endTime), no desde que empieza.
-    const isFuture = new Date(booking.endTime).getTime() > nowCDMX;
-    if (tab === 'canceladas') return booking.status === 'cancelada';
-    if (tab === 'proximas') return booking.status !== 'cancelada' && isFuture;
-    return booking.status !== 'cancelada' && !isFuture;
-  });
+  // startTime/endTime son timestamptz, así que Date.now() es la referencia
+  // correcta: comparar epochs no depende de la zona horaria. (Antes se derivaba
+  // "ahora" con toLocaleString('America/Mexico_City') y se reparseaba como hora
+  // local, lo que desplazaba la referencia varias horas y hacía que reservas ya
+  // terminadas siguieran apareciendo como próximas.)
+  const now = Date.now();
+  const isFuture = (booking: Booking) => new Date(booking.endTime).getTime() > now;
+  const byStartAsc = (a: Booking, b: Booking) =>
+    new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
+  const byStartDesc = (a: Booking, b: Booking) => -byStartAsc(a, b);
+
+  const upcomingBookings = source
+    .filter((b) => b.status !== 'cancelada' && isFuture(b))
+    .sort(byStartAsc);
+
+  // Pasadas y canceladas: más reciente primero y solo las últimas 20.
+  const pastBookings = source
+    .filter((b) => b.status !== 'cancelada' && !isFuture(b))
+    .sort(byStartDesc)
+    .slice(0, HISTORY_LIMIT);
+
+  const cancelledBookings = source
+    .filter((b) => b.status === 'cancelada')
+    .sort(byStartDesc)
+    .slice(0, HISTORY_LIMIT);
+
+  const totalPast = source.filter((b) => b.status !== 'cancelada' && !isFuture(b)).length;
+  const totalCancelled = source.filter((b) => b.status === 'cancelada').length;
+
+  const filtered =
+    tab === 'proximas' ? upcomingBookings : tab === 'pasadas' ? pastBookings : cancelledBookings;
+  const hiddenCount =
+    tab === 'pasadas'
+      ? totalPast - pastBookings.length
+      : tab === 'canceladas'
+        ? totalCancelled - cancelledBookings.length
+        : 0;
 
   if (errorKind === 'forbidden') {
     return <NoPermissions />;
@@ -54,9 +87,17 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
 
   return (
     <div>
-      <header>
-        <h1 className="text-2xl font-bold text-navy">Mis reservas</h1>
-        <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-navy">Mis reservas</h1>
+          <p className="mt-1 text-sm text-slate-500">Herramientas · Reserva de salas</p>
+        </div>
+        <Link
+          href="/herramientas/salas"
+          className="shrink-0 rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+        >
+          ← Reserva de salas
+        </Link>
       </header>
 
       {errorKind === 'unavailable' && (
@@ -87,13 +128,19 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
         </div>
       ) : (
         <div className="mt-4 space-y-3">
+          {hiddenCount > 0 && (
+            <p className="text-xs text-slate-400">
+              Mostrando las {HISTORY_LIMIT} más recientes de {filtered.length + hiddenCount}.
+            </p>
+          )}
           {filtered.map((booking) => {
             const room = booking.room;
             const office = room?.office;
             const city = office?.city;
-            const isFuture = new Date(booking.endTime).getTime() > nowCDMX;
+            const bookingIsFuture = isFuture(booking);
             const canCancel =
-              isFuture && (booking.status === 'confirmada' || booking.status === 'pendiente_aprobacion');
+              bookingIsFuture &&
+              (booking.status === 'confirmada' || booking.status === 'pendiente_aprobacion');
             const canEdit = canCancel && Boolean(room);
 
             return (

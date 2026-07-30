@@ -7,12 +7,14 @@ import { AlertIcon, CheckIcon, CloseIcon } from '@/components/icons';
 import { AttendeesPicker, type AttendeePickerHandle } from '@/components/ui/attendees-picker';
 import { createBookingAction, updateBookingAction } from './actions';
 import {
-  DURATION_OPTIONS,
+  MAX_BOOKING_MINUTES,
+  MIN_BOOKING_MINUTES,
   WEEKDAYS,
-  addHoursToIso,
   buildIsoDateTime,
+  defaultEndTime,
   formatTimeLabel,
-  generateTimeSlots,
+  generateTimeOptions,
+  timeToMinutes,
 } from './constants';
 import { SelectField, TextAreaField, TextField } from './form-field';
 
@@ -21,12 +23,13 @@ interface BookRoomDialogProps {
   officeName: string;
   date: string;
   startTime: string;
+  /** Solo se usa para proponer la hora de fin inicial; el formulario envía end_time. */
   durationHours: number;
   booking?: Booking; // presente → modo edición
   onClose: () => void;
 }
 
-const TIME_SLOTS = generateTimeSlots();
+const TIME_OPTIONS = generateTimeOptions();
 
 function maxRecurrenceEndDate(date: string): string {
   const max = new Date(`${date}T00:00:00Z`);
@@ -34,8 +37,12 @@ function maxRecurrenceEndDate(date: string): string {
   return max.toISOString().slice(0, 10);
 }
 
-function durationBetween(startISO: string, endISO: string): number {
-  return (new Date(endISO).getTime() - new Date(startISO).getTime()) / (60 * 60 * 1000);
+function formatMinutes(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes} min`;
+  if (minutes === 0) return `${hours} h`;
+  return `${hours} h ${minutes} min`;
 }
 
 export function BookRoomDialog({
@@ -53,8 +60,10 @@ export function BookRoomDialog({
 
   const [date, setDate] = useState(booking ? booking.startTime.slice(0, 10) : initialDate);
   const [startTime, setStartTime] = useState(booking ? booking.startTime.slice(11, 16) : initialStartTime);
-  const [durationHours, setDurationHours] = useState(
-    booking ? durationBetween(booking.startTime, booking.endTime) : initialDurationHours,
+  const [endTime, setEndTime] = useState(
+    booking
+      ? booking.endTime.slice(11, 16)
+      : defaultEndTime(initialStartTime, initialDurationHours, TIME_OPTIONS),
   );
   const [title, setTitle] = useState(booking?.title ?? '');
   const [notes, setNotes] = useState(booking?.notes ?? '');
@@ -67,9 +76,26 @@ export function BookRoomDialog({
   const [isPending, startTransition] = useTransition();
 
   const startISO = buildIsoDateTime(date, startTime);
-  const endISO = addHoursToIso(startISO, durationHours);
+  const endISO = buildIsoDateTime(date, endTime);
+  const durationMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
   const maxRecurrenceDate = maxRecurrenceEndDate(date);
-  const requiresApproval = durationHours > room.requiresApprovalOverHours;
+  const requiresApproval = durationMinutes / 60 > room.requiresApprovalOverHours;
+
+  /** Devuelve el mensaje de error de horario, o null si es válido. */
+  function validateRange(): string | null {
+    if (durationMinutes <= 0) {
+      return 'La hora de finalización debe ser posterior a la hora de inicio.';
+    }
+    if (durationMinutes < MIN_BOOKING_MINUTES) {
+      return `La reserva debe durar al menos ${MIN_BOOKING_MINUTES} minutos.`;
+    }
+    if (durationMinutes > MAX_BOOKING_MINUTES) {
+      return `La reserva no puede exceder ${MAX_BOOKING_MINUTES / 60} horas.`;
+    }
+    return null;
+  }
+
+  const rangeError = validateRange();
 
   function toggleDay(rrule: string) {
     setSelectedDays((prev) => (prev.includes(rrule) ? prev.filter((d) => d !== rrule) : [...prev, rrule]));
@@ -84,6 +110,11 @@ export function BookRoomDialog({
 
     if (!title.trim()) {
       setError('El motivo o título es obligatorio.');
+      return;
+    }
+    const invalidRange = validateRange();
+    if (invalidRange) {
+      setError(invalidRange);
       return;
     }
     if (!isEdit && isRecurring && selectedDays.length === 0) {
@@ -188,22 +219,22 @@ export function BookRoomDialog({
             <TextField id="booking-date" label="Fecha" type="date" value={date} onChange={setDate} />
 
             <SelectField id="booking-start-time" label="Hora inicio" value={startTime} onChange={setStartTime}>
-              {TIME_SLOTS.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
+              {TIME_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </SelectField>
 
             <SelectField
-              id="booking-duration"
-              label="Duración"
-              value={String(durationHours)}
-              onChange={(value) => setDurationHours(Number(value))}
+              id="booking-end-time"
+              label="Hora de finalización"
+              value={endTime}
+              onChange={setEndTime}
             >
-              {DURATION_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {TIME_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
                 </option>
               ))}
             </SelectField>
@@ -211,7 +242,14 @@ export function BookRoomDialog({
 
           <p className="text-sm text-slate-500">
             Horario: {formatTimeLabel(startISO)} - {formatTimeLabel(endISO)}
+            {durationMinutes > 0 && ` · ${formatMinutes(durationMinutes)}`}
           </p>
+
+          {rangeError && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+              {rangeError}
+            </div>
+          )}
 
           <TextField id="booking-title" label="Motivo o título" value={title} onChange={setTitle} maxLength={255} />
 
@@ -298,7 +336,7 @@ export function BookRoomDialog({
             </button>
             <button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || rangeError !== null}
               className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
             >
               {isPending
