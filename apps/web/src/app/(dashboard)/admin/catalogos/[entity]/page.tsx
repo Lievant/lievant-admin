@@ -42,11 +42,11 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
       <nav className="text-sm text-slate-500">
-        <Link href="/admin" className="hover:text-terracota">
+        <Link href="/admin" className="hover:text-black">
           Administración
         </Link>
         {' / '}
-        <Link href="/admin/catalogos" className="hover:text-terracota">
+        <Link href="/admin/catalogos" className="hover:text-black">
           Catálogos
         </Link>
         {' / '}
@@ -54,7 +54,7 @@ export default async function CatalogEntityPage({ params }: CatalogEntityPagePro
       </nav>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>
       )}

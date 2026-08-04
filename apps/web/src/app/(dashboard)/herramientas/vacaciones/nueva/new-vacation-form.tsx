@@ -17,7 +17,7 @@ interface CalcResult {
 }
 
 const inputClass =
-  'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota';
+  'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 
 export function NewVacationForm({ balance }: Props) {
   const router = useRouter();
@@ -104,11 +104,11 @@ export function NewVacationForm({ balance }: Props) {
       </Link>
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-terracota-bg text-terracota">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-50 text-black">
           <PlaneIcon className="h-5 w-5" />
         </span>
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Herramientas</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Herramientas</p>
           <h1 className="text-2xl font-bold text-navy">Solicitar vacaciones</h1>
         </div>
       </div>
@@ -235,7 +235,7 @@ export function NewVacationForm({ balance }: Props) {
           <button
             type="submit"
             disabled={!canSubmit}
-            className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white transition hover:bg-terracota-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? 'Enviando…' : 'Enviar solicitud'}
           </button>

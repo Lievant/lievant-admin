@@ -106,7 +106,7 @@ export function ContactDialog({
               id="contact-type"
               value={contactType}
               onChange={(e) => setContactType(e.target.value as ContactType | '')}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             >
               <option value="">Sin especificar</option>
               {CONTACT_TYPES.map((type) => (
@@ -129,7 +129,7 @@ export function ContactDialog({
               type="checkbox"
               checked={isPrimary}
               onChange={(e) => setIsPrimary(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-terracota focus:ring-terracota"
+              className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
             />
             Contacto principal
           </label>
@@ -143,7 +143,7 @@ export function ContactDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -175,7 +175,7 @@ export function ContactDialog({
               <button
                 type="submit"
                 disabled={isPending}
-                className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+                className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
               >
                 {isPending ? 'Guardando…' : 'Guardar'}
               </button>

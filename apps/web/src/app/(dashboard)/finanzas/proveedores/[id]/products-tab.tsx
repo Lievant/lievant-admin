@@ -17,7 +17,7 @@ export function ProductsTab({ vendor }: { vendor: VendorDetail }) {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Agregar producto/servicio

@@ -6,7 +6,7 @@ export default function MarketingPage() {
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Marketing</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Marketing</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
         </div>
         <ComingSoonBadge />
@@ -31,14 +31,14 @@ export default function MarketingPage() {
             description="Planificación y seguimiento de campañas"
             href="/marketing"
             icon={<SpeakerphoneIcon className="h-6 w-6" />}
-            accentClass="bg-pink-50 text-pink-600"
+            accentClass="bg-black/10 text-black"
           />
           <ModuleCard
             title="Contenido digital"
             description="Publicaciones, canales y calendario"
             href="/marketing"
             icon={<BroadcastIcon className="h-6 w-6" />}
-            accentClass="bg-violet-50 text-violet-600"
+            accentClass="bg-black/10 text-black"
           />
         </div>
       </div>

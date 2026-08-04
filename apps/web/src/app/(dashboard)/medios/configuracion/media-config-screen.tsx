@@ -111,7 +111,7 @@ export function MediaConfigScreen({
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Medios</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Medios</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Configuración</h1>
           <p className="mt-1 text-sm text-slate-500">
             Credenciales, conexiones, logs de sincronización y plataformas.
@@ -151,7 +151,7 @@ export function MediaConfigScreen({
             onClick={() => setTab(t.key)}
             className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               tab === t.key
-                ? 'border-terracota text-terracota'
+                ? 'border-black text-black'
                 : 'border-transparent text-slate-500 hover:text-navy'
             }`}
           >
@@ -226,7 +226,7 @@ function CredentialsTab({
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-terracota px-4 py-2 text-sm font-medium text-white hover:bg-terracota-dark"
+          className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nueva credencial
@@ -602,7 +602,7 @@ function CredentialModal({
             type="button"
             onClick={handleSubmit}
             disabled={submitting}
-            className="rounded-lg bg-terracota px-4 py-2 text-sm font-medium text-white hover:bg-terracota-dark disabled:opacity-50"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
           >
             {submitting ? 'Guardando...' : editing ? 'Guardar cambios' : 'Crear credencial'}
           </button>
@@ -733,7 +733,7 @@ function SyncLogsTab({
           <select
             value={platformSlug}
             onChange={(e) => setPlatformSlug(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
           >
             <option value="">Plataforma: Todas</option>
             {platforms.map((p) => (
@@ -745,7 +745,7 @@ function SyncLogsTab({
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
           >
             <option value="">Estado: Todos</option>
             <option value="success">Success</option>

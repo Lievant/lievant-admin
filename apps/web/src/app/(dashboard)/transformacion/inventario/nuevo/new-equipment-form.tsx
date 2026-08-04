@@ -57,7 +57,7 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion | nul
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder="Buscar empleado por nombre o email…"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg">
@@ -166,13 +166,13 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
     }
   }
 
-  const inputClass = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none';
+  const inputClass = 'w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none';
   const labelClass = 'mb-1 block text-sm font-medium text-slate-700';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="rounded-md border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="rounded-md border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           {error}
         </div>
       )}
@@ -294,7 +294,7 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         <button
           type="submit"
           disabled={saving}
-          className="rounded-md bg-terracota px-6 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-50"
+          className="rounded-md bg-black px-6 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
         >
           {saving ? 'Guardando…' : 'Guardar equipo'}
         </button>

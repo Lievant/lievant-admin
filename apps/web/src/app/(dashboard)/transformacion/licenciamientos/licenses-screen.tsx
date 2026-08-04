@@ -161,7 +161,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
             <button
               type="button"
               onClick={() => setShowNewRecordDialog(true)}
-              className="flex items-center gap-2 rounded-md border border-terracota px-4 py-2 text-sm font-semibold text-terracota hover:bg-terracota/5"
+              className="flex items-center gap-2 rounded-md border border-black px-4 py-2 text-sm font-semibold text-black hover:bg-black/5"
             >
               <PlusIcon className="h-4 w-4" />
               Agregar empleado
@@ -169,7 +169,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
             <button
               type="button"
               onClick={() => setShowNewToolDialog(true)}
-              className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+              className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
               <PlusIcon className="h-4 w-4" />
               Nueva herramienta
@@ -187,14 +187,14 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
       )}
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API.
         </div>
       )}
 
       {/* KPIs */}
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <StatCard label="Con licencias" value={stats.totalEmployeesWithLicenses} accent="text-terracota" />
+        <StatCard label="Con licencias" value={stats.totalEmployeesWithLicenses} accent="text-black" />
         {stats.byTool.map((t) => (
           <StatCard key={t.toolId} label={t.toolName} value={t.count} />
         ))}
@@ -216,7 +216,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
         <select
           value={filters.tool}
           onChange={(e) => updateParams({ tool: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Herramienta: Todas</option>
           {tools.map((t) => (
@@ -227,7 +227,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
         <select
           value={filters.hasAccess}
           onChange={(e) => updateParams({ hasAccess: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Acceso: Todos</option>
           <option value="true">Con acceso</option>
@@ -237,7 +237,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
         <select
           value={filters.department}
           onChange={(e) => updateParams({ department: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Área: Todas</option>
           {catalogs.areas.map((a) => (
@@ -248,7 +248,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
         <select
           value={filters.division}
           onChange={(e) => updateParams({ division: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">División: Todas</option>
           {catalogs.divisions.map((d) => (
@@ -260,7 +260,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
           <button
             type="button"
             onClick={() => router.push('/transformacion/licenciamientos')}
-            className="text-sm font-medium text-terracota hover:underline"
+            className="text-sm font-medium text-black hover:underline"
           >
             Limpiar filtros
           </button>
@@ -311,7 +311,7 @@ export function LicensesScreen({ employees, stats, tools, errorKind, filters, ca
                   <td className="px-4 py-3">
                     <Link
                       href={`/transformacion/licenciamientos/${emp.employeeId}`}
-                      className="text-xs font-medium text-terracota hover:underline"
+                      className="text-xs font-medium text-black hover:underline"
                     >
                       Editar licencias
                     </Link>

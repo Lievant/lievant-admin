@@ -91,7 +91,7 @@ export function UploadDocumentDialog({
                 id="doc-type"
                 value={documentType}
                 onChange={(e) => setDocumentType(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 {documentTypes.map((dt) => (
                   <option key={dt.id} value={dt.name}>
@@ -142,7 +142,7 @@ export function UploadDocumentDialog({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Cargando…' : 'Cargar documento'}
             </button>

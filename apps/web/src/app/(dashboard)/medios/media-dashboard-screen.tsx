@@ -36,7 +36,7 @@ export function MediaDashboardScreen({ summary, errorKind }: Props) {
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Medios</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Medios</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Control de pauta</h1>
           <p className="mt-1 text-sm text-slate-500">
             Dashboard ejecutivo — presupuesto, gasto y pacing del mes en curso.

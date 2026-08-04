@@ -30,7 +30,7 @@ export function TextField({ id, label, value, onChange, placeholder, mono, type 
         min={min}
         max={max}
         className={cn(
-          'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota',
+          'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black',
           mono && 'font-mono',
         )}
       />
@@ -59,7 +59,7 @@ export function TextAreaField({ id, label, value, onChange, rows = 3, placeholde
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
       />
     </div>
   );
@@ -85,7 +85,7 @@ export function SelectField({ id, label, value, onChange, children, disabled }: 
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota disabled:bg-slate-50 disabled:text-slate-400"
+        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black disabled:bg-slate-50 disabled:text-slate-400"
       >
         {children}
       </select>

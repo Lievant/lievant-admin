@@ -5,7 +5,7 @@ export default function ReportesFinanzasPage() {
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
       <header className="mb-8">
-        <p className="text-sm font-medium uppercase tracking-wide text-terracota">Finanzas</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-black">Finanzas</p>
         <h1 className="mt-1 text-3xl font-bold text-navy">Reportes</h1>
         <p className="mt-2 text-sm text-slate-500">Análisis de cartera de clientes y documentación</p>
       </header>
@@ -13,7 +13,7 @@ export default function ReportesFinanzasPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/finanzas/reportes/documentos-faltantes"
-          className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-terracota/40 hover:shadow-md"
+          className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-black/40 hover:shadow-md"
         >
           <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition group-hover:bg-amber-100">
             <TableIcon className="h-6 w-6" />

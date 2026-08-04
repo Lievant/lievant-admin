@@ -70,7 +70,7 @@ export function AnnouncementsCard({ initialAnnouncements, canManage }: Props) {
         {canManage && (
           <button
             onClick={() => setShowDialog(true)}
-            className="text-xs font-medium text-terracota border border-terracota/40 rounded-md px-2.5 py-1 hover:bg-terracota hover:text-white transition-colors"
+            className="text-xs font-medium text-black border border-black/40 rounded-md px-2.5 py-1 hover:bg-zinc-800 hover:text-white transition-colors"
           >
             + Publicar
           </button>
@@ -94,7 +94,7 @@ export function AnnouncementsCard({ initialAnnouncements, canManage }: Props) {
                 {canManage && (
                   <button
                     onClick={() => handleDelete(a.id)}
-                    className="flex-shrink-0 text-slate-300 hover:text-terracota transition-colors text-lg leading-none"
+                    className="flex-shrink-0 text-slate-300 hover:text-black transition-colors text-lg leading-none"
                     title="Eliminar"
                   >
                     ×
@@ -119,7 +119,7 @@ export function AnnouncementsCard({ initialAnnouncements, canManage }: Props) {
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={200}
                   required
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
                   placeholder="Asunto del comunicado"
                 />
               </div>
@@ -130,7 +130,7 @@ export function AnnouncementsCard({ initialAnnouncements, canManage }: Props) {
                   onChange={(e) => setBody(e.target.value)}
                   required
                   rows={4}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30 resize-none"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30 resize-none"
                   placeholder="Escribe el comunicado..."
                 />
               </div>
@@ -146,7 +146,7 @@ export function AnnouncementsCard({ initialAnnouncements, canManage }: Props) {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 text-sm font-medium bg-terracota text-white rounded-lg hover:bg-terracota-dark disabled:opacity-50 transition-colors"
+                  className="px-4 py-2 text-sm font-medium bg-black text-white rounded-lg hover:bg-zinc-800 disabled:opacity-50 transition-colors"
                 >
                   {saving ? 'Publicando…' : 'Publicar'}
                 </button>

@@ -131,7 +131,7 @@ export function NewProjectForm({ clients, employees }: Props) {
             key={s}
             className={cn(
               'flex-1 py-3 text-center text-sm font-medium',
-              step === s ? 'border-b-2 border-terracota text-terracota' : 'text-slate-400',
+              step === s ? 'border-b-2 border-black text-black' : 'text-slate-400',
             )}
           >
             {s === 1 ? 'Datos generales' : s === 2 ? 'Equipo' : 'Financiero'}
@@ -148,7 +148,7 @@ export function NewProjectForm({ clients, employees }: Props) {
               <input
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
                 placeholder="Ej. SIOcore Acme 2025"
               />
             </div>
@@ -158,7 +158,7 @@ export function NewProjectForm({ clients, employees }: Props) {
                 value={form.description}
                 onChange={(e) => set('description', e.target.value)}
                 rows={3}
-                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -337,7 +337,7 @@ export function NewProjectForm({ clients, employees }: Props) {
             <button
               type="button"
               onClick={nextStep}
-              className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white hover:bg-navy/90"
+              className="rounded-lg bg-navy px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
             >
               Siguiente
             </button>
@@ -346,7 +346,7 @@ export function NewProjectForm({ clients, employees }: Props) {
               type="button"
               onClick={handleSubmit}
               disabled={saving}
-              className="rounded-lg bg-terracota px-4 py-2 text-sm font-medium text-white hover:bg-terracota/90 disabled:opacity-60"
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {saving ? 'Creando…' : 'Crear proyecto'}
             </button>

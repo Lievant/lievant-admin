@@ -27,7 +27,7 @@ function Avatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
     );
   }
   return (
-    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-terracota text-xs font-semibold text-white">
+    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-black text-xs font-semibold text-white">
       {abbr}
     </span>
   );
@@ -162,7 +162,7 @@ export function PendingApprovalsCard() {
               onChange={(e) => setReason(e.target.value)}
               rows={3}
               autoFocus
-              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="mt-1 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               placeholder="Explica el motivo (obligatorio)…"
             />
             <div className="mt-4 flex justify-end gap-2">

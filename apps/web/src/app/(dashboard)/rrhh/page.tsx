@@ -24,7 +24,7 @@ export default async function RrhhPage() {
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8">
-        <p className="text-sm font-medium uppercase tracking-wide text-terracota">RRHH</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-black">RRHH</p>
         <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
       </header>
 
@@ -67,14 +67,14 @@ export default async function RrhhPage() {
             description="Directorio, contratos y datos del colaborador"
             href="/rrhh/empleados"
             icon={<PeopleIcon className="h-6 w-6" />}
-            accentClass="bg-terracota/10 text-terracota"
+            accentClass="bg-black/10 text-black"
           />
           <ModuleCard
             title="Reportes"
             description="Análisis de plantilla y estadísticas"
             href="/rrhh/reportes"
             icon={<ReportsIcon className="h-6 w-6" />}
-            accentClass="bg-blue-50 text-blue-600"
+            accentClass="bg-black/10 text-black"
           />
         </div>
       </div>

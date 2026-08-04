@@ -48,11 +48,11 @@ export function VendorDetailScreen({
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/finanzas" className="hover:text-terracota">
+        <Link href="/finanzas" className="hover:text-black">
           Finanzas
         </Link>
         <span>/</span>
-        <Link href="/finanzas/proveedores" className="hover:text-terracota">
+        <Link href="/finanzas/proveedores" className="hover:text-black">
           Proveedores
         </Link>
         <span>/</span>
@@ -75,7 +75,7 @@ export function VendorDetailScreen({
                 VND-{vendor.id.slice(0, 8).toUpperCase()}
               </span>
               {category && (
-                <span className="rounded-full bg-terracota/10 px-2 py-1 text-xs font-semibold text-terracota-dark">
+                <span className="rounded-full bg-black/10 px-2 py-1 text-xs font-semibold text-black">
                   {category.name}
                 </span>
               )}
@@ -112,7 +112,7 @@ export function VendorDetailScreen({
               className={cn(
                 'flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors',
                 activeTab === tab.id
-                  ? 'border-terracota text-terracota'
+                  ? 'border-black text-black'
                   : 'border-transparent text-slate-500 hover:text-navy',
               )}
             >

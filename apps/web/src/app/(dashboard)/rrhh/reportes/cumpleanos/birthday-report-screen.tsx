@@ -36,7 +36,7 @@ function getDaysUntil(birthDateMMDD: string, today: Date): number {
 
 function DaysBadge({ days }: { days: number }) {
   if (days === 0) {
-    return <span className="font-semibold text-terracota">Hoy 🎂</span>;
+    return <span className="font-semibold text-black">Hoy 🎂</span>;
   }
   if (days === 1) {
     return (
@@ -112,7 +112,7 @@ export function BirthdayReportScreen({ items, selectedMonth, selectedOrderBy }: 
               <CakeIcon className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-terracota">RRHH · Reportes</p>
+              <p className="text-sm font-medium uppercase tracking-wide text-black">RRHH · Reportes</p>
               <h1 className="text-2xl font-bold text-navy">Cumpleaños del mes</h1>
             </div>
           </div>
@@ -139,7 +139,7 @@ export function BirthdayReportScreen({ items, selectedMonth, selectedOrderBy }: 
             value={selectedMonth}
             onChange={(e) => navigate(Number(e.target.value), selectedOrderBy)}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-terracota/30 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-black/30 disabled:opacity-50"
           >
             {MONTH_NAMES.map((name, i) => (
               <option key={i + 1} value={i + 1}>
@@ -155,7 +155,7 @@ export function BirthdayReportScreen({ items, selectedMonth, selectedOrderBy }: 
             value={selectedOrderBy}
             onChange={(e) => navigate(selectedMonth, e.target.value)}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-terracota/30 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-black/30 disabled:opacity-50"
           >
             <option value="date">Fecha (día del mes)</option>
             <option value="name">Nombre</option>
@@ -183,9 +183,9 @@ export function BirthdayReportScreen({ items, selectedMonth, selectedOrderBy }: 
 
       {/* Today's birthday banner */}
       {today && todayBirthdays > 0 && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl bg-terracota/10 px-4 py-3 text-sm print:hidden">
+        <div className="mb-4 flex items-center gap-3 rounded-xl bg-black/10 px-4 py-3 text-sm print:hidden">
           <span className="text-xl">🎂</span>
-          <span className="font-medium text-terracota">
+          <span className="font-medium text-black">
             {todayBirthdays === 1
               ? 'Hoy cumple años 1 persona del equipo'
               : `Hoy cumplen años ${todayBirthdays} personas del equipo`}
@@ -228,14 +228,14 @@ export function BirthdayReportScreen({ items, selectedMonth, selectedOrderBy }: 
                 return (
                   <tr
                     key={item.id}
-                    className={isToday ? 'bg-terracota/10' : 'hover:bg-slate-50/60'}
+                    className={isToday ? 'bg-black/10' : 'hover:bg-slate-50/60'}
                   >
                     {/* Avatar + name */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span
                           className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            isToday ? 'bg-terracota text-white' : 'bg-slate-100 text-slate-600'
+                            isToday ? 'bg-black text-white' : 'bg-slate-100 text-slate-600'
                           }`}
                         >
                           {getInitials(item.fullName)}

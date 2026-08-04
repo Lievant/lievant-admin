@@ -65,7 +65,7 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion) => v
         onChange={(e) => handleChange(e.target.value)}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder="Buscar empleado…"
-        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
       />
       {open && suggestions.length > 0 && (
         <ul className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg">
@@ -167,7 +167,7 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-md border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">{error}</div>
+        <div className="rounded-md border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">{error}</div>
       )}
 
       {/* Empleado actual */}
@@ -200,7 +200,7 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
         )}
 
         <div className="mt-4 flex gap-2">
-          <button onClick={() => setAssigning(true)} className="rounded-md bg-terracota px-4 py-1.5 text-sm font-medium text-white hover:bg-terracota-dark">
+          <button onClick={() => setAssigning(true)} className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-800">
             {emp ? 'Cambiar asignación' : 'Asignar empleado'}
           </button>
           {emp && (
@@ -253,7 +253,7 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
                       <td className="px-4 py-3">
                         <Link
                           href={`/transformacion/inventario/${item.id}`}
-                          className="text-xs font-medium text-terracota hover:underline"
+                          className="text-xs font-medium text-black hover:underline"
                         >
                           Ver
                         </Link>
@@ -276,16 +276,16 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
             <div className="mt-4 grid grid-cols-2 gap-4">
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha de asignación</label>
-                <input type="date" value={assignmentDate} onChange={(e) => setAssignmentDate(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-terracota focus:outline-none" />
+                <input type="date" value={assignmentDate} onChange={(e) => setAssignmentDate(e.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none" />
               </div>
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">No. de responsiva</label>
-                <input type="text" value={responsiva} onChange={(e) => setResponsiva(e.target.value)} placeholder="TIC-RE-02-XXXX" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-terracota focus:outline-none" />
+                <input type="text" value={responsiva} onChange={(e) => setResponsiva(e.target.value)} placeholder="TIC-RE-02-XXXX" className="w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none" />
               </div>
             </div>
           )}
           <div className="mt-4 flex gap-2">
-            <button onClick={handleAssign} disabled={!newEmployee || saving} className="rounded-md bg-terracota px-4 py-1.5 text-sm font-medium text-white hover:bg-terracota-dark disabled:opacity-50">
+            <button onClick={handleAssign} disabled={!newEmployee || saving} className="rounded-md bg-black px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50">
               {saving ? 'Guardando…' : 'Confirmar asignación'}
             </button>
             <button onClick={() => setAssigning(false)} className="rounded-md border border-slate-200 px-4 py-1.5 text-sm text-slate-600 hover:bg-slate-50">

@@ -6,7 +6,7 @@ export default function EcommercePage() {
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Ecommerce</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Ecommerce</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
         </div>
         <ComingSoonBadge />
@@ -31,14 +31,14 @@ export default function EcommercePage() {
             description="Productos, precios e inventario"
             href="/ecommerce"
             icon={<ShoppingCartIcon className="h-6 w-6" />}
-            accentClass="bg-emerald-50 text-emerald-600"
+            accentClass="bg-black/10 text-black"
           />
           <ModuleCard
             title="Ventas y pedidos"
             description="Órdenes, facturación y seguimiento"
             href="/ecommerce"
             icon={<ReportMoneyIcon className="h-6 w-6" />}
-            accentClass="bg-blue-50 text-blue-600"
+            accentClass="bg-black/10 text-black"
           />
         </div>
       </div>

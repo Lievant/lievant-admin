@@ -40,7 +40,7 @@ export default async function VendorDetailPage({ params }: VendorDetailPageProps
   if (!vendor) {
     return (
       <div className="mx-auto max-w-3xl px-8 py-10">
-        <div className="rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           {fetchError}
         </div>
       </div>

@@ -92,7 +92,7 @@ function DashboardPhoto({ name, email, abbr }: { name: string; email: string; ab
 function WireframePhoto({ abbr }: { abbr: string }) {
   return (
     <div
-      className="flex-shrink-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-terracota/40 bg-terracota-bg text-terracota select-none"
+      className="flex-shrink-0 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-black/40 bg-zinc-50 text-black select-none"
       style={{ width: 100, minHeight: 120 }}
     >
       <svg
@@ -173,7 +173,7 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
                 <Link
                   key={chip.href}
                   href={chip.href}
-                  className="inline-flex items-center rounded-md border border-terracota/30 bg-terracota-bg px-3 py-1.5 text-xs font-medium text-terracota-dark hover:bg-terracota hover:text-white transition-colors"
+                  className="inline-flex items-center rounded-md border border-black/30 bg-zinc-50 px-3 py-1.5 text-xs font-medium text-black hover:bg-zinc-800 hover:text-white transition-colors"
                 >
                   {chip.label}
                 </Link>
@@ -185,7 +185,7 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
       </header>
 
       {!user && (
-        <div className="rounded-lg border border-terracota/30 bg-terracota-bg px-4 py-3 text-sm text-terracota-dark">
+        <div className="rounded-lg border border-black/30 bg-zinc-50 px-4 py-3 text-sm text-black">
           No se pudo verificar la sesión con la API. Mostrando vista previa.
         </div>
       )}

@@ -66,7 +66,7 @@ export function AccountDetailScreen({ detail, errorKind }: Props) {
     <div className="space-y-6">
       <Link
         href="/medios/cuentas"
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-terracota"
+        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-black"
       >
         <ChevronLeftIcon className="h-4 w-4" />
         Cuentas
@@ -80,7 +80,7 @@ export function AccountDetailScreen({ detail, errorKind }: Props) {
               className="inline-block h-4 w-4 rounded-full"
               style={{ backgroundColor: account.platform.color ?? '#94a3b8' }}
             />
-            <p className="text-sm font-medium uppercase tracking-wide text-terracota">
+            <p className="text-sm font-medium uppercase tracking-wide text-black">
               {account.platform.name}
             </p>
           </div>

@@ -116,7 +116,7 @@ export function NewLicenseRecordDialog({
               onFocus={() => suggestions.length > 0 && setOpen(true)}
               onBlur={() => setTimeout(() => setOpen(false), 150)}
               placeholder="Buscar empleado…"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
             />
             {open && suggestions.length > 0 && (
               <ul className="absolute z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
@@ -163,7 +163,7 @@ export function NewLicenseRecordDialog({
             type="button"
             onClick={handleCreate}
             disabled={!selected || alreadyHas || submitting}
-            className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {submitting ? 'Creando…' : 'Crear registro'}
           </button>

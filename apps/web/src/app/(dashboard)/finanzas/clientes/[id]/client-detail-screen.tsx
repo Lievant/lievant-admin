@@ -55,11 +55,11 @@ export function ClientDetailScreen({
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/finanzas" className="hover:text-terracota">
+        <Link href="/finanzas" className="hover:text-black">
           Finanzas
         </Link>
         <span>/</span>
-        <Link href="/finanzas/clientes" className="hover:text-terracota">
+        <Link href="/finanzas/clientes" className="hover:text-black">
           Clientes
         </Link>
         <span>/</span>
@@ -114,7 +114,7 @@ export function ClientDetailScreen({
               className={cn(
                 'flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors',
                 activeTab === tab.id
-                  ? 'border-terracota text-terracota'
+                  ? 'border-black text-black'
                   : 'border-transparent text-slate-500 hover:text-navy',
               )}
             >

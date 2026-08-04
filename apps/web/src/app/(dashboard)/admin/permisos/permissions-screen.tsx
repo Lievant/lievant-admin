@@ -410,7 +410,7 @@ export function PermissionsScreen() {
                 onClick={() => handleSelectUser(user)}
                 className={cn(
                   'flex w-full items-center gap-3 border-b border-slate-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-slate-50',
-                  isSelected && 'border-l-2 border-l-terracota bg-terracota/5',
+                  isSelected && 'border-l-2 border-l-black bg-black/5',
                 )}
               >
                 <UserAvatar name={user.name} email={user.email} />
@@ -490,7 +490,7 @@ export function PermissionsScreen() {
                     className={cn(
                       'rounded-md px-4 py-2 text-sm font-medium transition-colors',
                       pendingChanges.size > 0 && !saving
-                        ? 'bg-terracota text-white hover:bg-terracota/90'
+                        ? 'bg-black text-white hover:bg-zinc-800'
                         : 'cursor-not-allowed bg-slate-100 text-slate-400',
                     )}
                   >

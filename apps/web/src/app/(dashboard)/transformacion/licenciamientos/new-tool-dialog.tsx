@@ -74,7 +74,7 @@ export function NewToolDialog({ onClose }: NewToolDialogProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ej: Slack"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -86,7 +86,7 @@ export function NewToolDialog({ onClose }: NewToolDialogProps) {
               id="tool-category"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             >
               {CATEGORY_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -118,7 +118,7 @@ export function NewToolDialog({ onClose }: NewToolDialogProps) {
                 value={icon}
                 onChange={(e) => setIcon(e.target.value)}
                 placeholder="ti-brand-slack"
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               />
             </div>
           </div>
@@ -138,7 +138,7 @@ export function NewToolDialog({ onClose }: NewToolDialogProps) {
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Agregar herramienta'}
             </button>

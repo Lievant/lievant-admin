@@ -131,7 +131,7 @@ export function PhotosTab({ employeeId, canWrite }: PhotosTabProps) {
               key={photo.id}
               className={cn(
                 'group relative overflow-hidden rounded-xl border bg-slate-50',
-                photo.isProfile ? 'border-terracota ring-2 ring-terracota/20' : 'border-slate-200',
+                photo.isProfile ? 'border-black ring-2 ring-black/20' : 'border-slate-200',
               )}
             >
               <div className="aspect-square">
@@ -139,7 +139,7 @@ export function PhotosTab({ employeeId, canWrite }: PhotosTabProps) {
               </div>
 
               {photo.isProfile && (
-                <div className="absolute left-2 top-2 rounded-full bg-terracota px-2 py-0.5 text-[10px] font-semibold text-white shadow">
+                <div className="absolute left-2 top-2 rounded-full bg-black px-2 py-0.5 text-[10px] font-semibold text-white shadow">
                   Perfil
                 </div>
               )}

@@ -88,7 +88,7 @@ function EmployeeSearch({
         onChange={handleChange}
         onFocus={() => suggestions.length > 0 && setOpen(true)}
         placeholder={placeholder}
-        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+        className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
         autoComplete="off"
       />
       {loading && (
@@ -306,7 +306,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
                 onChange={(e) => set('behalfReason', e.target.value)}
                 placeholder="Ej: Colaborador sin acceso al sistema…"
                 required={Boolean(form.openedOnBehalfOf)}
-                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
               />
             </div>
           )}
@@ -322,7 +322,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
           value={form.category}
           onChange={(e) => void onCategoryChange(e.target.value)}
           required
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
         >
           <option value="">Selecciona una categoría…</option>
           {categories.map((c) => (
@@ -338,7 +338,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
           <select
             value={form.subcategory}
             onChange={(e) => set('subcategory', e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
           >
             <option value="">Sin especificar</option>
             {subcategories.map((s) => (
@@ -358,7 +358,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
           value={form.equipmentId}
           onChange={(e) => set('equipmentId', e.target.value)}
           placeholder="Ej: M080, E009…"
-          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
         />
         <p className="mt-1 text-xs text-slate-400">
           Puedes encontrarlo en la etiqueta de tu equipo. Próximamente podrás seleccionarlo desde el inventario.
@@ -376,7 +376,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
           placeholder={placeholder}
           rows={5}
           required
-          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
         />
         <p className={cn('mt-1 text-xs', descLen < 20 ? 'text-slate-400' : 'text-emerald-600')}>
           {descLen}/20 caracteres mínimos
@@ -395,7 +395,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
               className={cn(
                 'flex flex-1 cursor-pointer items-center justify-center rounded-lg border py-2.5 text-sm font-medium capitalize transition-colors',
                 form.impact === impact
-                  ? 'border-terracota bg-terracota/5 text-terracota'
+                  ? 'border-black bg-black/5 text-black'
                   : 'border-slate-200 text-slate-600 hover:border-slate-300',
               )}
             >
@@ -420,7 +420,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
           <select
             value={form.assignedTo}
             onChange={(e) => set('assignedTo', e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-terracota focus:outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
           >
             <option value="">Sin asignar</option>
             {assignees.map((a) => (
@@ -440,7 +440,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
         <button
           type="submit"
           disabled={loading || !form.category || descLen < 20}
-          className="flex-1 rounded-md bg-terracota py-2.5 text-sm font-semibold text-white hover:bg-terracota/90 disabled:opacity-50"
+          className="flex-1 rounded-md bg-black py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
         >
           {loading ? 'Enviando…' : 'Abrir ticket'}
         </button>

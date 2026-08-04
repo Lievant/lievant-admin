@@ -94,7 +94,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
     }
   }
 
-  const inputClass = 'w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-terracota focus:outline-none';
+  const inputClass = 'w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm focus:border-black focus:outline-none';
 
   if (!editing) {
     return (
@@ -143,7 +143,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
   return (
     <div className="space-y-4">
       {error && (
-        <div className="rounded-md border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="rounded-md border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           {error}
         </div>
       )}
@@ -221,7 +221,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
         <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className={inputClass} />
       </div>
       <div className="flex gap-3">
-        <button onClick={handleSave} disabled={saving} className="rounded-md bg-terracota px-5 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-50">
+        <button onClick={handleSave} disabled={saving} className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
           {saving ? 'Guardando…' : 'Guardar cambios'}
         </button>
         <button onClick={() => setEditing(false)} className="rounded-md border border-slate-200 px-5 py-2 text-sm text-slate-600 hover:bg-slate-50">

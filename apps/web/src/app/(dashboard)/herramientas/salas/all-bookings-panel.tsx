@@ -76,7 +76,7 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
             id="all-filter-room"
             value={roomId}
             onChange={(e) => setRoomId(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           >
             <option value="">Todas</option>
             {roomOptions.map(([id, label]) => (
@@ -96,7 +96,7 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           />
         </div>
 
@@ -110,7 +110,7 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Nombre, correo o motivo de la reserva…"
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           />
         </div>
       </div>

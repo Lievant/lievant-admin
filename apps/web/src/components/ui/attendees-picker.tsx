@@ -132,14 +132,14 @@ export const AttendeesPicker = forwardRef<AttendeePickerHandle, AttendeesPickerP
           {value.map((a) => (
             <span
               key={a.email}
-              className="inline-flex items-center gap-1 rounded-full bg-terracota/10 py-0.5 pl-2 pr-1 text-xs font-medium text-terracota-dark"
+              className="inline-flex items-center gap-1 rounded-full bg-black/10 py-0.5 pl-2 pr-1 text-xs font-medium text-black"
               title={a.email}
             >
               {a.name ?? a.email}
               <button
                 type="button"
                 onClick={() => removeAttendee(a.email)}
-                className="ml-0.5 rounded-full px-1 text-terracota-dark/70 hover:bg-terracota/20 hover:text-terracota-dark"
+                className="ml-0.5 rounded-full px-1 text-black/70 hover:bg-black/20 hover:text-black"
                 aria-label={`Quitar ${a.email}`}
               >
                 ×
@@ -163,7 +163,7 @@ export const AttendeesPicker = forwardRef<AttendeePickerHandle, AttendeesPickerP
             'w-full rounded-md border px-3 py-2 text-sm text-navy focus:outline-none focus:ring-1',
             error
               ? 'border-red-400 focus:border-red-400 focus:ring-red-400'
-              : 'border-slate-200 focus:border-terracota focus:ring-terracota',
+              : 'border-slate-200 focus:border-black focus:ring-black',
           )}
         />
         {open && suggestions.length > 0 && (
