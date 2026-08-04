@@ -100,7 +100,7 @@ export function TeamTab({ project, employees, onUpdate }: Props) {
             <p className="text-sm font-medium text-navy">{project.projectManagerName}</p>
             <p className="text-xs text-slate-400">Project Manager</p>
           </div>
-          <span className="ml-auto rounded-full bg-terracota/10 px-2 py-0.5 text-xs font-medium text-terracota">PM</span>
+          <span className="ml-auto rounded-full bg-black/10 px-2 py-0.5 text-xs font-medium text-black">PM</span>
         </div>
       )}
 
@@ -196,7 +196,7 @@ function MemberAvatar({ name, email }: { name: string; email: string }) {
           if (fb) fb.style.display = 'flex';
         }}
       />
-      <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-terracota text-xs font-semibold text-white">
+      <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-black text-xs font-semibold text-white">
         {initial}
       </div>
     </div>

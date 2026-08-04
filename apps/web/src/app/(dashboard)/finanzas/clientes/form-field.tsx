@@ -23,7 +23,7 @@ export function TextField({ id, label, value, onChange, placeholder, mono, type 
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className={cn(
-          'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota',
+          'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black',
           mono && 'font-mono',
         )}
       />

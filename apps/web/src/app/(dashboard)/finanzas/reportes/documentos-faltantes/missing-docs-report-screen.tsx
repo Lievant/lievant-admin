@@ -60,7 +60,7 @@ export function MissingDocsReportScreen({ items }: Props) {
               <TableIcon className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-terracota">Finanzas · Reportes</p>
+              <p className="text-sm font-medium uppercase tracking-wide text-black">Finanzas · Reportes</p>
               <h1 className="text-2xl font-bold text-navy">Documentos faltantes</h1>
             </div>
           </div>
@@ -76,7 +76,7 @@ export function MissingDocsReportScreen({ items }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Nombre o ID…"
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota/30"
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-black focus:outline-none focus:ring-1 focus:ring-black/30"
           />
         </div>
 
@@ -149,7 +149,7 @@ export function MissingDocsReportScreen({ items }: Props) {
                         <div className="flex items-center gap-2">
                           <div className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                             <div
-                              className="h-full rounded-full bg-terracota transition-all"
+                              className="h-full rounded-full bg-black transition-all"
                               style={{ width: `${item.completionPct}%` }}
                             />
                           </div>

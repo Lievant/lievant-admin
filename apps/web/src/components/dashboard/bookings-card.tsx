@@ -18,7 +18,7 @@ export function BookingsCard({ bookings }: Props) {
         <h2 className="font-semibold text-navy text-sm">Mis reservas de hoy</h2>
         <Link
           href="/herramientas/salas"
-          className="text-xs text-terracota hover:underline"
+          className="text-xs text-black hover:underline"
         >
           Ver todas
         </Link>
@@ -31,9 +31,9 @@ export function BookingsCard({ bookings }: Props) {
           {bookings.map((b) => (
             <li
               key={b.id}
-              className="flex items-start gap-2 rounded-lg bg-terracota-bg px-3 py-2"
+              className="flex items-start gap-2 rounded-lg bg-zinc-50 px-3 py-2"
             >
-              <span className="mt-0.5 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-terracota mt-2" />
+              <span className="mt-0.5 flex-shrink-0 w-1.5 h-1.5 rounded-full bg-black mt-2" />
               <div className="min-w-0">
                 <p className="text-sm font-medium text-navy truncate">{b.title}</p>
                 <p className="text-xs text-slate-500">

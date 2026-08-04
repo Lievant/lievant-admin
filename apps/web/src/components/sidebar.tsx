@@ -89,12 +89,9 @@ export function Sidebar({ user }: SidebarProps) {
   const showAdmin = showUsuarios || showPermisos || showCatalogos;
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col bg-navy text-slate-200">
-      <div className="flex h-16 items-center gap-2 border-b border-white/10 px-6">
-        <span className="text-lg font-bold tracking-tight text-white">
-          Lievant<span className="text-terracota">.</span>
-        </span>
-        <span className="text-xs font-medium text-slate-400">Admin</span>
+    <aside className="flex h-screen w-64 shrink-0 flex-col bg-black text-white">
+      <div className="flex h-16 items-center border-b border-white/10 px-6">
+        <img src="/images/lievant-isotipo.png" alt="Lievant" className="h-8 w-auto" />
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
@@ -311,12 +308,12 @@ export function Sidebar({ user }: SidebarProps) {
           <SidebarAvatar name={user?.name ?? '?'} email={user?.email ?? null} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-white">{user?.name ?? 'Invitado'}</p>
-            <p className="truncate text-xs text-slate-400">{user?.email ?? 'Sesión no iniciada'}</p>
+            <p className="truncate text-xs text-white/50">{user?.email ?? 'Sesión no iniciada'}</p>
           </div>
         </div>
         <a
           href="/api/auth/logout"
-          className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-300 transition-colors hover:bg-navy-light hover:text-white"
+          className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-white/80 transition-colors hover:bg-zinc-900 hover:text-white"
         >
           <LogoutIcon className="h-5 w-5" />
           Cerrar sesión
@@ -330,7 +327,7 @@ function SidebarAvatar({ name, email }: { name: string; email: string | null }) 
   const initial = name.slice(0, 1).toUpperCase();
   if (!email) {
     return (
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-terracota text-sm font-semibold text-white">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
         {initial}
       </div>
     );
@@ -348,7 +345,7 @@ function SidebarAvatar({ name, email }: { name: string; email: string | null }) 
           if (fallback) fallback.style.display = 'flex';
         }}
       />
-      <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-terracota text-sm font-semibold text-white">
+      <div className="hidden h-9 w-9 items-center justify-center rounded-full bg-white text-sm font-semibold text-black">
         {initial}
       </div>
     </div>
@@ -383,7 +380,7 @@ function MediaAlertsBadge() {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mt-4 px-3 pb-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <p className="mt-4 mb-1 ml-3 inline-block rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
       {children}
     </p>
   );
@@ -407,9 +404,7 @@ function NavLink({
       href={href}
       className={cn(
         'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-        active
-          ? 'bg-terracota text-white'
-          : 'text-slate-300 hover:bg-navy-light hover:text-white',
+        active ? 'bg-zinc-800 text-white' : 'text-white hover:bg-zinc-900',
       )}
     >
       {children}
@@ -432,8 +427,8 @@ function NavSubLink({
       className={cn(
         'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
         active
-          ? 'bg-terracota/20 font-medium text-white'
-          : 'text-slate-400 hover:bg-navy-light hover:text-white',
+          ? 'bg-zinc-800 font-medium text-white'
+          : 'text-white/70 hover:bg-zinc-900 hover:text-white',
       )}
     >
       {children}

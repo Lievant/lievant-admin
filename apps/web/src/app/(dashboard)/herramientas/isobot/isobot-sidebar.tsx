@@ -14,12 +14,13 @@ export function IsobotSidebar({ onSendExample }: { onSendExample: (text: string)
   const [libraryOpen, setLibraryOpen] = useState(false);
 
   return (
-    <div className="relative flex w-80 shrink-0 flex-col overflow-y-auto bg-navy px-6 py-8">
-      <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-terracota opacity-10" />
-      <div className="pointer-events-none absolute bottom-24 -left-20 h-64 w-64 rounded-full bg-terracota opacity-10" />
+    <div className="relative flex w-80 shrink-0 flex-col overflow-y-auto bg-black px-6 py-8">
+      <div className="pointer-events-none absolute -top-16 -right-16 h-56 w-56 rounded-full bg-white opacity-[0.04]" />
+      <div className="pointer-events-none absolute bottom-24 -left-20 h-64 w-64 rounded-full bg-white opacity-[0.03]" />
 
       <div className="relative flex flex-col items-center text-center">
-        <span className="rounded-full bg-terracota px-3 py-1 text-xs font-semibold tracking-wide text-white uppercase">
+        {/* Sobre negro el primario se invierte: fondo blanco, texto negro. */}
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold tracking-wide text-black uppercase">
           ISO 27001 · SGSI
         </span>
 
@@ -28,16 +29,16 @@ export function IsobotSidebar({ onSendExample }: { onSendExample: (text: string)
           src="/images/isobot.png"
           className="mt-6 h-48 w-48 object-contain drop-shadow-2xl"
           alt="ISOBOT"
-          style={{ filter: 'drop-shadow(0 8px 24px rgba(45,212,191,0.3))' }}
+          style={{ filter: 'drop-shadow(0 8px 24px rgba(255,255,255,0.22))' }}
         />
 
         <h1 className="mt-4 text-2xl font-bold text-white">ISOBOT</h1>
-        <p className="mt-1 text-sm text-slate-400">Asistente del SGSI ISO 27001</p>
+        <p className="mt-1 text-sm text-white/60">Asistente del SGSI ISO 27001</p>
 
         <button
           type="button"
           onClick={() => setLibraryOpen(true)}
-          className="mt-6 w-full rounded-md bg-terracota px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-terracota-dark"
+          className="mt-6 w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-zinc-200"
         >
           📚 Biblioteca de documentos
         </button>
@@ -51,7 +52,7 @@ export function IsobotSidebar({ onSendExample }: { onSendExample: (text: string)
               key={question}
               type="button"
               onClick={() => onSendExample(question)}
-              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-slate-300 transition-colors hover:border-terracota hover:text-white"
+              className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left text-xs text-white/70 transition-colors hover:border-white/40 hover:text-white"
             >
               {question}
             </button>
@@ -59,7 +60,7 @@ export function IsobotSidebar({ onSendExample }: { onSendExample: (text: string)
         </div>
       </div>
 
-      <div className="relative mt-auto pt-6 text-center text-xs font-medium text-teal">
+      <div className="relative mt-auto pt-6 text-center text-xs font-medium text-white/70">
         364 documentos · 14 macroprocesos
       </div>
 

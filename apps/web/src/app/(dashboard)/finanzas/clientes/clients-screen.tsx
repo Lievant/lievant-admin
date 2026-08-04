@@ -136,7 +136,7 @@ export function ClientsScreen({
         </div>
         <Link
           href="/finanzas/clientes/nuevo"
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo cliente
@@ -144,7 +144,7 @@ export function ClientsScreen({
       </header>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>
       )}
@@ -165,7 +165,7 @@ export function ClientsScreen({
         <select
           value={filters.status}
           onChange={(e) => updateParams({ status: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Estado: Todos</option>
           {CLIENT_STATUSES.map((status) => (
@@ -178,7 +178,7 @@ export function ClientsScreen({
         <select
           value={filters.docStatus}
           onChange={(e) => updateParams({ docStatus: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           {DOC_STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -190,7 +190,7 @@ export function ClientsScreen({
         <select
           value={filters.industry}
           onChange={(e) => updateParams({ industry: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Industria: Todas</option>
           {industries.map((ind) => (

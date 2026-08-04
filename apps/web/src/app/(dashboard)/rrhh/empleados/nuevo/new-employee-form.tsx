@@ -275,11 +275,11 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/rrhh" className="hover:text-terracota">
+        <Link href="/rrhh" className="hover:text-black">
           RRHH
         </Link>
         <span>/</span>
-        <Link href="/rrhh/empleados" className="hover:text-terracota">
+        <Link href="/rrhh/empleados" className="hover:text-black">
           Empleados
         </Link>
         <span>/</span>
@@ -521,7 +521,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
               type="button"
               onClick={handleNext}
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               Siguiente
             </button>
@@ -529,7 +529,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Creando…' : 'Crear empleado'}
             </button>
@@ -546,7 +546,7 @@ function StepBadge({ number, active, done, label }: { number: number; active: bo
       <div
         className={cn(
           'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-          active || done ? 'bg-terracota text-white' : 'bg-slate-100 text-slate-400',
+          active || done ? 'bg-black text-white' : 'bg-slate-100 text-slate-400',
         )}
       >
         {number}

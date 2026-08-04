@@ -246,7 +246,7 @@ export function DashboardCharts() {
                   <span className="w-44 truncate text-slate-700">{r.name}</span>
                   <div className="flex-1 h-1.5 rounded-full bg-slate-100">
                     <div
-                      className="h-1.5 rounded-full bg-terracota"
+                      className="h-1.5 rounded-full bg-black"
                       style={{ width: `${pct}%` }}
                     />
                   </div>

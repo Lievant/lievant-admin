@@ -39,7 +39,7 @@ export function WorkDaysPicker({ label = 'Días laborales', value, onChange }: W
               aria-pressed={active}
               className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
                 active
-                  ? 'border-terracota bg-terracota text-white'
+                  ? 'border-black bg-black text-white'
                   : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
               }`}
             >

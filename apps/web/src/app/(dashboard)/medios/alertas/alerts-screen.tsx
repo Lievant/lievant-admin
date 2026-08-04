@@ -58,7 +58,7 @@ export function AlertsScreen({ alerts, errorKind, filters }: Props) {
   return (
     <div className="space-y-6">
       <header>
-        <p className="text-sm font-medium uppercase tracking-wide text-terracota">Medios</p>
+        <p className="text-sm font-medium uppercase tracking-wide text-black">Medios</p>
         <h1 className="mt-1 text-3xl font-bold text-navy">Alertas</h1>
         <p className="mt-1 text-sm text-slate-500">{alerts.length} alertas</p>
       </header>
@@ -73,7 +73,7 @@ export function AlertsScreen({ alerts, errorKind, filters }: Props) {
               onClick={() => updateParams({ status: tab.value || undefined })}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 filters.status === tab.value
-                  ? 'bg-terracota text-white'
+                  ? 'bg-black text-white'
                   : 'text-slate-500 hover:bg-slate-50'
               }`}
             >
@@ -84,7 +84,7 @@ export function AlertsScreen({ alerts, errorKind, filters }: Props) {
         <select
           value={filters.severity}
           onChange={(e) => updateParams({ severity: e.target.value || undefined })}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
         >
           {SEVERITY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -133,7 +133,7 @@ export function AlertsScreen({ alerts, errorKind, filters }: Props) {
                 {a.account?.id && (
                   <Link
                     href={`/medios/cuentas/${a.account.id}`}
-                    className="text-xs text-slate-500 hover:text-terracota"
+                    className="text-xs text-slate-500 hover:text-black"
                   >
                     Ver cuenta →
                   </Link>

@@ -69,7 +69,7 @@ export function AddProductDialog({ vendorId, onClose }: { vendorId: string; onCl
               id="product-type"
               value={type}
               onChange={(e) => setType(e.target.value as ProductType)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             >
               {PRODUCT_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -88,7 +88,7 @@ export function AddProductDialog({ vendorId, onClose }: { vendorId: string; onCl
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -102,7 +102,7 @@ export function AddProductDialog({ vendorId, onClose }: { vendorId: string; onCl
                 id="product-currency"
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 <option value="MXN">MXN</option>
                 <option value="USD">USD</option>
@@ -125,7 +125,7 @@ export function AddProductDialog({ vendorId, onClose }: { vendorId: string; onCl
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Agregar'}
             </button>

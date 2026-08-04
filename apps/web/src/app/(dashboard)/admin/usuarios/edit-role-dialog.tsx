@@ -64,7 +64,7 @@ export function EditRoleDialog({ user, roles, onClose }: EditRoleDialogProps) {
               id="edit-role"
               value={roleId}
               onChange={(e) => setRoleId(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             >
               {roles.map((role) => (
                 <option key={role.id} value={role.id}>
@@ -90,7 +90,7 @@ export function EditRoleDialog({ user, roles, onClose }: EditRoleDialogProps) {
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Guardar cambios'}
             </button>

@@ -19,7 +19,7 @@ export function SortableHeader({ label, sortKey, currentSortKey, sortDir, onSort
     >
       <span className="flex items-center gap-1">
         {label}
-        <span className={cn('text-[10px] leading-none', isActive ? 'text-terracota' : 'text-slate-300')}>
+        <span className={cn('text-[10px] leading-none', isActive ? 'text-black' : 'text-slate-300')}>
           {isActive ? (sortDir === 'asc' ? '▲' : '▼') : '⇅'}
         </span>
       </span>

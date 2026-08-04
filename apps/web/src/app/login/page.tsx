@@ -23,19 +23,18 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   return (
     <main className="flex min-h-screen flex-col lg:flex-row">
       {/* Left: branding */}
-      <div className="relative flex w-full flex-col overflow-hidden bg-navy p-10 lg:w-[60%]">
-        <div className="pointer-events-none absolute -top-20 -right-20 h-80 w-80 rounded-full bg-terracota opacity-[0.07]" />
-        <div className="pointer-events-none absolute -bottom-16 -left-10 h-52 w-52 rounded-full bg-terracota opacity-[0.05]" />
+      <div className="relative flex w-full flex-col overflow-hidden bg-black p-10 lg:w-[60%]">
+        {/* Halos sutiles en blanco: sobre negro el acento oscuro anterior era invisible. */}
+        <div className="pointer-events-none absolute -top-20 -right-20 h-80 w-80 rounded-full bg-white opacity-[0.04]" />
+        <div className="pointer-events-none absolute -bottom-16 -left-10 h-52 w-52 rounded-full bg-white opacity-[0.03]" />
 
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-terracota text-sm font-black text-white">
-            L
-          </div>
-          <span className="text-lg font-black tracking-wide text-white uppercase">Lievant</span>
+        <div className="relative inline-flex w-fit flex-col items-center">
+          <img src="/images/lievant-logo.png" alt="Lievant" className="h-9 w-auto" />
+          <p className="mt-2 text-sm font-light tracking-[0.3em] text-white">LIEVANT ADMIN</p>
         </div>
 
         <div className="mt-auto mb-8 max-w-md">
-          <p className="mb-3 text-[10px] tracking-[0.2em] text-terracota uppercase">
+          <p className="mb-3 text-[10px] tracking-[0.2em] text-white/45 uppercase">
             Sistema Administrativo
           </p>
           <h2 className="mb-3 text-2xl leading-tight font-black text-white">
@@ -89,14 +88,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           <a
             href="/api/auth/login"
-            className="mb-4 flex w-full items-center justify-center gap-3 rounded-lg bg-terracota px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-terracota-dark"
+            className="mb-4 flex w-full items-center justify-center gap-3 rounded-lg bg-black px-4 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800"
           >
             <MicrosoftLogo className="h-[18px] w-[18px]" />
             Continuar con cuenta Microsoft
           </a>
 
-          <div className="mb-5 rounded-lg border border-terracota/20 bg-terracota-bg px-4 py-3">
-            <p className="mb-0.5 text-xs font-semibold text-terracota">Autenticación SSO</p>
+          <div className="mb-5 rounded-lg border border-black/20 bg-zinc-50 px-4 py-3">
+            <p className="mb-0.5 text-xs font-semibold text-black">Autenticación SSO</p>
             <p className="text-[10px] leading-relaxed text-slate-500">
               Serás redirigido a Microsoft para verificar tu identidad. Solo se aceptan cuentas{' '}
               <span className="font-semibold">@lievant.com</span>. Se requerirá MFA en todos los
@@ -112,7 +111,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           <a
             href="mailto:transformaciondigital@lievant.com"
-            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-navy transition-colors hover:border-terracota"
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-3 text-sm font-medium text-navy transition-colors hover:border-black"
           >
             ✉ Contactar a soporte de TI
           </a>
@@ -120,7 +119,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           <p className="mt-6 text-center text-[10px] leading-relaxed text-slate-400">
             Al iniciar sesión aceptas las
             <br />
-            <a href="#" className="text-terracota">
+            <a href="#" className="text-black underline">
               Políticas de seguridad de la información
             </a>{' '}
             de Lievant.

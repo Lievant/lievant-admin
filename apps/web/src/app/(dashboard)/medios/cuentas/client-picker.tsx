@@ -74,7 +74,7 @@ export function ClientPicker({ label, value, onSelect, id }: ClientPickerProps) 
   }
 
   const inputClass =
-    'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota';
+    'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 
   return (
     <div className="flex flex-col gap-1">

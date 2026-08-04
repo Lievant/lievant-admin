@@ -126,7 +126,7 @@ export function CreatePoDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -152,7 +152,7 @@ export function CreatePoDialog({
                       <select
                         value={line.productId}
                         onChange={(e) => handleProductChange(line.key, e.target.value)}
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       >
                         <option value="">Sin producto</option>
                         {products.map((product) => (
@@ -168,7 +168,7 @@ export function CreatePoDialog({
                         type="text"
                         value={line.description}
                         onChange={(e) => updateLine(line.key, { description: e.target.value })}
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       />
                     </div>
                   </div>
@@ -180,7 +180,7 @@ export function CreatePoDialog({
                         type="number"
                         value={line.quantity}
                         onChange={(e) => updateLine(line.key, { quantity: e.target.value })}
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
@@ -191,7 +191,7 @@ export function CreatePoDialog({
                         type="number"
                         value={line.unitPrice}
                         onChange={(e) => updateLine(line.key, { unitPrice: e.target.value })}
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
@@ -235,7 +235,7 @@ export function CreatePoDialog({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Creando…' : 'Crear OC'}
             </button>

@@ -160,7 +160,7 @@ export function InventoryScreen({
         </div>
         <Link
           href="/transformacion/inventario/nuevo"
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo equipo
@@ -168,7 +168,7 @@ export function InventoryScreen({
       </header>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API.
         </div>
       )}
@@ -178,7 +178,7 @@ export function InventoryScreen({
         <StatCard label="Total equipos" value={stats.total} />
         <StatCard label="Asignados" value={stats.assigned} accent="text-blue-600" />
         <StatCard label="Disponibles" value={stats.available} accent="text-green-600" />
-        <StatCard label="% Asignado" value={stats.assignedPercent} accent="text-terracota" />
+        <StatCard label="% Asignado" value={stats.assignedPercent} accent="text-black" />
       </div>
 
       {/* Filtros */}
@@ -197,7 +197,7 @@ export function InventoryScreen({
         <select
           value={filters.equipmentType}
           onChange={(e) => updateParams({ equipmentType: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Tipo: Todos</option>
           {catalogs.types.map((t) => (
@@ -208,7 +208,7 @@ export function InventoryScreen({
         <select
           value={filters.brand}
           onChange={(e) => updateParams({ brand: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Marca: Todas</option>
           {catalogs.brands.map((b) => (
@@ -219,7 +219,7 @@ export function InventoryScreen({
         <select
           value={filters.status}
           onChange={(e) => updateParams({ status: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Estatus: Todos</option>
           {catalogs.statuses.map((s) => (
@@ -230,7 +230,7 @@ export function InventoryScreen({
         <select
           value={filters.location}
           onChange={(e) => updateParams({ location: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Ubicación: Todas</option>
           {['León', 'Ciudad de México', 'Guadalajara', 'Medellín', 'Charlotte'].map((loc) => (
@@ -269,7 +269,7 @@ export function InventoryScreen({
                   <td className="px-4 py-3">
                     <Link
                       href={`/transformacion/inventario/${item.id}`}
-                      className="font-mono text-xs font-semibold text-terracota hover:underline"
+                      className="font-mono text-xs font-semibold text-black hover:underline"
                     >
                       {item.displayId}
                     </Link>
@@ -298,7 +298,7 @@ export function InventoryScreen({
                   <td className="px-4 py-3">
                     <Link
                       href={`/transformacion/inventario/${item.id}`}
-                      className="text-xs font-medium text-terracota hover:underline"
+                      className="text-xs font-medium text-black hover:underline"
                     >
                       Ver
                     </Link>

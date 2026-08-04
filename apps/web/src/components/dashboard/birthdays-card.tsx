@@ -16,7 +16,7 @@ function Avatar({ name, isToday }: { name: string; isToday: boolean }) {
     <span
       className={`inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
         isToday
-          ? 'border-2 border-terracota bg-terracota-bg text-terracota-dark'
+          ? 'border-2 border-black bg-zinc-50 text-black'
           : 'bg-slate-100 text-slate-600'
       }`}
     >
@@ -43,7 +43,7 @@ export function BirthdaysCard({ today, upcoming }: Props) {
         <div className="space-y-3">
           {today.length > 0 && (
             <div>
-              <p className="text-xs font-medium text-terracota mb-1.5">Hoy</p>
+              <p className="text-xs font-medium text-black mb-1.5">Hoy</p>
               <ul className="space-y-1.5">
                 {today.map((b) => (
                   <li key={b.id} className="flex items-center gap-2">

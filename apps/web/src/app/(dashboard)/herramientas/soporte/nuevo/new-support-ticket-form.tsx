@@ -147,7 +147,7 @@ export function NewSupportTicketForm({ categories }: Props) {
         </div>
         <h2 className="text-xl font-bold text-navy">¡Ticket creado!</h2>
         <p className="mt-2 text-slate-600">
-          Tu ticket <span className="font-mono font-semibold text-terracota">{result.displayId}</span> fue registrado.
+          Tu ticket <span className="font-mono font-semibold text-black">{result.displayId}</span> fue registrado.
           El equipo de TI lo atenderá pronto.
         </p>
         <div className="mt-6 flex justify-center gap-3">
@@ -165,7 +165,7 @@ export function NewSupportTicketForm({ categories }: Props) {
               setSubcategories([]);
               if (fileRef.current) fileRef.current.value = '';
             }}
-            className="rounded-lg bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota/90"
+            className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
           >
             Crear otro ticket
           </button>
@@ -185,7 +185,7 @@ export function NewSupportTicketForm({ categories }: Props) {
         <select
           value={form.equipmentId}
           onChange={(e) => set('equipmentId', e.target.value)}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
         >
           <option value="">No aplica / no sé cuál es</option>
           {myEquipment.map((eq) => (
@@ -209,7 +209,7 @@ export function NewSupportTicketForm({ categories }: Props) {
           required
           value={form.category}
           onChange={(e) => void onCategoryChange(e.target.value)}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
         >
           <option value="">Selecciona una categoría…</option>
           {categories.map((c) => (
@@ -225,7 +225,7 @@ export function NewSupportTicketForm({ categories }: Props) {
           <select
             value={form.subcategory}
             onChange={(e) => set('subcategory', e.target.value)}
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
           >
             <option value="">Elige una subcategoría…</option>
             {subcategories.map((s) => (
@@ -250,7 +250,7 @@ export function NewSupportTicketForm({ categories }: Props) {
               ? CATEGORY_PLACEHOLDERS[form.category]
               : 'Describe con detalle qué está ocurriendo, desde cuándo y qué has intentado…'
           }
-          className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed focus:border-terracota focus:outline-none"
+          className="w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed focus:border-black focus:outline-none"
         />
         <p className={`mt-1 text-xs ${form.description.length > 0 && form.description.length < 20 ? 'text-red-500' : 'text-slate-400'}`}>
           Mínimo 20 caracteres ({form.description.length})
@@ -271,7 +271,7 @@ export function NewSupportTicketForm({ categories }: Props) {
                 value={v}
                 checked={form.impact === v}
                 onChange={() => set('impact', v)}
-                className="accent-terracota"
+                className="accent-black"
               />
               <span className="capitalize text-sm text-slate-700">{v}</span>
             </label>
@@ -310,7 +310,7 @@ export function NewSupportTicketForm({ categories }: Props) {
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-terracota px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-terracota/90 disabled:opacity-60"
+          className="rounded-lg bg-black px-5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800 disabled:opacity-60"
         >
           {uploadStep === 'creating'
           ? 'Creando ticket…'

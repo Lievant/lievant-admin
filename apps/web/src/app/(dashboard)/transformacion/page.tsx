@@ -23,7 +23,7 @@ export default async function TransformacionPage() {
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8">
-        <p className="text-sm font-medium uppercase tracking-wide text-terracota">
+        <p className="text-sm font-medium uppercase tracking-wide text-black">
           Transformación Digital
         </p>
         <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
@@ -86,14 +86,14 @@ export default async function TransformacionPage() {
         <div className="flex flex-wrap gap-3">
           <Link
             href="/transformacion/tickets"
-            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy shadow-sm hover:border-terracota hover:text-terracota"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy shadow-sm hover:border-black hover:text-black"
           >
             <i className="ti ti-ticket text-lg leading-none" />
             Ver todos los tickets
           </Link>
           <Link
             href="/transformacion/tickets/nuevo"
-            className="flex items-center gap-2 rounded-lg bg-terracota px-4 py-2.5 text-sm font-semibold text-white hover:bg-terracota/90"
+            className="flex items-center gap-2 rounded-lg bg-black px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
           >
             <i className="ti ti-plus text-lg leading-none" />
             Nuevo ticket

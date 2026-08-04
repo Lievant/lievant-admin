@@ -73,7 +73,7 @@ export function VacationReportScreen({ rows, startDate, endDate }: Props) {
             <PlaneIcon className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-terracota">RRHH · Reportes</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-black">RRHH · Reportes</p>
             <h1 className="text-2xl font-bold text-navy">Vacaciones para nómina</h1>
           </div>
         </div>
@@ -86,7 +86,7 @@ export function VacationReportScreen({ rows, startDate, endDate }: Props) {
             type="date"
             value={start}
             onChange={(e) => setStart(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-black/30"
           />
         </div>
         <div>
@@ -96,13 +96,13 @@ export function VacationReportScreen({ rows, startDate, endDate }: Props) {
             value={end}
             min={start || undefined}
             onChange={(e) => setEnd(e.target.value)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-black/30"
           />
         </div>
         <button
           onClick={applyFilters}
           disabled={isPending || !start || !end}
-          className="rounded-lg bg-terracota px-4 py-2 text-sm font-semibold text-white transition hover:bg-terracota-dark disabled:opacity-50"
+          className="rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
         >
           {isPending ? 'Cargando…' : 'Aplicar'}
         </button>

@@ -115,11 +115,11 @@ export function EmployeeDetailScreen({
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/rrhh" className="hover:text-terracota">
+        <Link href="/rrhh" className="hover:text-black">
           RRHH
         </Link>
         <span>/</span>
-        <Link href="/rrhh/empleados" className="hover:text-terracota">
+        <Link href="/rrhh/empleados" className="hover:text-black">
           Empleados
         </Link>
         <span>/</span>
@@ -185,7 +185,7 @@ export function EmployeeDetailScreen({
               className={cn(
                 'flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors',
                 effectiveTab === tab.id
-                  ? 'border-terracota text-terracota'
+                  ? 'border-black text-black'
                   : 'border-transparent text-slate-500 hover:text-navy',
               )}
             >

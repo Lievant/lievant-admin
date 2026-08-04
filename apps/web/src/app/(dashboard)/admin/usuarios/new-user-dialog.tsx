@@ -76,7 +76,7 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Pedro García Méndez"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -90,7 +90,7 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="pedro.garcia@lievant.com"
-              className="rounded-md border border-slate-200 px-3 py-2 font-mono text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 font-mono text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
             <p className="text-xs text-slate-400">Debe ser una cuenta @lievant.com existente en Azure AD / M365.</p>
           </div>
@@ -104,7 +104,7 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
                 id="user-location"
                 value={location}
                 onChange={(e) => setLocation(e.target.value as UserLocation)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 {LOCATIONS.map((loc) => (
                   <option key={loc} value={loc}>
@@ -122,7 +122,7 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
                 id="user-role"
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 {roles.length === 0 && <option value="">No hay roles disponibles</option>}
                 {roles.map((role) => (
@@ -134,8 +134,8 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
             </div>
           </div>
 
-          <div className="rounded-lg border border-terracota/20 bg-terracota-bg px-4 py-3">
-            <p className="text-xs font-semibold text-terracota-dark">¿Qué pasa al crear?</p>
+          <div className="rounded-lg border border-black/20 bg-zinc-50 px-4 py-3">
+            <p className="text-xs font-semibold text-black">¿Qué pasa al crear?</p>
             <p className="mt-1 text-xs leading-relaxed text-slate-500">
               El usuario quedará en estado <strong>Pendiente</strong> y recibirá un correo de bienvenida. Un
               administrador deberá aprobarlo para que pueda iniciar sesión con su cuenta de Microsoft.
@@ -157,7 +157,7 @@ export function NewUserDialog({ roles, onClose }: NewUserDialogProps) {
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Creando…' : 'Crear y enviar invitación'}
             </button>

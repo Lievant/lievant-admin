@@ -43,7 +43,7 @@ function LinkField({ label, value }: { label: string; value: string | null }) {
             href={value}
             target="_blank"
             rel="noreferrer"
-            className="mt-1 block truncate text-sm text-terracota hover:underline"
+            className="mt-1 block truncate text-sm text-black hover:underline"
           >
             {value}
           </a>

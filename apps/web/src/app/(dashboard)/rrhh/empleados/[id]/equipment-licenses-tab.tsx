@@ -70,7 +70,7 @@ function EquipmentColumn({ employeeId }: { employeeId: string }) {
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusBadgeStyle(item.status)}`}>
                   {item.status}
                 </span>
-                <Link href={`/transformacion/inventario/${item.id}`} className="text-xs font-semibold text-terracota hover:text-terracota-dark">
+                <Link href={`/transformacion/inventario/${item.id}`} className="text-xs font-semibold text-black hover:text-black">
                   Ver detalle
                 </Link>
               </div>

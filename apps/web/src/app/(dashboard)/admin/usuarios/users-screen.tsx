@@ -96,7 +96,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo usuario
@@ -104,7 +104,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
       </header>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>
       )}
@@ -134,7 +134,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
         <select
           value={roleFilter}
           onChange={(e) => setRoleFilter(e.target.value)}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Rol: Todos</option>
           {roles.map((role) => (
@@ -147,7 +147,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as UserStatus | '')}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Estado: Todos</option>
           <option value="activo">Activo</option>
@@ -158,7 +158,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
         <select
           value={locationFilter}
           onChange={(e) => setLocationFilter(e.target.value)}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
         >
           <option value="">Sede: Todas</option>
           {LOCATIONS.map((loc) => (
@@ -328,7 +328,7 @@ export function UsersScreen({ users, roles, errorKind }: UsersScreenProps) {
                 onClick={() => setPage(p)}
                 className={cn(
                   'rounded-md border px-2 py-1',
-                  p === currentPage ? 'border-terracota bg-terracota text-white' : 'border-slate-200 text-slate-600',
+                  p === currentPage ? 'border-black bg-black text-white' : 'border-slate-200 text-slate-600',
                 )}
               >
                 {p}

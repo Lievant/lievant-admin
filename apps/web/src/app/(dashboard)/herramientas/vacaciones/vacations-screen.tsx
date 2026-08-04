@@ -75,11 +75,11 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
     return (
       <div className="space-y-6">
         <header className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-terracota-bg text-terracota">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-50 text-black">
             <PlaneIcon className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-terracota">Herramientas</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-black">Herramientas</p>
             <h1 className="text-2xl font-bold text-navy">Mis vacaciones</h1>
           </div>
         </header>
@@ -103,17 +103,17 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-terracota-bg text-terracota">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-zinc-50 text-black">
             <PlaneIcon className="h-5 w-5" />
           </span>
           <div>
-            <p className="text-sm font-medium uppercase tracking-wide text-terracota">Herramientas</p>
+            <p className="text-sm font-medium uppercase tracking-wide text-black">Herramientas</p>
             <h1 className="text-2xl font-bold text-navy">Mis vacaciones</h1>
           </div>
         </div>
         <Link
           href="/herramientas/vacaciones/nueva"
-          className="inline-flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white transition hover:bg-terracota-dark"
+          className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Solicitar vacaciones

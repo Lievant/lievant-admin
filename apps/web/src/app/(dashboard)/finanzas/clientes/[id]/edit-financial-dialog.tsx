@@ -37,7 +37,7 @@ function Select({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+        className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
       >
         <option value="">{placeholder}</option>
         {options.map((option) => (
@@ -243,7 +243,7 @@ export function EditFinancialDialog({
                 type="checkbox"
                 checked={autoRenewal}
                 onChange={(e) => setAutoRenewal(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-terracota focus:ring-terracota"
+                className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
               />
               Renovación automática
             </label>
@@ -258,7 +258,7 @@ export function EditFinancialDialog({
               value={internalNotes}
               onChange={(e) => setInternalNotes(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -277,7 +277,7 @@ export function EditFinancialDialog({
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Guardar cambios'}
             </button>

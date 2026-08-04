@@ -179,7 +179,7 @@ export function GenerateDocumentsDialog({
                     value={option.value}
                     checked={selectedContract === option.value}
                     onChange={() => setSelectedContract(option.value)}
-                    className="h-4 w-4 text-terracota focus:ring-terracota"
+                    className="h-4 w-4 text-black focus:ring-black"
                   />
                   {option.label}
                 </label>
@@ -217,7 +217,7 @@ export function GenerateDocumentsDialog({
                   type="checkbox"
                   checked={includeConfidencialidad}
                   onChange={(e) => setIncludeConfidencialidad(e.target.checked)}
-                  className="h-4 w-4 text-terracota focus:ring-terracota"
+                  className="h-4 w-4 text-black focus:ring-black"
                 />
                 Convenio de confidencialidad
               </label>
@@ -226,7 +226,7 @@ export function GenerateDocumentsDialog({
                   type="checkbox"
                   checked={includeNoCompetencia}
                   onChange={(e) => setIncludeNoCompetencia(e.target.checked)}
-                  className="h-4 w-4 text-terracota focus:ring-terracota"
+                  className="h-4 w-4 text-black focus:ring-black"
                 />
                 Convenio de no competencia
               </label>
@@ -254,7 +254,7 @@ export function GenerateDocumentsDialog({
               type="button"
               onClick={handleGenerate}
               disabled={isGenerateDisabled}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Generando documentos…' : 'Generar y descargar documentos'}
             </button>

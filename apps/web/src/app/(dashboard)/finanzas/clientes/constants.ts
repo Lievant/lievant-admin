@@ -70,7 +70,7 @@ export const CONTACT_TYPE_BADGE_STYLES: Record<ContactType, string> = {
   commercial: 'bg-blue-50 text-blue-600',
   operational: 'bg-purple-50 text-purple-600',
   legal: 'bg-amber-50 text-amber-600',
-  direction: 'bg-terracota/10 text-terracota-dark',
+  direction: 'bg-black/10 text-black',
 };
 
 export const CLIENT_SEGMENTS: ClientSegment[] = ['A', 'B', 'C'];

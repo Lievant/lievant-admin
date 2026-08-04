@@ -41,7 +41,7 @@ export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }:
                 {equipment.brand} {equipment.model ?? ''}
               </h1>
               <div className="mt-0.5 flex items-center gap-2">
-                <span className="font-mono text-sm text-terracota">{equipment.displayId}</span>
+                <span className="font-mono text-sm text-black">{equipment.displayId}</span>
                 {equipment.legacyId && (
                   <span className="text-xs text-slate-400">({equipment.legacyId})</span>
                 )}
@@ -69,7 +69,7 @@ export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }:
               onClick={() => setTab(t.key as typeof tab)}
               className={`px-4 py-2.5 text-sm font-medium transition-colors ${
                 tab === t.key
-                  ? 'border-b-2 border-terracota text-terracota'
+                  ? 'border-b-2 border-black text-black'
                   : 'text-slate-500 hover:text-navy'
               }`}
             >

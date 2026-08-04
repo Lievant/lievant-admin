@@ -110,7 +110,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -122,7 +122,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
                     type="checkbox"
                     checked={Boolean(extra[field.key])}
                     onChange={(e) => setExtra((prev) => ({ ...prev, [field.key]: e.target.checked }))}
-                    className="h-4 w-4 rounded border-slate-300 text-terracota focus:ring-terracota"
+                    className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
                   />
                   {field.label}
                 </label>
@@ -144,7 +144,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
                     type="date"
                     value={String(extra[field.key] ?? '')}
                     onChange={(e) => setExtra((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                   />
                 </div>
               );
@@ -163,7 +163,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
                     id={`catalog-${field.key}`}
                     value={String(extra[field.key] ?? '')}
                     onChange={(e) => setExtra((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                    className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                   >
                     {(field.options ?? []).map((option) => (
                       <option key={option.value} value={option.value}>
@@ -190,7 +190,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
                   value={String(extra[field.key] ?? '')}
                   onChange={(e) => setExtra((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   placeholder={field.placeholder}
-                  className={`rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota ${
+                  className={`rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black ${
                     field.mono ? 'font-mono' : ''
                   }`}
                 />
@@ -207,7 +207,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
               type="number"
               value={sortOrder}
               onChange={(e) => setSortOrder(Number(e.target.value))}
-              className="w-24 rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="w-24 rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -216,7 +216,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
               type="checkbox"
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-terracota focus:ring-terracota"
+              className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
             />
             Activo
           </label>
@@ -236,7 +236,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Guardar'}
             </button>

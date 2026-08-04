@@ -87,7 +87,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
                 id="client-status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 {CLIENT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -105,7 +105,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
                 id="client-am"
                 value={accountManagerId}
                 onChange={(e) => setAccountManagerId(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 <option value="">Sin asignar</option>
                 {accountManagers.map((user) => (
@@ -126,7 +126,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
                 id="client-segment"
                 value={segment}
                 onChange={(e) => setSegment(e.target.value as ClientSegment | '')}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 <option value="">Sin definir</option>
                 {CLIENT_SEGMENTS.map((s) => (
@@ -165,7 +165,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -187,7 +187,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -206,7 +206,7 @@ export function EditClientDialog({ client, accountManagers, onClose }: EditClien
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Guardando…' : 'Guardar cambios'}
             </button>
