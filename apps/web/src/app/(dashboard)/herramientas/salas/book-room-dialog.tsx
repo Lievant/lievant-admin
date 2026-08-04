@@ -269,7 +269,7 @@ export function BookRoomDialog({
                   role="switch"
                   aria-checked={isRecurring}
                   onClick={() => setIsRecurring((prev) => !prev)}
-                  className={`relative h-6 w-11 rounded-full transition-colors ${isRecurring ? 'bg-terracota' : 'bg-slate-200'}`}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${isRecurring ? 'bg-black' : 'bg-slate-200'}`}
                 >
                   <span
                     className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
@@ -291,7 +291,7 @@ export function BookRoomDialog({
                           onClick={() => toggleDay(day.rrule)}
                           className={`h-8 w-8 rounded-full text-xs font-semibold transition-colors ${
                             selectedDays.includes(day.rrule)
-                              ? 'bg-terracota text-white'
+                              ? 'bg-black text-white'
                               : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
                           }`}
                         >
@@ -337,7 +337,7 @@ export function BookRoomDialog({
             <button
               type="submit"
               disabled={isPending || rangeError !== null}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending
                 ? isEdit

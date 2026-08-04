@@ -130,7 +130,7 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
                         type="button"
                         onClick={() => handleCancel(booking.id)}
                         disabled={isPending}
-                        className="text-sm font-medium text-terracota hover:underline disabled:opacity-60"
+                        className="text-sm font-medium text-black hover:underline disabled:opacity-60"
                       >
                         Cancelar
                       </button>

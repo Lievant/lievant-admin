@@ -80,12 +80,12 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
     <>
       <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Herramientas</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Herramientas</p>
           <h1 className="mt-1 text-2xl font-bold text-navy">Mis tickets de soporte TI</h1>
         </div>
         <Link
           href="/herramientas/soporte/nuevo"
-          className="flex items-center gap-2 rounded-lg bg-terracota px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-terracota/90"
+          className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo ticket
@@ -104,7 +104,7 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
         <select
           value={statusFilter}
           onChange={onStatusChange}
-          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm focus:border-black focus:outline-none"
         >
           {STATUS_FILTER_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -134,7 +134,7 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
           {!statusFilter && (
             <Link
               href="/herramientas/soporte/nuevo"
-              className="mt-4 flex items-center gap-2 rounded-lg bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota/90"
+              className="mt-4 flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
               <PlusIcon className="h-4 w-4" />
               Crear primer ticket

@@ -74,7 +74,7 @@ export function PlatformScreen({ slug, platformMeta, accounts, errorKind, filter
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Medios</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Medios</p>
           <h1 className="mt-1 flex items-center gap-2 text-3xl font-bold text-navy">
             {platformMeta?.color && (
               <span
@@ -105,13 +105,13 @@ export function PlatformScreen({ slug, platformMeta, accounts, errorKind, filter
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar cliente o cuenta..."
-            className="w-64 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-terracota focus:outline-none"
+            className="w-64 rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm focus:border-black focus:outline-none"
           />
         </div>
         <select
           value={filters.status}
           onChange={(e) => updateParams({ status: e.target.value || undefined })}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
         >
           {STATUS_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>
@@ -123,7 +123,7 @@ export function PlatformScreen({ slug, platformMeta, accounts, errorKind, filter
           type="month"
           value={filters.month}
           onChange={(e) => updateParams({ month: e.target.value || undefined })}
-          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-terracota focus:outline-none"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-black focus:outline-none"
         />
       </div>
 

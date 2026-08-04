@@ -35,7 +35,7 @@ export default async function CatalogosPage() {
       </header>
 
       {apiUnavailable && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión como administrador para ver datos en vivo.
         </div>
       )}
@@ -47,7 +47,7 @@ export default async function CatalogosPage() {
           return (
             <div key={config.entity} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex items-start justify-between">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-terracota-bg text-terracota">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-50 text-black">
                   {typeof config.icon === 'string' ? (
                     <i className={`ti ${config.icon} text-xl leading-none`} />
                   ) : (
@@ -61,7 +61,7 @@ export default async function CatalogosPage() {
               </p>
               <Link
                 href={`/admin/catalogos/${config.entity}`}
-                className="mt-4 inline-flex items-center text-sm font-semibold text-terracota hover:text-terracota-dark"
+                className="mt-4 inline-flex items-center text-sm font-semibold text-black hover:text-black"
               >
                 Gestionar →
               </Link>

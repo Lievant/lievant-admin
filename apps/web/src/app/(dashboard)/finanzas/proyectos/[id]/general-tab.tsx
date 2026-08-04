@@ -110,7 +110,7 @@ export function GeneralTab({ project, onUpdate }: Props) {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="rounded-lg bg-terracota px-3 py-1.5 text-sm font-medium text-white hover:bg-terracota/90 disabled:opacity-60"
+              className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {saving ? 'Guardando…' : 'Guardar'}
             </button>
@@ -148,7 +148,7 @@ export function GeneralTab({ project, onUpdate }: Props) {
             <input
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
             />
           </div>
           <div>
@@ -217,7 +217,7 @@ export function GeneralTab({ project, onUpdate }: Props) {
               value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               rows={3}
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
             />
           </div>
         </div>

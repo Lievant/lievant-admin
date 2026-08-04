@@ -79,11 +79,11 @@ export function NewClientForm({ accountManagers }: NewClientFormProps) {
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/finanzas" className="hover:text-terracota">
+        <Link href="/finanzas" className="hover:text-black">
           Finanzas
         </Link>
         <span>/</span>
-        <Link href="/finanzas/clientes" className="hover:text-terracota">
+        <Link href="/finanzas/clientes" className="hover:text-black">
           Clientes
         </Link>
         <span>/</span>
@@ -141,7 +141,7 @@ export function NewClientForm({ accountManagers }: NewClientFormProps) {
                   id="account-manager"
                   value={accountManagerId}
                   onChange={(e) => setAccountManagerId(e.target.value)}
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                  className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
                 >
                   <option value="">Sin asignar</option>
                   {accountManagers.map((user) => (
@@ -161,7 +161,7 @@ export function NewClientForm({ accountManagers }: NewClientFormProps) {
                 id="status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                className="w-full max-w-xs rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+                className="w-full max-w-xs rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
               >
                 {CLIENT_STATUSES.map((s) => (
                   <option key={s} value={s}>
@@ -244,7 +244,7 @@ export function NewClientForm({ accountManagers }: NewClientFormProps) {
             <button
               type="button"
               onClick={handleNext}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
             >
               Siguiente
             </button>
@@ -252,7 +252,7 @@ export function NewClientForm({ accountManagers }: NewClientFormProps) {
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Creando…' : 'Crear cliente'}
             </button>
@@ -269,7 +269,7 @@ function StepBadge({ number, active, done, label }: { number: number; active: bo
       <div
         className={cn(
           'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold',
-          active || done ? 'bg-terracota text-white' : 'bg-slate-100 text-slate-400',
+          active || done ? 'bg-black text-white' : 'bg-slate-100 text-slate-400',
         )}
       >
         {number}
@@ -296,10 +296,10 @@ function TypeOption({
       onClick={onClick}
       className={cn(
         'rounded-lg border px-4 py-3 text-left transition-colors',
-        active ? 'border-terracota bg-terracota-bg' : 'border-slate-200 hover:border-slate-300',
+        active ? 'border-black bg-zinc-50' : 'border-slate-200 hover:border-slate-300',
       )}
     >
-      <p className={cn('text-sm font-semibold', active ? 'text-terracota-dark' : 'text-navy')}>{label}</p>
+      <p className={cn('text-sm font-semibold', active ? 'text-black' : 'text-navy')}>{label}</p>
       <p className="mt-1 text-xs text-slate-500">{description}</p>
     </button>
   );

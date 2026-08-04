@@ -25,7 +25,7 @@ export function LocationsTab({ locationsTree }: LocationsTabProps) {
         <button
           type="button"
           onClick={() => setDialog({ kind: 'country' })}
-          className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           + Nuevo país
         </button>
@@ -45,7 +45,7 @@ export function LocationsTab({ locationsTree }: LocationsTabProps) {
         <button
           type="button"
           onClick={() => setDialog({ kind: 'country' })}
-          className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           + Nuevo país
         </button>
@@ -61,7 +61,7 @@ export function LocationsTab({ locationsTree }: LocationsTabProps) {
               <button
                 type="button"
                 onClick={() => setDialog({ kind: 'city', parentId: country.id })}
-                className="text-sm font-medium text-terracota hover:underline"
+                className="text-sm font-medium text-black hover:underline"
               >
                 + Ciudad
               </button>
@@ -76,7 +76,7 @@ export function LocationsTab({ locationsTree }: LocationsTabProps) {
                       <button
                         type="button"
                         onClick={() => setDialog({ kind: 'office', parentId: city.id })}
-                        className="text-sm font-medium text-terracota hover:underline"
+                        className="text-sm font-medium text-black hover:underline"
                       >
                         + Oficina
                       </button>

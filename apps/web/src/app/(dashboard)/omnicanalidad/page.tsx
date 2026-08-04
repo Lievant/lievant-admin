@@ -6,7 +6,7 @@ export default function OmnicanalidadPage() {
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">
+          <p className="text-sm font-medium uppercase tracking-wide text-black">
             Omnicanalidad
           </p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Resumen ejecutivo</h1>
@@ -33,14 +33,14 @@ export default function OmnicanalidadPage() {
             description="WhatsApp, correo, chat y redes sociales"
             href="/omnicanalidad"
             icon={<BroadcastIcon className="h-6 w-6" />}
-            accentClass="bg-cyan-50 text-cyan-600"
+            accentClass="bg-black/10 text-black"
           />
           <ModuleCard
             title="Integraciones"
             description="Configuración de plataformas conectadas"
             href="/omnicanalidad"
             icon={<SitemapIcon className="h-6 w-6" />}
-            accentClass="bg-indigo-50 text-indigo-600"
+            accentClass="bg-black/10 text-black"
           />
         </div>
       </div>

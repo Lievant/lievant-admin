@@ -208,7 +208,7 @@ export function RoomsScreen({
       </header>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión para ver datos en vivo.
         </div>
       )}
@@ -226,7 +226,7 @@ export function RoomsScreen({
               className={cn(
                 'border-b-2 px-3 py-2 text-sm font-medium transition-colors',
                 view === t.id
-                  ? 'border-terracota text-terracota'
+                  ? 'border-black text-black'
                   : 'border-transparent text-slate-500 hover:text-navy',
               )}
             >
@@ -252,7 +252,7 @@ export function RoomsScreen({
             id="filter-country"
             value={countryId}
             onChange={(e) => handleCountryChange(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           >
             <option value="">Selecciona</option>
             {countries.map((country) => (
@@ -272,7 +272,7 @@ export function RoomsScreen({
             value={cityId}
             onChange={(e) => handleCityChange(e.target.value)}
             disabled={!countryId}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
           >
             <option value="">Selecciona</option>
             {cities.map((city) => (
@@ -292,7 +292,7 @@ export function RoomsScreen({
             value={officeId}
             onChange={(e) => handleOfficeChange(e.target.value)}
             disabled={!cityId}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
           >
             <option value="">Selecciona</option>
             {offices.map((office) => (
@@ -312,7 +312,7 @@ export function RoomsScreen({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           />
         </div>
 
@@ -324,7 +324,7 @@ export function RoomsScreen({
             id="filter-start-time"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           >
             {TIME_SLOTS.map((slot) => (
               <option key={slot} value={slot}>
@@ -342,7 +342,7 @@ export function RoomsScreen({
             id="filter-duration"
             value={durationHours}
             onChange={(e) => setDurationHours(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           >
             {DURATION_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -360,7 +360,7 @@ export function RoomsScreen({
             id="filter-room-type"
             value={roomType}
             onChange={(e) => setRoomType(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           >
             {ROOM_TYPE_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -375,7 +375,7 @@ export function RoomsScreen({
             type="button"
             onClick={handleSearch}
             disabled={!officeId}
-            className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
           >
             Buscar disponibilidad
           </button>
@@ -450,7 +450,7 @@ export function RoomsScreen({
                   <button
                     type="button"
                     onClick={() => setBookingRoom(room)}
-                    className="mt-4 w-full rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+                    className="mt-4 w-full rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
                   >
                     Reservar
                   </button>

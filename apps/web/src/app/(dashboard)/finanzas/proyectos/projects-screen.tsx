@@ -92,7 +92,7 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <p className="text-sm font-medium uppercase tracking-wide text-terracota">Finanzas</p>
+          <p className="text-sm font-medium uppercase tracking-wide text-black">Finanzas</p>
           <h1 className="mt-1 text-3xl font-bold text-navy">Proyectos</h1>
           {activeCount !== null && (
             <p className="mt-1 text-sm text-slate-500">
@@ -102,7 +102,7 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
         </div>
         <Link
           href="/finanzas/proyectos/nuevo"
-          className="flex items-center gap-2 rounded-lg bg-terracota px-4 py-2 text-sm font-medium text-white hover:bg-terracota/90"
+          className="flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo proyecto
@@ -124,7 +124,7 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar proyecto…"
-            className="h-9 rounded-lg border border-slate-200 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-terracota/30"
+            className="h-9 rounded-lg border border-slate-200 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-black/30"
           />
         </div>
         <select
@@ -210,7 +210,7 @@ export function ProjectsScreen({ page, clients, errorKind, filters, activeCount 
                 <td className="px-4 py-3">
                   <Link
                     href={`/finanzas/proyectos/${p.id}`}
-                    className="rounded-md px-3 py-1 text-xs font-medium text-terracota hover:bg-terracota/5"
+                    className="rounded-md px-3 py-1 text-xs font-medium text-black hover:bg-black/5"
                   >
                     Ver
                   </Link>
@@ -251,7 +251,7 @@ function EmployeeAvatar({ name, email }: { name: string; email: string }) {
           if (fb) fb.style.display = 'flex';
         }}
       />
-      <div className="hidden h-7 w-7 items-center justify-center rounded-full bg-terracota text-[11px] font-semibold text-white">
+      <div className="hidden h-7 w-7 items-center justify-center rounded-full bg-black text-[11px] font-semibold text-white">
         {initial}
       </div>
     </div>

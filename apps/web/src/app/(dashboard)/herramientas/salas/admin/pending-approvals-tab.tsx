@@ -73,7 +73,7 @@ export function PendingApprovalsTab({ bookings }: PendingApprovalsTabProps) {
               type="button"
               onClick={() => handleApprove(booking.id)}
               disabled={isPending && actingId === booking.id}
-              className="rounded-md bg-terracota px-3 py-1.5 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-3 py-1.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               Aprobar
             </button>

@@ -60,7 +60,7 @@ function SourceChip({ source }: { source: MessageSource }) {
       onClick={handleClick}
       disabled={loading}
       title={source.macroprocess ?? undefined}
-      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-terracota hover:text-terracota disabled:opacity-60"
+      className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-black hover:text-black disabled:opacity-60"
     >
       📄 {source.title}
     </button>
@@ -159,7 +159,7 @@ export function IsobotScreen() {
       <div className="flex flex-1 flex-col bg-slate-50">
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-terracota text-white">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-black text-white">
             <RobotIcon className="h-6 w-6" />
           </div>
           <div>
@@ -173,7 +173,7 @@ export function IsobotScreen() {
           {messages.map((msg, i) =>
             msg.role === 'user' ? (
               <div key={i} className="flex justify-end">
-                <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-terracota px-4 py-2.5 text-sm text-white">
+                <div className="max-w-[75%] rounded-2xl rounded-tr-sm bg-black px-4 py-2.5 text-sm text-white">
                   {msg.content}
                 </div>
               </div>
@@ -222,7 +222,7 @@ export function IsobotScreen() {
             onKeyDown={handleKeyDown}
             placeholder="Escribe tu pregunta sobre el SGSI…"
             rows={1}
-            className="max-h-32 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-terracota focus:outline-none"
+            className="max-h-32 flex-1 resize-none rounded-md border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-black focus:outline-none"
           />
           <button
             type="button"
@@ -231,7 +231,7 @@ export function IsobotScreen() {
             className={cn(
               'rounded-md px-4 py-2 text-sm font-semibold transition-colors',
               !loading && input.trim()
-                ? 'bg-terracota text-white hover:bg-terracota-dark'
+                ? 'bg-black text-white hover:bg-zinc-800'
                 : 'cursor-not-allowed bg-slate-100 text-slate-400',
             )}
           >

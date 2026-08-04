@@ -25,7 +25,7 @@ export function QuoteWidget() {
   }, []);
 
   return (
-    <blockquote className="border-l-2 border-terracota pl-3">
+    <blockquote className="border-l-2 border-black pl-3">
       <p className="text-xs italic text-slate-500 leading-relaxed">&ldquo;{quote.q}&rdquo;</p>
       <cite className="mt-1 block text-xs text-slate-400 not-italic">— {quote.a}</cite>
     </blockquote>

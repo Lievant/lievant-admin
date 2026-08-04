@@ -59,11 +59,11 @@ export function NewVendorForm({ categories }: NewVendorFormProps) {
     <div>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-slate-400">
-        <Link href="/finanzas" className="hover:text-terracota">
+        <Link href="/finanzas" className="hover:text-black">
           Finanzas
         </Link>
         <span>/</span>
-        <Link href="/finanzas/proveedores" className="hover:text-terracota">
+        <Link href="/finanzas/proveedores" className="hover:text-black">
           Proveedores
         </Link>
         <span>/</span>
@@ -106,7 +106,7 @@ export function NewVendorForm({ categories }: NewVendorFormProps) {
               id="vendor-category"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             >
               <option value="">Sin categoría</option>
               {categories.map((cat) => (
@@ -136,7 +136,7 @@ export function NewVendorForm({ categories }: NewVendorFormProps) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
-            className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
           />
         </div>
 
@@ -154,7 +154,7 @@ export function NewVendorForm({ categories }: NewVendorFormProps) {
           <button
             type="submit"
             disabled={isPending}
-            className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+            className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
           >
             {isPending ? 'Guardando…' : 'Guardar proveedor'}
           </button>

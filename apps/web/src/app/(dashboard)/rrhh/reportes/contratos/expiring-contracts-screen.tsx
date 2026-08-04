@@ -93,7 +93,7 @@ export function ExpiringContractsScreen({ items, selectedDays }: Props) {
               <ContractIcon className="h-5 w-5" />
             </span>
             <div>
-              <p className="text-sm font-medium uppercase tracking-wide text-terracota">RRHH · Reportes</p>
+              <p className="text-sm font-medium uppercase tracking-wide text-black">RRHH · Reportes</p>
               <h1 className="text-2xl font-bold text-navy">Contratos por vencer</h1>
             </div>
           </div>
@@ -108,7 +108,7 @@ export function ExpiringContractsScreen({ items, selectedDays }: Props) {
             value={selectedDays}
             onChange={(e) => navigate(Number(e.target.value))}
             disabled={isPending}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-terracota/30 disabled:opacity-50"
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-black/30 disabled:opacity-50"
           >
             {DAYS_OPTIONS.map((d) => (
               <option key={d} value={d}>

@@ -58,7 +58,7 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Nuevo ítem
@@ -130,7 +130,7 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
                       onClick={() => toggleActive(item)}
                       className={cn(
                         'relative h-5 w-9 rounded-full transition-colors disabled:opacity-50',
-                        item.isActive ? 'bg-terracota' : 'bg-slate-300',
+                        item.isActive ? 'bg-black' : 'bg-slate-300',
                       )}
                     >
                       <span

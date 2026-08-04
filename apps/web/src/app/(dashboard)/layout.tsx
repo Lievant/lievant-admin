@@ -14,7 +14,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <div className="flex min-h-screen bg-surface">
+    <div className="flex min-h-screen bg-background">
       <ApiHealthBanner />
       <IdleLogout />
       <UserProvider user={user}>

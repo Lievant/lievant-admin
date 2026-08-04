@@ -18,7 +18,7 @@ export function ContactsTab({ client }: { client: ClientDetail }) {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           <PlusIcon className="h-4 w-4" />
           Agregar contacto
@@ -48,7 +48,7 @@ export function ContactsTab({ client }: { client: ClientDetail }) {
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-semibold text-navy">{contact.name}</p>
                 {contact.isPrimary && (
-                  <span className="rounded-full bg-terracota/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-terracota-dark">
+                  <span className="rounded-full bg-black/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-black">
                     Principal
                   </span>
                 )}

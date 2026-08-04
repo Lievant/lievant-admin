@@ -25,7 +25,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boo
       onClick={() => onChange(!checked)}
       className={cn(
         'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
-        checked ? 'bg-terracota' : 'bg-slate-200',
+        checked ? 'bg-black' : 'bg-slate-200',
       )}
     >
       <span
@@ -115,7 +115,7 @@ export function EmployeeLicensesScreen({ detail: initialDetail, tools }: Props) 
     <div>
       <Link
         href="/transformacion/licenciamientos"
-        className="text-sm font-medium text-slate-500 hover:text-terracota"
+        className="text-sm font-medium text-slate-500 hover:text-black"
       >
         ← Volver al maestro de licencias
       </Link>
@@ -158,7 +158,7 @@ export function EmployeeLicensesScreen({ detail: initialDetail, tools }: Props) 
             value={activeDirectoryName}
             onChange={(e) => { setActiveDirectoryName(e.target.value); setSuccess(false); }}
             placeholder="LV-DG-CEO-NOMBRE"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           />
         </div>
         <div>
@@ -170,7 +170,7 @@ export function EmployeeLicensesScreen({ detail: initialDetail, tools }: Props) 
             value={responsiva}
             onChange={(e) => { setResponsiva(e.target.value); setSuccess(false); }}
             placeholder="TIC-RE-02-0000"
-            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+            className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
           />
         </div>
       </div>
@@ -223,7 +223,7 @@ export function EmployeeLicensesScreen({ detail: initialDetail, tools }: Props) 
           className={cn(
             'rounded-md px-4 py-2 text-sm font-medium transition-colors',
             isDirty && !saving
-              ? 'bg-terracota text-white hover:bg-terracota/90'
+              ? 'bg-black text-white hover:bg-zinc-800'
               : 'cursor-not-allowed bg-slate-100 text-slate-400',
           )}
         >

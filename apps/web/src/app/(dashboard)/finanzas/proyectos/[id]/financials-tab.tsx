@@ -106,7 +106,7 @@ export function FinancialsTab({ project, onUpdate }: Props) {
           ) : (
             <div className="flex gap-2">
               <button onClick={() => setEditingFin(false)} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600">Cancelar</button>
-              <button onClick={saveFin} disabled={savingFin} className="rounded-lg bg-terracota px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60">
+              <button onClick={saveFin} disabled={savingFin} className="rounded-lg bg-black px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60">
                 {savingFin ? 'Guardando…' : 'Guardar'}
               </button>
             </div>

@@ -1,14 +1,49 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 
+/* Sistema de colores Lievant — monocromático (negro / blanco / grises).
+   Tailwind v4: los tokens de @theme generan utilidades (bg-background,
+   text-text-muted, …) y se emiten como variables CSS en :root. Va `static`
+   porque por defecto Tailwind descarta las variables que ninguna clase usa, y
+   estas deben existir siempre para poder leerse desde CSS o estilos inline. */
+@theme static {
+  /* Superficies */
+  --color-background: #f5f5f5; /* fondo principal gris claro */
+  --color-surface: #ffffff; /* tarjetas y paneles */
+
+  /* Sidebar */
+  --color-sidebar: #000000; /* sidebar negro */
+  --color-sidebar-text: #ffffff; /* texto en sidebar */
+  --color-sidebar-hover: #1a1a1a; /* hover en sidebar */
+  --color-sidebar-active: #333333; /* item activo en sidebar */
+
+  /* Texto y bordes */
+  --color-text: #111111; /* texto principal */
+  --color-text-muted: #666666; /* texto secundario */
+  --color-border: #e0e0e0; /* bordes */
+
+  /* Acciones */
+  --color-primary: #000000; /* botones primarios */
+  --color-primary-text: #ffffff; /* texto en botones primarios */
+
+  /* Estados */
+  --color-danger: #dc2626; /* eliminar / error */
+  --color-success: #16a34a; /* éxito */
+  --color-warning: #d97706; /* advertencia */
+}
+
+/* Tokens heredados. `text-navy` sigue usándose en cientos de clases del
+   proyecto, así que el token se remapea a negro en lugar de renombrar cada
+   archivo. Los de terracota ya no se usan en el código: quedan como red de
+   seguridad para que cualquier clase que reaparezca en un merge pinte negro y
+   no terracota. Sin `static`: Tailwind los descarta mientras nadie los use.
+   No usar en código nuevo — preferir los tokens de arriba. */
 @theme {
-  --color-terracota: #c2714f;
-  --color-terracota-dark: #a85e3c;
-  --color-terracota-bg: #fff7f4;
-  --color-navy: #0f1623;
-  --color-navy-light: #1c2735;
-  --color-surface: #f8f9fc;
-  --color-teal: #2dd4bf;
+  --color-navy: #000000;
+  --color-navy-light: #1a1a1a;
+  --color-terracota: #000000;
+  --color-terracota-dark: #27272a; /* zinc-800 — hover sobre botón negro */
+  --color-terracota-bg: #fafafa; /* zinc-50 — panel informativo claro */
 }
 
 body {

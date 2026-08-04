@@ -71,7 +71,7 @@ export function TerminationDialog({ employee, onClose }: { employee: EmployeeDet
                 type="checkbox"
                 checked={severancePaid}
                 onChange={(e) => setSeverancePaid(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-terracota focus:ring-terracota"
+                className="h-4 w-4 rounded border-slate-300 text-black focus:ring-black"
               />
               Finiquito pagado
             </label>
@@ -86,7 +86,7 @@ export function TerminationDialog({ employee, onClose }: { employee: EmployeeDet
               value={references}
               onChange={(e) => setReferences(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 
@@ -99,7 +99,7 @@ export function TerminationDialog({ employee, onClose }: { employee: EmployeeDet
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           </div>
 

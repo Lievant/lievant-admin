@@ -88,7 +88,7 @@ export function CancelBookingDialog({ booking, onClose }: CancelBookingDialogPro
               type="button"
               onClick={handleConfirm}
               disabled={isPending}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Cancelando…' : 'Cancelar reserva'}
             </button>

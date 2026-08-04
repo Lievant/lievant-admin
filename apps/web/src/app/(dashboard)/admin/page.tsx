@@ -39,7 +39,7 @@ export default async function AdminPage() {
       </header>
 
       {apiUnavailable && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API ({process.env.NEXT_PUBLIC_API_URL}). Inicia sesión como
           administrador para ver datos en vivo.
         </div>

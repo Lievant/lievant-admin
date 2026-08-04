@@ -149,7 +149,7 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
         <select
           value={officeId}
           onChange={(e) => navigate({ office_id: e.target.value, date })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none"
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-navy focus:border-black focus:outline-none"
         >
           {offices.length === 0 && <option value="">Sin oficinas</option>}
           {offices.map((o) => (
@@ -236,7 +236,7 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
                       type="button"
                       onClick={() => handleSlotClick(room, i)}
                       style={{ height: SLOT_PX }}
-                      className="block w-full border-b border-slate-100 hover:bg-terracota/5"
+                      className="block w-full border-b border-slate-100 hover:bg-black/5"
                       aria-label={`Reservar ${room.name} a las ${slotLabel(i)}`}
                     />
                   ))}

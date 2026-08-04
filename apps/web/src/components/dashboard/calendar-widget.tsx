@@ -390,7 +390,7 @@ export function CalendarWidget({ announcements, canCreateEvents, userLocation }:
               }}
               className={`rounded-lg p-1 min-h-[72px] flex flex-col transition-colors ${
                 events.length > 0 ? 'cursor-pointer' : 'cursor-default'
-              } ${isToday ? 'ring-2 ring-terracota ring-offset-1' : ''} ${
+              } ${isToday ? 'ring-2 ring-black ring-offset-1' : ''} ${
                 isSel
                   ? 'bg-slate-100'
                   : events.length > 0
@@ -400,7 +400,7 @@ export function CalendarWidget({ announcements, canCreateEvents, userLocation }:
             >
               <span
                 className={`text-[11px] font-semibold leading-none mb-1 ${
-                  isToday ? 'text-terracota' : 'text-slate-600'
+                  isToday ? 'text-black' : 'text-slate-600'
                 }`}
               >
                 {day}
@@ -462,7 +462,7 @@ export function CalendarWidget({ announcements, canCreateEvents, userLocation }:
 
       {/* ── Legend ──────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 pt-3 border-t border-slate-100">
-        <LegendItem color="ring-2 ring-terracota ring-offset-1 bg-transparent rounded-full" label="Hoy" />
+        <LegendItem color="ring-2 ring-black ring-offset-1 bg-transparent rounded-full" label="Hoy" />
         <LegendItem color="bg-blue-200 rounded" label="Festivo" />
         <LegendItem color="bg-amber-200 rounded" label="Efeméride" />
         <LegendItem color="bg-emerald-200 rounded" label="Cumpleaños" />

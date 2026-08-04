@@ -100,7 +100,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
       <div className="mx-auto max-w-6xl px-8 py-8 no-print">
         {/* Breadcrumb */}
         <nav className="mb-6 flex items-center gap-2 text-sm text-slate-500">
-          <Link href="/transformacion/reportes" className="hover:text-terracota">Reportes</Link>
+          <Link href="/transformacion/reportes" className="hover:text-black">Reportes</Link>
           <span>/</span>
           <span className="text-navy font-medium">Inventario por área</span>
         </nav>
@@ -116,7 +116,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-2 rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy/90"
+            className="flex items-center gap-2 rounded-md bg-navy px-5 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
           >
             <span>🖨</span>
             Exportar PDF
@@ -124,7 +124,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+          <div className="mb-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
             No se pudo cargar el reporte. Verifica tu conexión e intenta de nuevo.
           </div>
         )}
@@ -134,7 +134,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
           <select
             value={areaFilter}
             onChange={(e) => setAreaFilter(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
           >
             <option value="">Área: Todas</option>
             {allAreas.map((a) => (
@@ -145,7 +145,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
           <select
             value={locationFilter}
             onChange={(e) => setLocationFilter(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
           >
             <option value="">Ubicación: Todas</option>
             {allLocations.map((l) => (
@@ -156,7 +156,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-terracota focus:outline-none"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
           >
             <option value="">Estado: Todos</option>
             {allStatuses.map((s) => (
@@ -233,7 +233,7 @@ export function InventoryAreaReportScreen({ report, error }: Props) {
                       <tbody>
                         {emp.equipment.map((eq) => (
                           <tr key={eq.displayId} className="border-b border-slate-100 last:border-none">
-                            <td className="px-3 py-1.5 font-mono text-[10px] font-medium text-terracota">{eq.displayId}</td>
+                            <td className="px-3 py-1.5 font-mono text-[10px] font-medium text-black">{eq.displayId}</td>
                             <td className="px-3 py-1.5 font-mono text-[10px] text-slate-500">{eq.legacyId ?? '—'}</td>
                             <td className="px-3 py-1.5 text-slate-700">{eq.equipmentType}</td>
                             <td className="px-3 py-1.5 text-slate-700">

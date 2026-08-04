@@ -17,7 +17,7 @@ export function StatCard({ label, value = '—', href, description, className }:
     <Link
       href={href}
       className={cn(
-        'group flex flex-col gap-1 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-shadow hover:shadow-md',
+        'group flex flex-col gap-1 rounded-xl border border-slate-200 border-l-4 border-l-black bg-white p-5 shadow-sm transition-shadow hover:shadow-md',
         className,
       )}
     >
@@ -45,7 +45,7 @@ export function ModuleCard({
   description,
   href,
   icon,
-  accentClass = 'text-navy bg-slate-100',
+  accentClass = 'bg-black/10 text-black',
 }: ModuleCardProps) {
   return (
     <Link
@@ -61,12 +61,12 @@ export function ModuleCard({
         {icon}
       </div>
       <div className="min-w-0">
-        <p className="font-semibold text-navy group-hover:text-terracota transition-colors">
+        <p className="font-semibold text-navy group-hover:text-black transition-colors">
           {title}
         </p>
         <p className="mt-0.5 text-sm text-slate-500">{description}</p>
       </div>
-      <span className="ml-auto text-slate-300 group-hover:text-terracota transition-colors">→</span>
+      <span className="ml-auto text-slate-300 group-hover:text-black transition-colors">→</span>
     </Link>
   );
 }

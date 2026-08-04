@@ -94,7 +94,7 @@ export function UploadVendorDocumentDialog({ vendorId, onClose }: { vendorId: st
               value={documentType}
               onChange={(e) => setDocumentType(e.target.value)}
               disabled={docTypes.length === 0}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-terracota focus:outline-none focus:ring-1 focus:ring-terracota disabled:opacity-50"
+              className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black disabled:opacity-50"
             >
               {docTypes.map((t) => (
                 <option key={t.id} value={t.name}>
@@ -138,7 +138,7 @@ export function UploadVendorDocumentDialog({ vendorId, onClose }: { vendorId: st
             <button
               type="submit"
               disabled={isPending || docTypes.length === 0}
-              className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark disabled:opacity-60"
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
             >
               {isPending ? 'Cargando…' : 'Subir documento'}
             </button>

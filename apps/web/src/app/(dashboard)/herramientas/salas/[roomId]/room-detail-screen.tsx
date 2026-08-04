@@ -18,7 +18,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
 
   return (
     <div>
-      <Link href="/herramientas/salas" className="text-sm font-medium text-terracota hover:text-terracota-dark">
+      <Link href="/herramientas/salas" className="text-sm font-medium text-black hover:text-black">
         ← Volver a salas
       </Link>
 
@@ -35,7 +35,7 @@ export function RoomDetailScreen({ room }: RoomDetailScreenProps) {
         <button
           type="button"
           onClick={() => setBooking({ date: todayDateString(), startTime: '09:00' })}
-          className="rounded-md bg-terracota px-4 py-2 text-sm font-semibold text-white hover:bg-terracota-dark"
+          className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
         >
           Reservar esta sala
         </button>

@@ -101,7 +101,7 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
       </header>
 
       {errorKind === 'unavailable' && (
-        <div className="mt-6 rounded-lg border border-terracota/30 bg-terracota/5 px-4 py-3 text-sm text-terracota-dark">
+        <div className="mt-6 rounded-lg border border-black/30 bg-black/5 px-4 py-3 text-sm text-black">
           No se pudo conectar con la API. Inicia sesión para ver datos en vivo.
         </div>
       )}
@@ -114,7 +114,7 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
             onClick={() => setTab(t.id)}
             className={cn(
               'border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              tab === t.id ? 'border-terracota text-terracota' : 'border-transparent text-slate-500 hover:text-navy',
+              tab === t.id ? 'border-black text-black' : 'border-transparent text-slate-500 hover:text-navy',
             )}
           >
             {t.label}
