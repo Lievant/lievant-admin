@@ -1,10 +1,20 @@
 'use client';
 
+import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import type {
   EmployeeVacationSummary,
   VacationMovementItem,
+  VacationRequestItem,
   VacationRequestStatus,
 } from '@/lib/api';
+import { usePermission } from '@/hooks/use-permission';
+import { PlusIcon } from '@/components/icons';
+import { AdminVacationRequestDialog } from './admin-vacation-request-dialog';
+import {
+  adminApproveVacationRequestAction,
+  adminDeleteVacationRequestAction,
+} from './actions';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -44,6 +54,46 @@ function StatCard({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
+/** Confirmación en línea para no depender de window.confirm. */
+function ConfirmBar({
+  message,
+  confirmLabel,
+  danger,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  confirmLabel: string;
+  danger?: boolean;
+  pending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap items-center justify-end gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+      <span className="mr-auto text-xs text-amber-800">{message}</span>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="rounded-md border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+      >
+        No
+      </button>
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={pending}
+        className={`rounded-md px-3 py-1 text-xs font-semibold text-white disabled:opacity-60 ${
+          danger ? 'bg-red-600 hover:bg-red-700' : 'bg-black hover:bg-zinc-800'
+        }`}
+      >
+        {pending ? 'Procesando…' : confirmLabel}
+      </button>
+    </div>
+  );
+}
+
 export function VacationTab({
   summary,
   canView,
@@ -51,6 +101,41 @@ export function VacationTab({
   summary: EmployeeVacationSummary | null;
   canView: boolean;
 }) {
+  const router = useRouter();
+  const canManage = usePermission('rrhh', 'vacaciones', 'manage');
+  const [showNewDialog, setShowNewDialog] = useState(false);
+  const [confirming, setConfirming] = useState<{ id: string; kind: 'approve' | 'delete' } | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function runApprove(requestId: string) {
+    if (!summary) return;
+    setActionError(null);
+    startTransition(async () => {
+      const res = await adminApproveVacationRequestAction(summary.employeeId, requestId);
+      if (res.success) {
+        setConfirming(null);
+        router.refresh();
+      } else {
+        setActionError(res.error ?? 'No se pudo aprobar la solicitud.');
+      }
+    });
+  }
+
+  function runDelete(requestId: string) {
+    if (!summary) return;
+    setActionError(null);
+    startTransition(async () => {
+      const res = await adminDeleteVacationRequestAction(summary.employeeId, requestId);
+      if (res.success) {
+        setConfirming(null);
+        router.refresh();
+      } else {
+        setActionError(res.error ?? 'No se pudo eliminar la solicitud.');
+      }
+    });
+  }
+
   if (!canView) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-10 text-center shadow-sm">
@@ -134,7 +219,26 @@ export function VacationTab({
 
       {/* Historial de solicitudes */}
       <section>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Solicitudes</h3>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Solicitudes</h3>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => setShowNewDialog(true)}
+              className="flex items-center gap-2 rounded-md bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800"
+            >
+              <PlusIcon className="h-3.5 w-3.5" />
+              Nueva solicitud
+            </button>
+          )}
+        </div>
+
+        {actionError && (
+          <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {actionError}
+          </div>
+        )}
+
         {summary.requests.length === 0 ? (
           <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
             Sin solicitudes registradas.
@@ -148,7 +252,9 @@ export function VacationTab({
                   <th className="px-4 py-3 text-left">Fechas</th>
                   <th className="px-4 py-3 text-left">Días</th>
                   <th className="px-4 py-3 text-left">Sustituto</th>
+                  <th className="px-4 py-3 text-left">Origen</th>
                   <th className="px-4 py-3 text-left">Estado</th>
+                  {canManage && <th className="px-4 py-3 text-right">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -161,10 +267,31 @@ export function VacationTab({
                     <td className="px-4 py-3 font-semibold text-navy">{r.workingDaysTaken}</td>
                     <td className="px-4 py-3 text-slate-600">{r.substitute?.fullName ?? '—'}</td>
                     <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                          r.createdByAdmin ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {r.createdByAdmin ? 'Administrador' : 'Colaborador'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
                       <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_META[r.status].className}`}>
                         {STATUS_META[r.status].label}
                       </span>
                     </td>
+                    {canManage && (
+                      <td className="px-4 py-3 text-right align-top">
+                        <RequestActions
+                          request={r}
+                          confirming={confirming}
+                          pending={isPending}
+                          onAsk={setConfirming}
+                          onApprove={runApprove}
+                          onDelete={runDelete}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -172,6 +299,92 @@ export function VacationTab({
           </div>
         )}
       </section>
+
+      {showNewDialog && (
+        <AdminVacationRequestDialog
+          employeeId={summary.employeeId}
+          employeeName={summary.fullName}
+          availableDays={b.availableDays}
+          onClose={() => setShowNewDialog(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Acciones por solicitud. Pendiente: aprobar o eliminar. Aprobada: eliminar,
+ * que devuelve los días al saldo. Rechazada o cancelada: nada, porque los días
+ * ya se reintegraron y borrarlas no aportaría.
+ */
+function RequestActions({
+  request,
+  confirming,
+  pending,
+  onAsk,
+  onApprove,
+  onDelete,
+}: {
+  request: VacationRequestItem;
+  confirming: { id: string; kind: 'approve' | 'delete' } | null;
+  pending: boolean;
+  onAsk: (v: { id: string; kind: 'approve' | 'delete' } | null) => void;
+  onApprove: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const activo = confirming?.id === request.id ? confirming.kind : null;
+
+  if (activo === 'approve') {
+    return (
+      <ConfirmBar
+        message={`¿Aprobar ${request.displayId} por ${request.workingDaysTaken} días?`}
+        confirmLabel="Sí, aprobar"
+        pending={pending}
+        onConfirm={() => onApprove(request.id)}
+        onCancel={() => onAsk(null)}
+      />
+    );
+  }
+
+  if (activo === 'delete') {
+    return (
+      <ConfirmBar
+        message={
+          request.status === 'approved'
+            ? `¿Seguro? Esto revertirá ${request.workingDaysTaken} días al balance del empleado.`
+            : `¿Eliminar ${request.displayId}? Se devolverán ${request.workingDaysTaken} días al saldo.`
+        }
+        confirmLabel="Sí, eliminar"
+        danger
+        pending={pending}
+        onConfirm={() => onDelete(request.id)}
+        onCancel={() => onAsk(null)}
+      />
+    );
+  }
+
+  if (request.status !== 'pending' && request.status !== 'approved') {
+    return <span className="text-xs text-slate-400">—</span>;
+  }
+
+  return (
+    <div className="flex justify-end gap-2">
+      {request.status === 'pending' && (
+        <button
+          type="button"
+          onClick={() => onAsk({ id: request.id, kind: 'approve' })}
+          className="rounded-md border border-emerald-200 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:border-emerald-300"
+        >
+          Aprobar
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => onAsk({ id: request.id, kind: 'delete' })}
+        className="rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 hover:border-red-300"
+      >
+        Eliminar
+      </button>
     </div>
   );
 }

@@ -66,6 +66,10 @@ export class VacationRequest {
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 
+  /** true cuando la levantó RRHH en nombre del colaborador, no el colaborador. */
+  @Column({ name: 'created_by_admin', type: 'boolean', default: false })
+  createdByAdmin!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

@@ -1,0 +1,22 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+
+/**
+ * Variante del cálculo de días hábiles autorizada por rrhh.vacaciones.manage,
+ * para el alta de solicitudes que hace RRHH en nombre de un colaborador.
+ */
+export async function GET(request: NextRequest): Promise<NextResponse> {
+  const accessToken = request.cookies.get('access_token')?.value;
+  const qs = request.nextUrl.search;
+
+  const res = await fetch(`${API_URL}/vacations/admin/calculate-days${qs}`, {
+    headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+  });
+
+  const body = await res.text();
+  return new NextResponse(body, {
+    status: res.status,
+    headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
+  });
+}

@@ -3,6 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import {
   ApiError,
+  adminApproveVacationRequest,
+  adminCreateVacationRequest,
+  adminDeleteVacationRequest,
   addEmployeeContact,
   generateEmployeeDocument,
   removeEmployeeContact,
@@ -141,6 +144,51 @@ export async function generateEmployeeDocumentAction(
   try {
     const doc = await generateEmployeeDocument(employeeId, docType, extraParams ?? {});
     return { success: true, base64: doc.base64 };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+// ─── Gestión manual de vacaciones (rrhh.vacaciones.manage) ───────────────────
+
+export async function adminCreateVacationRequestAction(
+  employeeId: string,
+  payload: { startDate: string; endDate: string; notes?: string; autoApprove?: boolean },
+): Promise<ActionResult> {
+  try {
+    await adminCreateVacationRequest({ employeeId, ...payload });
+    revalidatePath(`/rrhh/empleados/${employeeId}`);
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function adminApproveVacationRequestAction(
+  employeeId: string,
+  requestId: string,
+): Promise<ActionResult> {
+  try {
+    await adminApproveVacationRequest(requestId);
+    revalidatePath(`/rrhh/empleados/${employeeId}`);
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export interface DeleteVacationRequestActionResult extends ActionResult {
+  daysReturned?: number;
+}
+
+export async function adminDeleteVacationRequestAction(
+  employeeId: string,
+  requestId: string,
+): Promise<DeleteVacationRequestActionResult> {
+  try {
+    const res = await adminDeleteVacationRequest(requestId);
+    revalidatePath(`/rrhh/empleados/${employeeId}`);
+    return { success: true, daysReturned: res.daysReturned };
   } catch (err) {
     return toResult(err);
   }
