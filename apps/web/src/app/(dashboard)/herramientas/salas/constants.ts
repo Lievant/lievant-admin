@@ -119,6 +119,51 @@ export function todayDateString(): string {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 }
 
+export const DEFAULT_ROOM_TIMEZONE = 'America/Mexico_City';
+
+/**
+ * "Ahora" expresado en la misma convención que start_time/end_time: el módulo
+ * guarda la hora de pared local en componentes UTC (ver assertWithinOfficeHours
+ * y buildIsoDateTime, que arma `${date}T${time}:00Z`). Por eso Date.now(), que
+ * es el epoch real, no sirve como referencia: en México va 6 h por delante de
+ * los valores guardados y hace que las reservas de hoy se vean como pasadas.
+ *
+ * Se usa Intl.formatToParts + Date.UTC en lugar de reparsear
+ * toLocaleString(): el formato de salida de toLocaleString no está garantizado
+ * por el estándar, así que `new Date(...)` sobre ese string devuelve NaN en
+ * algunos motores y además desplaza ambos lados por igual, dejando el desfase
+ * intacto.
+ */
+export function wallClockNowMs(timeZone: string = DEFAULT_ROOM_TIMEZONE): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date());
+
+  const value = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+
+  return Date.UTC(
+    value('year'),
+    value('month') - 1,
+    value('day'),
+    value('hour'),
+    value('minute'),
+    value('second'),
+  );
+}
+
+/** Fecha de hoy (YYYY-MM-DD) en la zona de la oficina, no en UTC ni en la del navegador. */
+export function wallClockTodayString(timeZone: string = DEFAULT_ROOM_TIMEZONE): string {
+  return new Date(wallClockNowMs(timeZone)).toISOString().slice(0, 10);
+}
+
 export function formatDateLabel(dateISO: string, timeZone = 'UTC'): string {
   return new Intl.DateTimeFormat('es-MX', {
     weekday: 'long',
