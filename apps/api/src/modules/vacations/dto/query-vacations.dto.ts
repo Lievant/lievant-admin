@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional } from 'class-validator';
+import { IsDateString, IsIn, IsInt, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CalculateDaysDto {
   @IsDateString()
@@ -27,4 +27,17 @@ export class VacationReportQueryDto {
 
   @IsDateString()
   endDate!: string;
+}
+
+export class VacationMasterQueryDto {
+  /** Busca en full_name o display_id. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  /** Acota a empleados cuyo próximo aniversario cae dentro del período. */
+  @IsOptional()
+  @IsIn(['week', 'month', 'quarter'])
+  anniversary_within?: 'week' | 'month' | 'quarter';
 }
