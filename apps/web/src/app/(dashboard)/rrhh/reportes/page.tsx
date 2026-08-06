@@ -55,6 +55,21 @@ export default function ReportesRrhhPage() {
             </p>
           </div>
         </Link>
+
+        <Link
+          href="/rrhh/reportes/maestro-vacaciones"
+          className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-black/40 hover:shadow-md"
+        >
+          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-black/10 text-black transition group-hover:bg-black group-hover:text-white">
+            <PlaneIcon className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="font-semibold text-navy">Maestro de Vacaciones</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Saldos, antigüedad y próximos aniversarios por colaborador, con exportación
+            </p>
+          </div>
+        </Link>
       </div>
     </div>
   );

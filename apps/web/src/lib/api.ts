@@ -2873,6 +2873,8 @@ export interface VacationRequestItem {
   rejectionReason: string | null;
   approvedAt: string | null;
   createdAt: string;
+  /** true si la levantó RRHH en nombre del colaborador. */
+  createdByAdmin: boolean;
   substitute: { id: string; fullName: string; corporateEmail: string | null } | null;
   period: { periodStart: string; periodEnd: string } | null;
 }
@@ -2965,6 +2967,79 @@ export function getEmployeeVacationSummary(employeeId: string): Promise<Employee
 export function getVacationReport(startDate: string, endDate: string): Promise<VacationReportRow[]> {
   const qs = new URLSearchParams({ startDate, endDate }).toString();
   return apiFetchWithRetry<VacationReportRow[]>(`/vacations/report?${qs}`);
+}
+
+// --- Maestro de vacaciones ---
+
+export type AnniversaryWindow = 'week' | 'month' | 'quarter';
+
+export interface VacationMasterRow {
+  employeeId: string;
+  displayId: string;
+  fullName: string;
+  area: string | null;
+  photoUrl: string | null;
+  seniorityDate: string;
+  yearsOfService: number;
+  /** Meses cumplidos por encima de los años completos (0-11). */
+  monthsOfService: number;
+  totalMonthsOfService: number;
+  anniversaryDate: string;
+  daysUntilAnniversary: number;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  entitledDays: number;
+  /** Cupo del período: entitled menos expirados, antes de restar solicitudes. */
+  availableDays: number;
+  requestedDays: number;
+  takenDays: number;
+  /** availableDays - requestedDays - takenDays. */
+  remainingDays: number;
+}
+
+export function getVacationMasterReport(params: {
+  search?: string;
+  anniversaryWithin?: AnniversaryWindow;
+} = {}): Promise<VacationMasterRow[]> {
+  const q = new URLSearchParams();
+  if (params.search) q.set('search', params.search);
+  if (params.anniversaryWithin) q.set('anniversary_within', params.anniversaryWithin);
+  const qs = q.toString();
+  return apiFetchWithRetry<VacationMasterRow[]>(`/vacations/report/master${qs ? `?${qs}` : ''}`);
+}
+
+// --- Gestión manual de vacaciones (rrhh.vacaciones.manage) ---
+
+export interface AdminCreateVacationRequestPayload {
+  employeeId: string;
+  startDate: string;
+  endDate: string;
+  notes?: string;
+  autoApprove?: boolean;
+}
+
+export function adminCreateVacationRequest(
+  payload: AdminCreateVacationRequestPayload,
+): Promise<VacationRequestItem> {
+  return apiFetch<VacationRequestItem>('/vacations/requests/admin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function adminApproveVacationRequest(requestId: string): Promise<VacationRequestItem> {
+  return apiFetch<VacationRequestItem>(`/vacations/requests/${requestId}/admin-approve`, {
+    method: 'PATCH',
+  });
+}
+
+export function adminDeleteVacationRequest(
+  requestId: string,
+): Promise<{ deleted: true; daysReturned: number }> {
+  return apiFetch<{ deleted: true; daysReturned: number }>(`/vacations/requests/${requestId}`, {
+    method: 'DELETE',
+  });
 }
 
 // --- Medios (Control de Pauta) ---

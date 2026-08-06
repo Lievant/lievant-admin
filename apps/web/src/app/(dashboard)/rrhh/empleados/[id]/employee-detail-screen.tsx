@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type {
   EmployeeCompensation,
@@ -43,6 +44,26 @@ const ALL_TABS = [
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
+
+/**
+ * Alias en español para ?tab=. Los ids internos son en inglés, pero los enlaces
+ * que se comparten usan el nombre visible del tab.
+ */
+const TAB_ALIASES: Record<string, TabId> = {
+  vacaciones: 'vacation',
+  compensacion: 'compensation',
+  'datos-personales': 'personal',
+  familia: 'family',
+  documentos: 'documents',
+  fotos: 'photos',
+};
+
+function resolveTabParam(value: string | null): TabId | null {
+  if (!value) return null;
+  const slug = value.toLowerCase();
+  if (ALL_TABS.some((t) => t.id === slug)) return slug as TabId;
+  return TAB_ALIASES[slug] ?? null;
+}
 
 interface EmployeeDetailScreenProps {
   employee: EmployeeDetail;
@@ -105,10 +126,18 @@ export function EmployeeDetailScreen({
     return true; // general, photos
   });
 
-  const [activeTab, setActiveTab] = useState<TabId>('general');
+  // ?tab= define el tab inicial para poder enlazar directo desde otras
+  // pantallas (p. ej. "Ver expediente" del Maestro de Vacaciones). Va como
+  // estado inicial, no como efecto, para que el primer render ya sea el
+  // correcto y no haya parpadeo desde General.
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<TabId>(
+    () => resolveTabParam(searchParams.get('tab')) ?? 'general',
+  );
   const [isEditOpen, setEditOpen] = useState(false);
   const [isDocumentsOpen, setDocumentsOpen] = useState(false);
 
+  // Si el tab pedido no está visible por permisos, cae al primero disponible.
   const effectiveTab = visibleTabs.some((t) => t.id === activeTab) ? activeTab : visibleTabs[0]?.id ?? 'general';
 
   return (

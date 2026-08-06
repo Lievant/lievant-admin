@@ -581,6 +581,7 @@ export class VacationsService {
       rejectionReason: r.rejectionReason,
       approvedAt: r.approvedAt,
       createdAt: r.createdAt,
+      createdByAdmin: r.createdByAdmin,
       substitute: r.substitute
         ? { id: r.substitute.id, fullName: r.substitute.fullName, corporateEmail: r.substitute.corporateEmail }
         : null,
@@ -730,6 +731,325 @@ export class VacationsService {
     }
 
     return rows;
+  }
+
+  /**
+   * Maestro de vacaciones: una fila por empleado con balance vigente.
+   *
+   * Nota sobre la aritmética: el módulo descuenta los días de `used_days` al
+   * CREAR la solicitud (retención mientras está pendiente), no al aprobarla.
+   * Por eso `availableDays` se expone como el cupo del período (entitled menos
+   * expirados) y `remainingDays` resta solicitados y tomados. Así
+   * remainingDays coincide con el "disponible" que ya muestra el resto de la
+   * app (entitled - used - expired) y ninguna columna cuenta doble.
+   */
+  /**
+   * Crea los balances que falten para los colaboradores con derecho.
+   *
+   * getOrCreateCurrentBalance() se dispara cuando el colaborador entra a su
+   * pestaña de vacaciones, así que el maestro solo veía a quienes ya habían
+   * accedido. Esto lo adelanta en lote: es idempotente y el costo es one-time
+   * por colaborador.
+   *
+   * Cada creación va en su propio try: hr.vacation_balances tiene UNIQUE
+   * (employee_id, period_start), así que dos reportes concurrentes hacen que el
+   * segundo choque contra la restricción. Ese fallo es benigno —el balance
+   * quedó creado por el otro— y no debe tumbar el reporte completo.
+   */
+  private async ensureCurrentBalances(): Promise<{ created: number; failed: number }> {
+    const pendientes = (await this.dataSource.query(
+      `SELECT e.id
+       FROM employees.employee_records e
+       LEFT JOIN hr.vacation_balances b
+         ON b.employee_id = e.id AND b.is_current = true
+       WHERE e.deleted_at IS NULL
+         AND e.status = $1
+         AND e.seniority_date IS NOT NULL
+         AND e.seniority_date <= (CURRENT_DATE - INTERVAL '1 year')
+         AND b.id IS NULL`,
+      [EmployeeStatus.ACTIVE],
+    )) as { id: string }[];
+
+    let created = 0;
+    let failed = 0;
+    for (const { id } of pendientes) {
+      try {
+        const balance = await this.getOrCreateCurrentBalance(id);
+        if (balance) created += 1;
+      } catch (err) {
+        failed += 1;
+        this.logger.warn(
+          `No se pudo crear el balance de vacaciones del empleado ${id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+
+    if (pendientes.length > 0) {
+      this.logger.log(
+        `Maestro de vacaciones: ${pendientes.length} colaboradores sin balance vigente — ${created} creados, ${failed} con error.`,
+      );
+    }
+
+    return { created, failed };
+  }
+
+  async getVacationMasterReport(params: {
+    search?: string | undefined;
+    anniversaryWithin?: 'week' | 'month' | 'quarter' | undefined;
+  }) {
+    // Debe ir antes de la consulta: si no, el reporte solo lista a quienes ya
+    // tienen balance creado.
+    await this.ensureCurrentBalances();
+
+    const qb = this.balancesRepo
+      .createQueryBuilder('b')
+      .innerJoinAndSelect('b.employee', 'emp')
+      .where('b.is_current = true')
+      .andWhere('emp.deleted_at IS NULL')
+      .andWhere('emp.status = :status', { status: EmployeeStatus.ACTIVE })
+      .orderBy('emp.full_name', 'ASC');
+
+    if (params.search) {
+      qb.andWhere('(emp.full_name ILIKE :s OR emp.display_id ILIKE :s)', { s: `%${params.search}%` });
+    }
+
+    const balances = await qb.getMany();
+    if (balances.length === 0) return [];
+
+    // Días por estado en una sola consulta, para no hacer N+1.
+    const balanceIds = balances.map((b) => b.id);
+    const agg = (await this.dataSource.query(
+      `SELECT balance_id, status, SUM(working_days_taken)::float AS dias
+       FROM hr.vacation_requests
+       WHERE balance_id = ANY($1) AND deleted_at IS NULL AND status IN ('pending', 'approved')
+       GROUP BY balance_id, status`,
+      [balanceIds],
+    )) as { balance_id: string; status: string; dias: number }[];
+
+    const porBalance = new Map<string, { pending: number; approved: number }>();
+    for (const row of agg) {
+      const actual = porBalance.get(row.balance_id) ?? { pending: 0, approved: 0 };
+      if (row.status === 'pending') actual.pending = row.dias;
+      else actual.approved = row.dias;
+      porBalance.set(row.balance_id, actual);
+    }
+
+    const hoyMs = Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate(),
+    );
+    const LIMITES: Record<string, number> = { week: 7, month: 30, quarter: 90 };
+    const limite = params.anniversaryWithin ? LIMITES[params.anniversaryWithin] : undefined;
+
+    const filas = [];
+    for (const b of balances) {
+      const emp = b.employee;
+      if (!emp.seniorityDate) continue;
+
+      const s = ymd(emp.seniorityDate);
+      // El próximo aniversario es el día siguiente al fin del período vigente.
+      const finPeriodo = ymd(b.periodEnd);
+      const anivMs = Date.UTC(finPeriodo.y, finPeriodo.m - 1, finPeriodo.d) + 86400000;
+      const diasHastaAniversario = Math.round((anivMs - hoyMs) / 86400000);
+
+      if (limite !== undefined && (diasHastaAniversario < 0 || diasHastaAniversario > limite)) {
+        continue;
+      }
+
+      // Antigüedad exacta a hoy, en años y meses cumplidos.
+      const hoy = new Date(hoyMs);
+      let meses =
+        (hoy.getUTCFullYear() - s.y) * 12 + (hoy.getUTCMonth() + 1 - s.m) - (hoy.getUTCDate() < s.d ? 1 : 0);
+      meses = Math.max(0, meses);
+
+      const dias = porBalance.get(b.id) ?? { pending: 0, approved: 0 };
+      const entitledDays = Number(b.entitledDays);
+      const availableDays = entitledDays - Number(b.expiredDays);
+      const requestedDays = Number(dias.pending.toFixed(2));
+      const takenDays = Number(dias.approved.toFixed(2));
+      const aniv = new Date(anivMs);
+
+      filas.push({
+        employeeId: emp.id,
+        displayId: emp.displayId,
+        fullName: emp.fullName,
+        area: emp.area,
+        photoUrl: photoUrl(emp.corporateEmail),
+        seniorityDate: emp.seniorityDate,
+        yearsOfService: b.yearsOfService,
+        monthsOfService: meses % 12,
+        totalMonthsOfService: meses,
+        anniversaryDate: `${aniv.getUTCFullYear()}-${pad2(aniv.getUTCMonth() + 1)}-${pad2(aniv.getUTCDate())}`,
+        daysUntilAnniversary: diasHastaAniversario,
+        periodLabel: `Año ${b.yearsOfService} (${b.periodStart.slice(0, 4)}-${b.periodEnd.slice(0, 4)})`,
+        periodStart: b.periodStart,
+        periodEnd: b.periodEnd,
+        entitledDays,
+        availableDays,
+        requestedDays,
+        takenDays,
+        remainingDays: Number((availableDays - requestedDays - takenDays).toFixed(2)),
+      });
+    }
+
+    return filas;
+  }
+
+  // ==========================================================================
+  // Gestión manual (rrhh.vacaciones.manage)
+  // ==========================================================================
+
+  /** Aprueba sin exigir jefatura directa: la autoriza el permiso manage. */
+  async adminApproveRequest(requestId: string, user: User): Promise<VacationRequest> {
+    const request = await this.requestsRepo.findOne({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Solicitud no encontrada.');
+    if (request.status !== 'pending') {
+      throw new BadRequestException(`La solicitud ya está ${request.status}.`);
+    }
+
+    const approverEmployeeId = await this.resolveApproverEmployeeId(user);
+
+    request.status = 'approved';
+    request.approvedBy = approverEmployeeId;
+    request.approvedAt = new Date();
+    await this.requestsRepo.save(request);
+
+    // Solo movimiento de auditoría: los días ya se retuvieron en used_days al
+    // crear la solicitud, así que volver a descontarlos cobraría doble.
+    await this.movementsRepo.save(
+      this.movementsRepo.create({
+        employeeId: request.employeeId,
+        balanceId: request.balanceId,
+        requestId: request.id,
+        movementType: 'REQUEST_APPROVED',
+        daysDelta: String(-Number(request.workingDaysTaken)),
+        description: `Solicitud ${request.displayId} aprobada por RRHH (${request.workingDaysTaken} días).`,
+        createdBy: user.id,
+      }),
+    );
+
+    return request;
+  }
+
+  /**
+   * Elimina una solicitud. Devuelve los días al saldo salvo que ya estuvieran
+   * devueltos (rechazada o cancelada), porque en esos estados rejectRequest ya
+   * los reintegró y hacerlo otra vez infla el balance.
+   */
+  async adminDeleteRequest(requestId: string, user: User): Promise<{ deleted: true; daysReturned: number }> {
+    const request = await this.requestsRepo.findOne({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Solicitud no encontrada.');
+
+    const days = Number(request.workingDaysTaken);
+    const retienesSaldo = request.status === 'pending' || request.status === 'approved';
+
+    await this.dataSource.transaction(async (mgr) => {
+      if (retienesSaldo) {
+        const balance = await mgr.getRepository(VacationBalance).findOne({ where: { id: request.balanceId } });
+        if (balance) {
+          balance.usedDays = String(Math.max(0, Number(balance.usedDays) - days));
+          await mgr.getRepository(VacationBalance).save(balance);
+        }
+
+        await mgr.getRepository(VacationMovement).save(
+          mgr.getRepository(VacationMovement).create({
+            employeeId: request.employeeId,
+            balanceId: request.balanceId,
+            requestId: null, // la solicitud desaparece; no dejar FK apuntando a nada
+            movementType: 'REQUEST_CANCELLED',
+            daysDelta: String(days),
+            description: `Solicitud ${request.displayId} eliminada por RRHH: se devolvieron ${days} días al saldo.`,
+            createdBy: user.id,
+          }),
+        );
+      }
+
+      await mgr.getRepository(VacationRequest).softDelete({ id: request.id });
+    });
+
+    return { deleted: true, daysReturned: retienesSaldo ? days : 0 };
+  }
+
+  /** Crea una solicitud en nombre de un colaborador, con aprobación opcional. */
+  async adminCreateRequest(
+    dto: { employeeId: string; startDate: string; endDate: string; notes?: string; autoApprove?: boolean },
+    user: User,
+  ): Promise<VacationRequest> {
+    if (dto.endDate < dto.startDate) {
+      throw new BadRequestException('La fecha de fin no puede ser anterior a la fecha de inicio.');
+    }
+
+    const employee = await this.employeesRepo.findOne({ where: { id: dto.employeeId } });
+    if (!employee) throw new NotFoundException(`Empleado ${dto.employeeId} no encontrado.`);
+
+    const balance = await this.getOrCreateCurrentBalance(employee.id);
+    if (!balance) {
+      throw new BadRequestException(
+        'El colaborador aún no cumple su primer año de servicio, por lo que no tiene período vigente.',
+      );
+    }
+
+    const workingDays = await this.calculateWorkingDays(dto.startDate, dto.endDate, employee.workDays);
+    if (workingDays <= 0) {
+      throw new BadRequestException('El rango seleccionado no contiene días hábiles.');
+    }
+
+    const available = this.availableDays(balance);
+    if (workingDays > available) {
+      throw new BadRequestException(
+        `Días insuficientes: solicitas ${workingDays} y el saldo disponible del colaborador es ${available}.`,
+      );
+    }
+
+    const approverEmployeeId = await this.resolveApproverEmployeeId(user);
+
+    return this.dataSource.transaction(async (mgr) => {
+      const seqRows = (await mgr.query(`SELECT nextval('hr.vacation_request_seq') AS seq`)) as { seq: string }[];
+      const seq = seqRows[0]?.seq ?? '0';
+      const year = new Date().getUTCFullYear();
+      const displayId = `VAC-${year}-${String(seq).padStart(3, '0')}`;
+
+      const request = await mgr.getRepository(VacationRequest).save(
+        mgr.getRepository(VacationRequest).create({
+          displayId,
+          employeeId: employee.id,
+          balanceId: balance.id,
+          startDate: dto.startDate,
+          endDate: dto.endDate,
+          workingDaysTaken: String(workingDays),
+          substituteEmployeeId: null,
+          status: dto.autoApprove ? 'approved' : 'pending',
+          notes: dto.notes ?? null,
+          createdByAdmin: true,
+          approvedBy: dto.autoApprove ? approverEmployeeId : null,
+          approvedAt: dto.autoApprove ? new Date() : null,
+        }),
+      );
+
+      // La retención del saldo ocurre siempre al crear, igual que en el flujo de
+      // autoservicio; autoApprove solo añade el movimiento de aprobación.
+      balance.usedDays = String(Number(balance.usedDays) + workingDays);
+      await mgr.getRepository(VacationBalance).save(balance);
+
+      if (dto.autoApprove) {
+        await mgr.getRepository(VacationMovement).save(
+          mgr.getRepository(VacationMovement).create({
+            employeeId: employee.id,
+            balanceId: balance.id,
+            requestId: request.id,
+            movementType: 'REQUEST_APPROVED',
+            daysDelta: String(-workingDays),
+            description: `Solicitud ${displayId} creada y aprobada por RRHH (${workingDays} días).`,
+            createdBy: user.id,
+          }),
+        );
+      }
+
+      return request;
+    });
   }
 
   async getHolidays(year: number) {
