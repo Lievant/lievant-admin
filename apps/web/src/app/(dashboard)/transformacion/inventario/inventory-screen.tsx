@@ -122,19 +122,27 @@ export function InventoryScreen({
     router.push(`/transformacion/inventario${qs ? `?${qs}` : ''}`);
   }
 
+  // `cursorsStack` guarda los cursores de las páginas anteriores a la actual,
+  // sin incluir la primera (que no tiene cursor). Antes se apilaba el cursor
+  // vacío de la página 1, el join dejaba `cursors=` y page.tsx lo descartaba,
+  // así que en la página 2 la pila llegaba vacía: el botón "Anterior" se
+  // renderizaba pero goPrev() salía en el primer if y no hacía nada.
   function goNext() {
     if (!page.nextCursor) return;
     const sp = buildParams({}, true);
-    sp.set('cursors', [...cursorsStack, cursor].join(','));
+    const stack = cursor ? [...cursorsStack, cursor] : cursorsStack;
+    if (stack.length) sp.set('cursors', stack.join(','));
+    else sp.delete('cursors');
     sp.set('cursor', page.nextCursor);
     router.push(`/transformacion/inventario?${sp.toString()}`);
   }
 
   function goPrev() {
-    if (cursorsStack.length === 0) return;
-    const stack = [...cursorsStack];
-    const prev = stack.pop() ?? '';
+    if (isFirstPage) return;
     const sp = buildParams({}, true);
+    const stack = [...cursorsStack];
+    const prev = stack.pop();
+    // Sin cursores apilados, la anterior es la primera página: se va sin cursor.
     if (prev) sp.set('cursor', prev);
     else sp.delete('cursor');
     if (stack.length) sp.set('cursors', stack.join(','));
@@ -143,7 +151,8 @@ export function InventoryScreen({
   }
 
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
-  const isFirstPage = cursorsStack.length === 0 && !cursor;
+  // La primera página es exactamente la que no lleva cursor.
+  const isFirstPage = !cursor;
 
   if (errorKind === 'forbidden') {
     return <NoPermissions />;
@@ -313,7 +322,9 @@ export function InventoryScreen({
 
       {/* Paginación */}
       <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-        <span>{page.data.length > 0 ? `${page.data.length} de ${page.total + (page.nextCursor ? '+' : '')} registros` : ''}</span>
+        <span>
+          {page.data.length > 0 ? `${page.data.length} de ${page.total} registros` : ''}
+        </span>
         <div className="flex gap-2">
           {!isFirstPage && (
             <button
