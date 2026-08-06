@@ -23,6 +23,21 @@ export class InventoryService {
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
   ) {}
 
+  /**
+   * Clave temporal del cursor de paginación, truncada a milisegundos.
+   *
+   * created_at es timestamptz (microsegundos) pero el cursor se serializa con
+   * Date.toISOString(), que solo llega al milisegundo. Comparar el valor crudo
+   * contra ese cursor truncado deja filas fuera de las dos ramas del predicado
+   * (`.207456` no es `< .207` ni `= .207`), volviéndolas inalcanzables; y si
+   * todas las filas comparten el timestamp —una carga masiva en una sola
+   * transacción, donde now() es constante— la página siguiente sale vacía.
+   *
+   * Truncando aquí, la clave de orden tiene exactamente la misma precisión que
+   * el cursor y el desempate por id vuelve a ser efectivo.
+   */
+  private static readonly CURSOR_MS_EXPR = "date_trunc('milliseconds', e.created_at)";
+
   // -------------------------------------------------------------------------
   // Catálogos
   // -------------------------------------------------------------------------
@@ -49,9 +64,14 @@ export class InventoryService {
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.assignedEmployee', 'emp')
       .where('e.deleted_at IS NULL')
-      .orderBy('e.createdAt', 'DESC')
-      .addOrderBy('e.id', 'DESC')
-      .limit(limit + 1);
+      // Se ordena por created_at truncado a milisegundos, no por el valor
+      // crudo: el cursor viaja como Date de JS y toISOString() solo conserva
+      // milisegundos, mientras la columna timestamptz guarda microsegundos. Si
+      // la clave de orden tiene más precisión que el cursor, el desempate por
+      // id queda inservible y filas enteras se vuelven inalcanzables (ver
+      // CURSOR_MS_EXPR).
+      .orderBy(InventoryService.CURSOR_MS_EXPR, 'DESC')
+      .addOrderBy('e.id', 'DESC');
 
     if (query.equipmentType) qb.andWhere('e.equipment_type = :et', { et: query.equipmentType });
     if (query.brand) qb.andWhere('e.brand = :brand', { brand: query.brand });
@@ -69,15 +89,22 @@ export class InventoryService {
         { s: `%${query.search}%` },
       );
     }
+    // El conteo se toma antes de aplicar el cursor: es el total de la consulta
+    // filtrada, no el tamaño de la página. Antes se devolvía data.length, así
+    // que el pie de tabla siempre mostraba "20 de 20+".
+    const total = await qb.clone().getCount();
+
     if (query.cursor) {
       const [cursorDate = '', cursorId = ''] = Buffer.from(query.cursor, 'base64url').toString().split('|');
+      // Misma expresión que el ORDER BY, así el desempate por id sí aplica a
+      // las filas que caen en el mismo milisegundo que el cursor.
       qb.andWhere(
-        '(e.created_at < :cd OR (e.created_at = :cd AND e.id < :ci))',
+        `(${InventoryService.CURSOR_MS_EXPR} < :cd OR (${InventoryService.CURSOR_MS_EXPR} = :cd AND e.id < :ci))`,
         { cd: cursorDate, ci: cursorId },
       );
     }
 
-    const items = await qb.getMany();
+    const items = await qb.limit(limit + 1).getMany();
     const hasMore = items.length > limit;
     const data = hasMore ? items.slice(0, limit) : items;
 
@@ -94,7 +121,7 @@ export class InventoryService {
       assignedEmployeePosition: item.assignedEmployee?.position ?? null,
     }));
 
-    return { data: enriched, nextCursor, total: enriched.length };
+    return { data: enriched, nextCursor, total };
   }
 
   // -------------------------------------------------------------------------
