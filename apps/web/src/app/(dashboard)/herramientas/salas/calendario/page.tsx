@@ -1,9 +1,9 @@
 import {
+  listActiveRoomsByOffice,
   listCalendarBookings,
   listRoomCitiesByCountry,
   listRoomCountries,
   listRoomOfficesByCity,
-  listRoomsByOffice,
   type Booking,
   type Office,
   type Room,
@@ -51,7 +51,10 @@ export default async function CalendarioPage({ searchParams }: CalendarPageProps
   let rooms: Room[] = [];
   let bookings: Booking[] = [];
   if (officeId) {
-    rooms = await safe(listRoomsByOffice(officeId), []);
+    // Endpoint de lectura, no el de admin: la vista de calendario es accesible a
+    // cualquier usuario autenticado. Con /rooms/admin el 403 lo absorbía safe()
+    // y el calendario quedaba sin columnas para quien no fuera admin de oficina.
+    rooms = await safe(listActiveRoomsByOffice(officeId), []);
     bookings = await safe(listCalendarBookings(officeId, date), []);
   }
 

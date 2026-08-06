@@ -1584,6 +1584,15 @@ export function listRoomsByOffice(officeId: string): Promise<Room[]> {
   return apiFetchWithRetry<Room[]>(`/rooms/admin?office_id=${officeId}`);
 }
 
+/**
+ * Salas activas de una oficina para cualquier usuario autenticado (no requiere
+ * permisos de admin, a diferencia de listRoomsByOffice). Alimenta la vista de
+ * calendario, que es de solo lectura.
+ */
+export function listActiveRoomsByOffice(officeId: string): Promise<Room[]> {
+  return apiFetchWithRetry<Room[]>(`/rooms/by-office?office_id=${officeId}`);
+}
+
 export interface CreateRoomPayload {
   office_id: string;
   name: string;

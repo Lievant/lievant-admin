@@ -5,7 +5,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { Booking, Office, Room } from '@/lib/api';
+import { hasPermission } from '@/lib/permissions';
+import { useCurrentUser } from '@/components/user-provider';
 import { BookRoomDialog } from '../book-room-dialog';
+import { CancelBookingDialog } from '../mis-reservas/cancel-booking-dialog';
+import { wallClockTodayString } from '../constants';
+import { BookingDetailModal } from './booking-detail-modal';
 
 interface RoomCalendarViewProps {
   rooms: Room[];
@@ -53,8 +58,16 @@ function minutesFromStartOfGrid(iso: string): number {
 
 export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: RoomCalendarViewProps) {
   const router = useRouter();
+  const user = useCurrentUser();
+  const canManage = hasPermission(user, 'herramientas', 'salas', 'manage');
+
   const [newBooking, setNewBooking] = useState<{ room: Room; startTime: string } | null>(null);
   const [occupiedMsg, setOccupiedMsg] = useState<string | null>(null);
+  // Reserva existente sobre la que se hizo click: alimenta el modal de detalle
+  // y, desde ahí, los flujos de edición y cancelación.
+  const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [editBooking, setEditBooking] = useState<Booking | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
 
   function navigate(overrides: { date?: string; office_id?: string }) {
     setOccupiedMsg(null);
@@ -89,6 +102,15 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
       if (bStart < slotEnd && bEnd > slotStart) return true;
     }
     return false;
+  }
+
+  /** Sala de una reserva tomada de las columnas del calendario. */
+  function roomOf(booking: Booking): Room | undefined {
+    return rooms.find((r) => r.id === booking.roomId);
+  }
+
+  function roomNameOf(booking: Booking): string {
+    return roomOf(booking)?.name ?? booking.room?.name ?? 'Sala';
   }
 
   function handleSlotClick(room: Room, slotIndex: number) {
@@ -128,7 +150,9 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
           </button>
           <button
             type="button"
-            onClick={() => navigate({ date: new Date().toISOString().slice(0, 10) })}
+            // toISOString() da la fecha en UTC: después de las 18:00 en México
+            // saltaba al día siguiente. wallClockTodayString usa la hora local.
+            onClick={() => navigate({ date: wallClockTodayString() })}
             className="rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-300"
           >
             Hoy
@@ -251,19 +275,27 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
                     const reservante = b.user?.name ?? '';
                     const horaLabel = `${b.startTime.slice(11, 16)}–${b.endTime.slice(11, 16)}`;
                     return (
-                      <div
+                      <button
                         key={b.id}
+                        type="button"
+                        // El bloque va encima de las celdas: stopPropagation evita
+                        // que el click abra además el diálogo de nueva reserva.
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOccupiedMsg(null);
+                          setSelectedBooking(b);
+                        }}
                         title={`${b.title}${reservante ? ` · ${reservante}` : ''} · ${horaLabel}`}
                         style={{ top, height }}
                         className={cn(
-                          'pointer-events-none absolute inset-x-0.5 overflow-hidden rounded border px-1.5 py-0.5 text-[10px] leading-tight',
+                          'absolute inset-x-0.5 overflow-hidden rounded border px-1.5 py-0.5 text-left text-[10px] leading-tight transition-shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-black/40',
                           STATUS_STYLES[b.status] ?? 'bg-slate-100 border-slate-300 text-slate-700',
                         )}
                       >
                         <p className="truncate font-semibold">{b.title}</p>
                         <p className="truncate opacity-80">{horaLabel}</p>
                         {reservante && <p className="truncate opacity-70">{reservante}</p>}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -282,6 +314,46 @@ export function RoomCalendarView({ rooms, bookings, offices, officeId, date }: R
           durationHours={1}
           onClose={() => setNewBooking(null)}
         />
+      )}
+
+      {selectedBooking && (
+        <BookingDetailModal
+          booking={selectedBooking}
+          roomName={roomNameOf(selectedBooking)}
+          officeName={officeName}
+          isOwner={Boolean(user) && selectedBooking.userId === user?.id}
+          canManage={canManage}
+          onClose={() => setSelectedBooking(null)}
+          onEdit={() => {
+            setEditBooking(selectedBooking);
+            setSelectedBooking(null);
+          }}
+          onCancel={() => {
+            setCancelTarget(selectedBooking);
+            setSelectedBooking(null);
+          }}
+        />
+      )}
+
+      {/* La sala sale de `rooms`, no de booking.room: el endpoint de calendario
+          no trae la relación office, que BookRoomDialog necesita para el header. */}
+      {editBooking && roomOf(editBooking) && (
+        <BookRoomDialog
+          room={roomOf(editBooking)!}
+          officeName={officeName}
+          date={editBooking.startTime.slice(0, 10)}
+          startTime={editBooking.startTime.slice(11, 16)}
+          durationHours={
+            (new Date(editBooking.endTime).getTime() - new Date(editBooking.startTime).getTime()) /
+            3600000
+          }
+          booking={editBooking}
+          onClose={() => setEditBooking(null)}
+        />
+      )}
+
+      {cancelTarget && (
+        <CancelBookingDialog booking={cancelTarget} onClose={() => setCancelTarget(null)} />
       )}
     </div>
   );
