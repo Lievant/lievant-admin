@@ -83,6 +83,22 @@ export class RoomsService {
     return this.roomsRepository.find({ where: { officeId }, order: { name: 'ASC' } });
   }
 
+  /**
+   * Salas activas de una oficina, sin exigir permisos de administrador.
+   * Alimenta la vista de calendario, que es de solo lectura y debe ser
+   * accesible a cualquier usuario autenticado. A diferencia de
+   * findAllByOffice (pantalla de admin), omite las salas inactivas y no
+   * expone nada que el usuario no pueda ver ya al buscar disponibilidad.
+   */
+  async findActiveByOffice(officeId: string): Promise<Room[]> {
+    await this.getOfficeOrFail(officeId);
+
+    return this.roomsRepository.find({
+      where: { officeId, isActive: true },
+      order: { name: 'ASC' },
+    });
+  }
+
   async create(dto: CreateRoomDto, user: User): Promise<Room> {
     await this.assertOfficeAdmin(user, dto.office_id);
     await this.getOfficeOrFail(dto.office_id);

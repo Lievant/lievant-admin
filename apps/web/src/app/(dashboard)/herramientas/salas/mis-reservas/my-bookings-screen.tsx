@@ -8,8 +8,10 @@ import { NoPermissions } from '@/components/ui/no-permissions';
 import {
   BOOKING_STATUS_BADGE_STYLES,
   BOOKING_STATUS_LABELS,
+  DEFAULT_ROOM_TIMEZONE,
   formatDateTimeRange,
   formatDurationLabel,
+  wallClockNowMs,
 } from '../constants';
 import { CancelBookingDialog } from './cancel-booking-dialog';
 import { BookRoomDialog } from '../book-room-dialog';
@@ -43,13 +45,18 @@ export function MyBookingsScreen({ bookings, errorKind }: MyBookingsScreenProps)
 
   const source = bookings;
 
-  // startTime/endTime son timestamptz, así que Date.now() es la referencia
-  // correcta: comparar epochs no depende de la zona horaria. (Antes se derivaba
-  // "ahora" con toLocaleString('America/Mexico_City') y se reparseaba como hora
-  // local, lo que desplazaba la referencia varias horas y hacía que reservas ya
-  // terminadas siguieran apareciendo como próximas.)
-  const now = Date.now();
-  const isFuture = (booking: Booking) => new Date(booking.endTime).getTime() > now;
+  // El módulo guarda start_time/end_time como hora de pared local en
+  // componentes UTC (buildIsoDateTime arma `${date}T${time}:00Z`, y la API
+  // valida el horario de la sala contra getUTCHours()). Por eso la referencia
+  // no puede ser Date.now(): ese es el epoch real y en México va 6 h por
+  // delante de lo guardado, lo que mandaba a "Pasadas" las reservas de hoy que
+  // aún no habían terminado. wallClockNowMs() pone el "ahora" en esa misma
+  // convención. La zona se toma de la ciudad de la reserva, no fija, para que
+  // las oficinas fuera de México comparen contra su propia hora.
+  const isFuture = (booking: Booking) => {
+    const timeZone = booking.room?.office?.city?.timezone ?? DEFAULT_ROOM_TIMEZONE;
+    return new Date(booking.endTime).getTime() > wallClockNowMs(timeZone);
+  };
   const byStartAsc = (a: Booking, b: Booking) =>
     new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
   const byStartDesc = (a: Booking, b: Booking) => -byStartAsc(a, b);

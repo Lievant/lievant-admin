@@ -22,6 +22,13 @@ export class RoomsController {
     return this.roomsService.findAllByOffice(officeId, user);
   }
 
+  // Debe declararse antes de @Get(':id'): Nest resuelve por orden y esa ruta
+  // capturaría 'by-office' como id, fallando en el ParseUUIDPipe.
+  @Get('by-office')
+  findActiveByOffice(@Query('office_id', ParseUUIDPipe) officeId: string) {
+    return this.roomsService.findActiveByOffice(officeId);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.roomsService.findOne(id);

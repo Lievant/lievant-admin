@@ -302,7 +302,11 @@ export class BookingsService {
     }
 
     if (upcoming) {
-      qb.andWhere('booking.startTime >= :now', { now: new Date() });
+      // No se puede usar new Date() ni NOW(): start_time guarda la hora de
+      // pared local en componentes UTC (ver assertWithinOfficeHours), así que
+      // el epoch real va adelantado por el offset de la oficina y descartaría
+      // reservas de hoy que todavía no empiezan.
+      qb.andWhere('booking.startTime >= :now', { now: this.wallClockNow() });
     }
 
     return qb.getMany();
@@ -377,6 +381,38 @@ export class BookingsService {
     const admins = await this.officeAdminsRepository.find({ where: { userId: user.id } });
     return admins.some(
       (admin) => admin.scope === AdminScope.GLOBAL || (admin.scope === AdminScope.OFFICE && admin.officeId === officeId),
+    );
+  }
+
+  /**
+   * "Ahora" en la convención de almacenamiento del módulo: la hora de pared de
+   * la zona indicada, expresada en componentes UTC. Sirve para comparar contra
+   * start_time/end_time sin el desfase del offset.
+   */
+  private wallClockNow(timeZone = 'America/Mexico_City'): Date {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date());
+
+    const value = (type: Intl.DateTimeFormatPartTypes): number =>
+      Number(parts.find((part) => part.type === type)?.value ?? 0);
+
+    return new Date(
+      Date.UTC(
+        value('year'),
+        value('month') - 1,
+        value('day'),
+        value('hour'),
+        value('minute'),
+        value('second'),
+      ),
     );
   }
 
