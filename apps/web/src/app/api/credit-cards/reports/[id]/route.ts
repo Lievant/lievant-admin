@@ -1,0 +1,37 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+
+function auth(request: NextRequest): Record<string, string> {
+  const token = request.cookies.get('access_token')?.value;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function relay(res: Response): Promise<NextResponse> {
+  const body = await res.text();
+  return new NextResponse(body, {
+    status: res.status,
+    headers: { 'Content-Type': res.headers.get('content-type') ?? 'application/json' },
+  });
+}
+
+type Ctx = { params: Promise<{ id: string }> };
+
+export async function GET(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
+  const { id } = await params;
+  return relay(await fetch(`${API_URL}/credit-cards/reports/${id}`, { headers: auth(request) }));
+}
+
+export async function PATCH(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
+  const { id } = await params;
+  return relay(await fetch(`${API_URL}/credit-cards/reports/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...auth(request) },
+    body: await request.text(),
+  }));
+}
+
+export async function DELETE(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
+  const { id } = await params;
+  return relay(await fetch(`${API_URL}/credit-cards/reports/${id}`, { method: 'DELETE', headers: auth(request) }));
+}
