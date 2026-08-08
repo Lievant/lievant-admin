@@ -32,6 +32,7 @@ import {
   UsersGroupIcon,
   WalletIcon,
 } from '@/components/icons';
+import { useNotifications } from '@/hooks/use-notifications';
 import type { CurrentUser } from '@/lib/api';
 
 interface SidebarProps {
@@ -76,11 +77,13 @@ export function Sidebar({ user }: SidebarProps) {
 
   // Herramientas: cada link se controla por su módulo y la sección entera se
   // oculta si el usuario no conserva ninguno.
+  const showNotificaciones = hasModule(user, 'herramientas', 'notificaciones', 'read');
   const showSalas = hasModule(user, 'herramientas', 'salas');
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
   const showIsobot = hasModule(user, 'herramientas', 'isobot');
   const showVacaciones = hasModule(user, 'herramientas', 'vacaciones', 'read');
-  const showHerramientas = showSalas || showSoporte || showIsobot || showVacaciones;
+  const showHerramientas =
+    showNotificaciones || showSalas || showSoporte || showIsobot || showVacaciones;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -245,6 +248,16 @@ export function Sidebar({ user }: SidebarProps) {
         {showHerramientas && (
           <>
             <SectionLabel>Herramientas</SectionLabel>
+            {showNotificaciones && (
+              <NavLink
+                href="/herramientas/mis-notificaciones"
+                active={pathname.startsWith('/herramientas/mis-notificaciones')}
+              >
+                <BellIcon className="h-5 w-5" />
+                Mis Notificaciones
+                <UnreadBadge />
+              </NavLink>
+            )}
             {showSalas && (
               <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
                 <DoorIcon className="h-5 w-5" />
@@ -388,6 +401,21 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 function SubMenu({ children }: { children: React.ReactNode }) {
   return <div className="mt-1 space-y-1 border-l border-white/10 pl-3">{children}</div>;
+}
+
+/**
+ * Contador de no leídas del sidebar. Vive en su propio componente para que el
+ * WebSocket solo re-renderice el badge y no todo el árbol de navegación.
+ */
+function UnreadBadge() {
+  const { unreadCount } = useNotifications();
+  if (unreadCount <= 0) return null;
+
+  return (
+    <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 text-[11px] font-bold leading-none text-white">
+      {unreadCount > 99 ? '99+' : unreadCount}
+    </span>
+  );
 }
 
 function NavLink({

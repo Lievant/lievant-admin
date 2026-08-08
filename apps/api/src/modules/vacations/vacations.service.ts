@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -11,6 +13,7 @@ import { DataSource, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateVacationRequestDto } from './dto/create-vacation-request.dto';
 import { Holiday } from './entities/holiday.entity';
 import { VacationBalance } from './entities/vacation-balance.entity';
@@ -23,6 +26,24 @@ const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 interface HolidaySets {
   recurring: Set<string>; // 'MM-DD'
   fixed: Set<string>; // 'YYYY-MM-DD'
+}
+
+const LONG_MONTHS = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+/**
+ * 'YYYY-MM-DD' → '5 de marzo de 2026'. Se formatea a mano porque toLocaleDateString
+ * interpretaría la fecha en la zona del servidor y podría correrla un día.
+ */
+function formatLongDate(date: string): string {
+  const parts = date.slice(0, 10).split('-');
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  const month = LONG_MONTHS[m - 1] ?? '';
+  return `${d} de ${month} de ${y}`;
 }
 
 function ymd(date: string): { y: number; m: number; d: number } {
@@ -56,6 +77,10 @@ export class VacationsService {
     @InjectRepository(Holiday) private readonly holidaysRepo: Repository<Holiday>,
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     private readonly dataSource: DataSource,
+    // Ciclo real: al crear una solicitud se notifica al jefe y responder esa
+    // notificación aprueba/rechaza la solicitud.
+    @Inject(forwardRef(() => NotificationsService))
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   // ==========================================================================
@@ -383,13 +408,13 @@ export class VacationsService {
       throw new BadRequestException('No puedes asignarte a ti mismo como sustituto.');
     }
 
-    return this.dataSource.transaction(async (mgr) => {
+    const request = await this.dataSource.transaction(async (mgr) => {
       const seqRows = (await mgr.query(`SELECT nextval('hr.vacation_request_seq') AS seq`)) as { seq: string }[];
       const seq = seqRows[0]?.seq ?? '0';
       const year = new Date().getUTCFullYear();
       const displayId = `VAC-${year}-${String(seq).padStart(3, '0')}`;
 
-      const request = await mgr.getRepository(VacationRequest).save(
+      const created = await mgr.getRepository(VacationRequest).save(
         mgr.getRepository(VacationRequest).create({
           displayId,
           employeeId: employee.id,
@@ -407,8 +432,61 @@ export class VacationsService {
       balance.usedDays = String(Number(balance.usedDays) + workingDays);
       await mgr.getRepository(VacationBalance).save(balance);
 
-      return request;
+      return created;
     });
+
+    // Fuera de la transacción: notificar dentro dejaría una notificación viva
+    // apuntando a una solicitud inexistente si el commit fallara.
+    await this.notifyManagerOfNewRequest(employee, request, userId, workingDays);
+
+    return request;
+  }
+
+  /**
+   * Avisa al jefe inmediato de que tiene una solicitud por resolver.
+   *
+   * Un fallo aquí no revierte la solicitud —ya está guardada y el colaborador
+   * la ve en su lista—, así que se registra y se sigue: dejar caer la petición
+   * HTTP por un problema de notificación sería peor que quedarse sin aviso.
+   */
+  private async notifyManagerOfNewRequest(
+    employee: EmployeeRecord,
+    request: VacationRequest,
+    userId: string,
+    workingDays: number,
+  ): Promise<void> {
+    try {
+      if (!employee.directReportToId) return;
+
+      const manager = await this.employeesRepo.findOne({
+        where: { id: employee.directReportToId },
+      });
+      if (!manager?.authUserId) return;
+
+      // Un jefe que se autoaprobaría no necesita el aviso.
+      if (manager.authUserId === userId) return;
+
+      await this.notificationsService.create({
+        recipientId: manager.authUserId,
+        senderId: userId,
+        senderName: employee.fullName,
+        title: `Solicitud de vacaciones — ${employee.fullName}`,
+        message:
+          `${employee.fullName} solicita vacaciones del ${formatLongDate(request.startDate)} ` +
+          `al ${formatLongDate(request.endDate)} (${workingDays} días hábiles).`,
+        type: 'accion_con_nota',
+        module: 'vacaciones',
+        entityId: request.id,
+        entityType: 'vacation_request',
+        actionUrl: `/rrhh/empleados/${employee.id}?tab=vacaciones`,
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar al jefe de la solicitud ${request.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async resolveApproverEmployeeId(user: User): Promise<string | null> {
