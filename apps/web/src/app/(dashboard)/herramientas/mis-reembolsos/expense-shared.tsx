@@ -51,10 +51,13 @@ export function DocumentHeader({
   code = 'FIN-RE-07',
   version = '00',
   classification = 'C2',
+  title = 'Reporte de Gastos por Reembolso',
 }: {
   code?: string;
   version?: string;
   classification?: string;
+  /** Reembolsos y gastos de tarjeta son documentos distintos del mismo SGSI. */
+  title?: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-300 bg-white">
@@ -64,7 +67,7 @@ export function DocumentHeader({
         </p>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <h2 className="text-base font-bold text-navy">Reporte de Gastos por Reembolso</h2>
+        <h2 className="text-base font-bold text-navy">{title}</h2>
         <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
           <div className="flex gap-1">
             <dt className="font-semibold uppercase">Código:</dt>

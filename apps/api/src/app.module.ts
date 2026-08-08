@@ -6,6 +6,7 @@ import { HealthController } from './health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
+import { CreditCardsModule } from './modules/credit-cards/credit-cards.module';
 import { EmployeesModule } from './modules/employees/employees.module';
 import { ExpensesModule } from './modules/expenses/expenses.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
@@ -55,6 +56,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     MediaModule,
     NotificationsModule,
     ExpensesModule,
+    CreditCardsModule,
   ],
 })
 export class AppModule {}

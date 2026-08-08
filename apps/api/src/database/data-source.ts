@@ -37,6 +37,9 @@ import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.en
 import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
 import { EquipmentStatus } from '../modules/inventory/entities/equipment-status.entity';
 import { EquipmentType } from '../modules/inventory/entities/equipment-type.entity';
+import { CardExpenseLine } from '../modules/credit-cards/entities/card-expense-line.entity';
+import { CardExpenseReport } from '../modules/credit-cards/entities/card-expense-report.entity';
+import { CreditCard } from '../modules/credit-cards/entities/credit-card.entity';
 import { CatalogExpenseConcept } from '../modules/expenses/entities/catalog-expense-concept.entity';
 import { CatalogExpenseType } from '../modules/expenses/entities/catalog-expense-type.entity';
 import { ExpenseLine } from '../modules/expenses/entities/expense-line.entity';
@@ -150,6 +153,9 @@ const AppDataSource = new DataSource({
     ExpenseLine,
     CatalogExpenseConcept,
     CatalogExpenseType,
+    CreditCard,
+    CardExpenseReport,
+    CardExpenseLine,
   ],
   migrations: [__dirname + '/migrations/*{.js,.ts}'],
   migrationsTableName: 'migrations',
