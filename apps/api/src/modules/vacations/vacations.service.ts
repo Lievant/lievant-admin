@@ -13,6 +13,7 @@ import { DataSource, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
+import { userHasPermission } from '../auth/permissions.util';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateVacationRequestDto } from './dto/create-vacation-request.dto';
@@ -20,7 +21,7 @@ import { Holiday } from './entities/holiday.entity';
 import { VacationBalance } from './entities/vacation-balance.entity';
 import { VacationMovement } from './entities/vacation-movement.entity';
 import { VacationPolicy } from './entities/vacation-policy.entity';
-import { VacationRequest } from './entities/vacation-request.entity';
+import { VacationRequest, type VacationRequestStatus } from './entities/vacation-request.entity';
 
 const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
 
@@ -1133,20 +1134,52 @@ export class VacationsService {
   }
 
   /**
-   * Elimina una solicitud. Devuelve los días al saldo salvo que ya estuvieran
-   * devueltos (rechazada o cancelada), porque en esos estados rejectRequest ya
-   * los reintegró y hacerlo otra vez infla el balance.
+   * Elimina una solicitud, propia o ajena según el permiso de quien llama.
+   *
+   * Autoriza aquí y no con @RequirePermission porque la regla es un OR y el
+   * guard solo evalúa un permiso: el dueño la borra con
+   * herramientas.vacaciones.read y RRHH con rrhh.vacaciones.manage, y hay
+   * usuarios de RRHH que no tienen el primero (ver nota en el controller).
+   *
+   * Devuelve los días al saldo salvo que ya estuvieran devueltos (rechazada o
+   * cancelada), porque en esos estados rejectRequest ya los reintegró y hacerlo
+   * otra vez infla el balance.
    */
-  async adminDeleteRequest(requestId: string, user: User): Promise<{ deleted: true; daysReturned: number }> {
+  async deleteRequest(
+    requestId: string,
+    user: User,
+  ): Promise<{ deleted: true; daysReturned: number }> {
     const request = await this.requestsRepo.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada.');
 
+    const employee = await this.employeesRepo.findOne({ where: { id: request.employeeId } });
+    const canManage = userHasPermission(user, 'rrhh', 'vacaciones', 'manage');
+    const isOwner = !!employee?.authUserId && employee.authUserId === user.id;
+    const canUseModule = userHasPermission(user, 'herramientas', 'vacaciones', 'read');
+
+    if (!canManage && !(isOwner && canUseModule)) {
+      throw new ForbiddenException('No puedes eliminar esta solicitud.');
+    }
+
+    // Las aprobadas ya están en el calendario del equipo: deshacerlas es una
+    // decisión de RRHH, no del colaborador.
+    if (request.status === 'approved' && !canManage) {
+      throw new ForbiddenException(
+        'Las vacaciones aprobadas solo pueden ser canceladas por RRHH',
+      );
+    }
+
+    const previousStatus = request.status;
     const days = Number(request.workingDaysTaken);
-    const retienesSaldo = request.status === 'pending' || request.status === 'approved';
+    const retieneSaldo = previousStatus === 'pending' || previousStatus === 'approved';
+    // Una aprobada solo llega aquí si quien llama tiene manage.
+    const esCancelacionAdministrativa = previousStatus === 'approved';
 
     await this.dataSource.transaction(async (mgr) => {
-      if (retienesSaldo) {
-        const balance = await mgr.getRepository(VacationBalance).findOne({ where: { id: request.balanceId } });
+      if (retieneSaldo) {
+        const balance = await mgr
+          .getRepository(VacationBalance)
+          .findOne({ where: { id: request.balanceId } });
         if (balance) {
           balance.usedDays = String(Math.max(0, Number(balance.usedDays) - days));
           await mgr.getRepository(VacationBalance).save(balance);
@@ -1156,10 +1189,14 @@ export class VacationsService {
           mgr.getRepository(VacationMovement).create({
             employeeId: request.employeeId,
             balanceId: request.balanceId,
-            requestId: null, // la solicitud desaparece; no dejar FK apuntando a nada
-            movementType: 'REQUEST_CANCELLED',
+            requestId: null, // la solicitud se va; no dejar FK apuntando a una fila oculta
+            movementType: esCancelacionAdministrativa ? 'ADMIN_CANCELLED' : 'REQUEST_CANCELLED',
             daysDelta: String(days),
-            description: `Solicitud ${request.displayId} eliminada por RRHH: se devolvieron ${days} días al saldo.`,
+            description: esCancelacionAdministrativa
+              ? `Cancelación administrativa por RRHH de ${request.displayId}: se devolvieron ${days} días al saldo.`
+              : isOwner
+                ? `Solicitud ${request.displayId} eliminada por el colaborador: se devolvieron ${days} días al saldo.`
+                : `Solicitud ${request.displayId} eliminada por RRHH: se devolvieron ${days} días al saldo.`,
             createdBy: user.id,
           }),
         );
@@ -1168,7 +1205,72 @@ export class VacationsService {
       await mgr.getRepository(VacationRequest).softDelete({ id: request.id });
     });
 
-    return { deleted: true, daysReturned: retienesSaldo ? days : 0 };
+    // Fuera de la transacción: las notificaciones no deben poder tumbar el
+    // borrado que ya se confirmó.
+    await this.notificationsService.softDeleteByEntity('vacation_request', request.id);
+    await this.notifyRequestDeleted(request, employee, previousStatus, isOwner, days);
+
+    return { deleted: true, daysReturned: retieneSaldo ? days : 0 };
+  }
+
+  /**
+   * Avisa a quien queda afectado por el borrado: al jefe si tenía una solicitud
+   * pendiente por resolver, y al colaborador si RRHH le tumbó unas vacaciones
+   * ya aprobadas.
+   */
+  private async notifyRequestDeleted(
+    request: VacationRequest,
+    employee: EmployeeRecord | null,
+    previousStatus: VacationRequestStatus,
+    canceladaPorElDueno: boolean,
+    days: number,
+  ): Promise<void> {
+    if (!employee) return;
+
+    const rango = `del ${formatLongDate(request.startDate)} al ${formatLongDate(request.endDate)}`;
+
+    try {
+      if (previousStatus === 'pending' && employee.directReportToId) {
+        const manager = await this.employeesRepo.findOne({
+          where: { id: employee.directReportToId },
+        });
+        // Si el jefe es el propio colaborador (se reporta a sí mismo) el aviso
+        // sobra: acaba de hacerlo él.
+        if (manager?.authUserId && manager.authUserId !== employee.authUserId) {
+          await this.notificationsService.create({
+            recipientId: manager.authUserId,
+            senderName: 'Sistema',
+            title: 'Solicitud de vacaciones cancelada',
+            message: canceladaPorElDueno
+              ? `${employee.fullName} ha cancelado su solicitud de vacaciones ${rango}.`
+              : `Se canceló la solicitud de vacaciones de ${employee.fullName} ${rango}.`,
+            type: 'informativa',
+            module: 'vacaciones',
+            actionUrl: '/herramientas/vacaciones',
+          });
+        }
+      }
+
+      if (previousStatus === 'approved' && employee.authUserId) {
+        await this.notificationsService.create({
+          recipientId: employee.authUserId,
+          senderName: 'Sistema',
+          title: 'Tus vacaciones han sido canceladas',
+          message:
+            `Tu período de vacaciones ${rango} ha sido cancelado por RRHH. ` +
+            `Los ${days} días han sido devueltos a tu balance.`,
+          type: 'informativa',
+          module: 'vacaciones',
+          actionUrl: '/herramientas/vacaciones',
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar la cancelación de ${request.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /** Crea una solicitud en nombre de un colaborador, con aprobación opcional. */

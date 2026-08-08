@@ -4,7 +4,12 @@ export type VacationMovementType =
   | 'PERIOD_START'
   | 'PERIOD_EXPIRY'
   | 'REQUEST_APPROVED'
+  // Devolución por rechazo o por baja de una solicitud pendiente.
   | 'REQUEST_CANCELLED'
+  // RRHH tumba unas vacaciones YA aprobadas: se separa de REQUEST_CANCELLED
+  // porque en el historial del empleado no es lo mismo que él se arrepienta a
+  // que se las cancelen después de autorizadas.
+  | 'ADMIN_CANCELLED'
   | 'MANUAL_ADJUSTMENT';
 
 @Entity({ name: 'vacation_movements', schema: 'hr' })

@@ -97,6 +97,33 @@ export class NotificationsService {
     this.gateway.sendUnreadCount(userId, await this.getUnreadCount(userId));
   }
 
+  /**
+   * Oculta las notificaciones de un registro que deja de existir (p. ej. una
+   * solicitud de vacaciones eliminada): quedarían apuntando a algo que ya no se
+   * puede abrir, y las de acción seguirían ofreciendo Aceptar/Rechazar.
+   *
+   * Refresca el badge de cada destinatario afectado; si no, el contador queda
+   * inflado hasta que recarguen.
+   */
+  async softDeleteByEntity(entityType: string, entityId: string): Promise<number> {
+    const afectadas = await this.repo.find({
+      where: { entityType, entityId },
+      select: { id: true, recipientId: true, status: true },
+    });
+    if (afectadas.length === 0) return 0;
+
+    await this.repo.softDelete({ entityType, entityId });
+
+    const conNoLeidas = new Set(
+      afectadas.filter((n) => n.status === 'no_leida').map((n) => n.recipientId),
+    );
+    for (const recipientId of conNoLeidas) {
+      this.gateway.sendUnreadCount(recipientId, await this.getUnreadCount(recipientId));
+    }
+
+    return afectadas.length;
+  }
+
   async markAllAsRead(userId: string): Promise<void> {
     await this.repo.update(
       { recipientId: userId, status: 'no_leida' },

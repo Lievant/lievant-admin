@@ -138,10 +138,15 @@ export class VacationsController {
     return this.service.adminApproveRequest(id, user);
   }
 
+  // Sin @RequirePermission a propósito: la regla es un OR (el dueño la borra
+  // con herramientas.vacaciones.read, RRHH con rrhh.vacaciones.manage) y el
+  // guard solo evalúa un permiso. Exigir herramientas.vacaciones.read aquí
+  // dejaría fuera a los usuarios de RRHH que no lo tienen —el mismo caso que
+  // documenta 'admin/calculate-days' arriba—, así que la autorización completa
+  // vive en deleteRequest().
   @Delete('requests/:id')
-  @RequirePermission('rrhh', 'vacaciones', 'manage')
-  adminDeleteRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    return this.service.adminDeleteRequest(id, user);
+  deleteRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.deleteRequest(id, user);
   }
 
   // ── Cron manual ────────────────────────────────────────────────────────────

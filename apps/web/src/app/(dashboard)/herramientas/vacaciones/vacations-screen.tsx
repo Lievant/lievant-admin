@@ -1,9 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState, useTransition } from 'react';
 import type { ErrorKind, MyVacationBalance, VacationRequestItem, VacationRequestStatus } from '@/lib/api';
-import { PlaneIcon, PlusIcon } from '@/components/icons';
+import { PlaneIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
+import { usePermission } from '@/hooks/use-permission';
+import { deleteVacationRequestAction } from './actions';
 
 interface Props {
   balance: MyVacationBalance | null;
@@ -46,7 +50,108 @@ function StatusBadge({ status }: { status: VacationRequestStatus }) {
   );
 }
 
+/**
+ * Confirmación a pantalla completa. Se usa modal y no la barra inline del tab
+ * de RRHH porque aquí el aviso tiene que explicar tres consecuencias (días,
+ * notificaciones e irreversibilidad) y no cabe dentro de la fila.
+ */
+function CancelDialog({
+  request,
+  pending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  request: VacationRequestItem;
+  pending: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cancelar-solicitud-titulo"
+    >
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+        <h3 id="cancelar-solicitud-titulo" className="text-base font-semibold text-navy">
+          ¿Cancelar esta solicitud de vacaciones?
+        </h3>
+        <p className="mt-3 text-sm text-slate-600">
+          Del <span className="font-medium text-navy">{formatDate(request.startDate)}</span> al{' '}
+          <span className="font-medium text-navy">{formatDate(request.endDate)}</span> (
+          {request.workingDaysTaken} días).
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Los días serán devueltos a tu balance disponible. Las notificaciones relacionadas también
+          serán eliminadas.
+        </p>
+
+        {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={pending}
+            className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            No, mantener
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={pending}
+            className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+          >
+            {pending ? 'Cancelando…' : 'Sí, cancelar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function VacationsScreen({ balance, requests, errorKind }: Props) {
+  // Los hooks van antes de los returns tempranos de abajo (reglas de hooks).
+  const router = useRouter();
+  const canManage = usePermission('rrhh', 'vacaciones', 'manage');
+  const [confirming, setConfirming] = useState<VacationRequestItem | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  // El aviso de éxito se va solo: no hay sistema de toasts en el proyecto y
+  // dejarlo fijo ensucia la pantalla tras varias cancelaciones.
+  useEffect(() => {
+    if (!feedback) return;
+    const t = setTimeout(() => setFeedback(null), 6000);
+    return () => clearTimeout(t);
+  }, [feedback]);
+
+  function runDelete(request: VacationRequestItem) {
+    setActionError(null);
+    startTransition(async () => {
+      const res = await deleteVacationRequestAction(request.id);
+      if (res.success) {
+        setConfirming(null);
+        setFeedback('Solicitud cancelada. Días devueltos a tu balance.');
+        router.refresh();
+      } else {
+        setActionError(res.error ?? 'No se pudo cancelar la solicitud.');
+      }
+    });
+  }
+
+  /** Aprobadas: solo RRHH. Rechazadas y canceladas ya no se tocan desde aquí. */
+  function puedeCancelar(request: VacationRequestItem): boolean {
+    if (request.status === 'pending') return true;
+    if (request.status === 'approved') return canManage;
+    return false;
+  }
+
   if (errorKind === 'forbidden') {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 p-10 text-center shadow-sm">
@@ -120,6 +225,15 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
         </Link>
       </header>
 
+      {feedback && (
+        <div
+          role="status"
+          className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+        >
+          {feedback}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Días disponibles" value={String(b.availableDays)} hint={`de ${b.entitledDays} del período`} />
         <StatCard label="Días usados" value={String(b.usedDays)} hint="este período" />
@@ -148,6 +262,7 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
                   <th className="px-4 py-3 text-left">Días hábiles</th>
                   <th className="px-4 py-3 text-left">Sustituto</th>
                   <th className="px-4 py-3 text-left">Estado</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -165,6 +280,23 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
                         <p className="mt-1 text-xs text-rose-500">{r.rejectionReason}</p>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      {puedeCancelar(r) ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActionError(null);
+                            setConfirming(r);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                          Cancelar solicitud
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">—</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -173,6 +305,19 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
           </div>
         )}
       </section>
+
+      {confirming && (
+        <CancelDialog
+          request={confirming}
+          pending={isPending}
+          error={actionError}
+          onConfirm={() => runDelete(confirming)}
+          onCancel={() => {
+            setConfirming(null);
+            setActionError(null);
+          }}
+        />
+      )}
     </div>
   );
 }
