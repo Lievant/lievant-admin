@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Holiday } from './entities/holiday.entity';
 import { VacationBalance } from './entities/vacation-balance.entity';
 import { VacationMovement } from './entities/vacation-movement.entity';
@@ -21,6 +22,7 @@ import { VacationsService } from './vacations.service';
       Holiday,
       User,
     ]),
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [VacationsController],
   providers: [VacationsService],
