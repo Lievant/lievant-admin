@@ -7,6 +7,7 @@ import { AnnouncementsCard } from './announcements-card';
 import { BirthdaysCard } from './birthdays-card';
 import { BookingsCard } from './bookings-card';
 import { CalendarWidget } from './calendar-widget';
+import { NotificationsCard } from './notifications-card';
 import { PendingApprovalsCard } from './pending-approvals-card';
 import { QuoteWidget } from './quote-widget';
 
@@ -140,24 +141,30 @@ export function DashboardScreen({ user, dashboardData, announcements }: Props) {
       {/* ── Header: 3 tercios ─────────────────────────────────────────────── */}
       <header className="grid grid-cols-3 gap-6 rounded-xl border border-slate-200 bg-white px-6 py-5">
 
-        {/* Tercio izquierdo — foto + identidad */}
-        <div className="flex items-center gap-4">
-          <PhotoPlaceholder name={user?.name ?? 'Invitado'} email={user?.email ?? null} />
-          <div className="min-w-0">
-            <p className="text-xs text-slate-400 capitalize">{formatDate()}</p>
-            <p className="text-xl font-medium text-navy leading-snug mt-0.5">
-              {greeting()},<br />
-              <span className="font-semibold">{user?.name ?? 'Invitado'}</span>
-            </p>
-            <p className="text-xs text-slate-500 mt-1 truncate">
-              {user?.email ?? ''}
-            </p>
+        {/* Tercio izquierdo — foto + identidad, con la frase del día debajo */}
+        <div className="flex flex-col">
+          <div className="flex items-center gap-4">
+            <PhotoPlaceholder name={user?.name ?? 'Invitado'} email={user?.email ?? null} />
+            <div className="min-w-0">
+              <p className="text-xs text-slate-400 capitalize">{formatDate()}</p>
+              <p className="text-xl font-medium text-navy leading-snug mt-0.5">
+                {greeting()},<br />
+                <span className="font-semibold">{user?.name ?? 'Invitado'}</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-1 truncate">
+                {user?.email ?? ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 border-t border-slate-100 pt-3">
+            <QuoteWidget />
           </div>
         </div>
 
-        {/* Tercio central — frase del día */}
-        <div className="flex items-center justify-center border-x border-slate-100 px-4">
-          <QuoteWidget />
+        {/* Tercio central — últimas notificaciones */}
+        <div className="border-x border-slate-100 px-4">
+          <NotificationsCard />
         </div>
 
         {/* Tercio derecho — accesos directos por sección */}

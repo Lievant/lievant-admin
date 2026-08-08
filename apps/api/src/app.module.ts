@@ -12,6 +12,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { LicensesModule } from './modules/licenses/licenses.module';
 import { MediaModule } from './modules/media/media.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { VacationsModule } from './modules/vacations/vacations.module';
@@ -51,6 +52,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     IsobotModule,
     VacationsModule,
     MediaModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}
