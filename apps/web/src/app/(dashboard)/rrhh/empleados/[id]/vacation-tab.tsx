@@ -34,6 +34,7 @@ const MOVEMENT_META: Record<VacationMovementItem['movementType'], { label: strin
   PERIOD_EXPIRY: { label: 'Expiración', color: 'bg-rose-500' },
   REQUEST_APPROVED: { label: 'Solicitud aprobada', color: 'bg-sky-500' },
   REQUEST_CANCELLED: { label: 'Devolución / rechazo', color: 'bg-amber-500' },
+  ADMIN_CANCELLED: { label: 'Cancelación por RRHH', color: 'bg-orange-500' },
   MANUAL_ADJUSTMENT: { label: 'Ajuste manual', color: 'bg-slate-500' },
 };
 
