@@ -5,7 +5,7 @@ import {
   ApiError,
   adminApproveVacationRequest,
   adminCreateVacationRequest,
-  adminDeleteVacationRequest,
+  deleteVacationRequest,
   addEmployeeContact,
   generateEmployeeDocument,
   removeEmployeeContact,
@@ -186,7 +186,7 @@ export async function adminDeleteVacationRequestAction(
   requestId: string,
 ): Promise<DeleteVacationRequestActionResult> {
   try {
-    const res = await adminDeleteVacationRequest(requestId);
+    const res = await deleteVacationRequest(requestId);
     revalidatePath(`/rrhh/empleados/${employeeId}`);
     return { success: true, daysReturned: res.daysReturned };
   } catch (err) {

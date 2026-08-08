@@ -2912,6 +2912,7 @@ export interface VacationMovementItem {
     | 'PERIOD_EXPIRY'
     | 'REQUEST_APPROVED'
     | 'REQUEST_CANCELLED'
+    | 'ADMIN_CANCELLED'
     | 'MANUAL_ADJUSTMENT';
   daysDelta: number;
   description: string | null;
@@ -3034,7 +3035,11 @@ export function adminApproveVacationRequest(requestId: string): Promise<Vacation
   });
 }
 
-export function adminDeleteVacationRequest(
+/**
+ * La usa tanto RRHH como el propio colaborador: el backend decide qué puede
+ * borrar cada uno según el estado de la solicitud.
+ */
+export function deleteVacationRequest(
   requestId: string,
 ): Promise<{ deleted: true; daysReturned: number }> {
   return apiFetch<{ deleted: true; daysReturned: number }>(`/vacations/requests/${requestId}`, {
