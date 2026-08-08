@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { EmployeesModule } from './modules/employees/employees.module';
+import { ExpensesModule } from './modules/expenses/expenses.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
@@ -53,6 +54,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     VacationsModule,
     MediaModule,
     NotificationsModule,
+    ExpensesModule,
   ],
 })
 export class AppModule {}

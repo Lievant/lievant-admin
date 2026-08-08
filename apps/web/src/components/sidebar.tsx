@@ -78,12 +78,14 @@ export function Sidebar({ user }: SidebarProps) {
   // Herramientas: cada link se controla por su módulo y la sección entera se
   // oculta si el usuario no conserva ninguno.
   const showNotificaciones = hasModule(user, 'herramientas', 'notificaciones', 'read');
+  const showReembolsos = hasModule(user, 'herramientas', 'reembolsos', 'read');
+  const showReembolsosFinanzas = hasModule(user, 'finanzas', 'reembolsos', 'read');
   const showSalas = hasModule(user, 'herramientas', 'salas');
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
   const showIsobot = hasModule(user, 'herramientas', 'isobot');
   const showVacaciones = hasModule(user, 'herramientas', 'vacaciones', 'read');
   const showHerramientas =
-    showNotificaciones || showSalas || showSoporte || showIsobot || showVacaciones;
+    showNotificaciones || showReembolsos || showSalas || showSoporte || showIsobot || showVacaciones;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -130,6 +132,15 @@ export function Sidebar({ user }: SidebarProps) {
                   <TableIcon className="h-4 w-4" />
                   Reportes
                 </NavSubLink>
+                {showReembolsosFinanzas && (
+                  <NavSubLink
+                    href="/finanzas/reembolsos"
+                    active={pathname.startsWith('/finanzas/reembolsos')}
+                  >
+                    <WalletIcon className="h-4 w-4" />
+                    Reembolsos
+                  </NavSubLink>
+                )}
               </SubMenu>
             )}
           </>
@@ -257,6 +268,15 @@ export function Sidebar({ user }: SidebarProps) {
                 <BellIcon className="h-5 w-5" />
                 Mis Notificaciones
                 <UnreadBadge />
+              </NavLink>
+            )}
+            {showReembolsos && (
+              <NavLink
+                href="/herramientas/mis-reembolsos"
+                active={pathname.startsWith('/herramientas/mis-reembolsos')}
+              >
+                <WalletIcon className="h-5 w-5" />
+                Mis Reembolsos
               </NavLink>
             )}
             {showSalas && (

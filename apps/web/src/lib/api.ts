@@ -3434,3 +3434,189 @@ export function getMediaSyncLogs(
   const qs = query.toString();
   return apiFetchWithRetry<MediaSyncLog[]>(`/media/sync-logs${qs ? `?${qs}` : ''}`);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Reportes de gastos por reembolso (FIN-RE-07)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type ExpenseReportStatus =
+  | 'draft'
+  | 'submitted'
+  | 'authorized'
+  | 'rejected'
+  | 'processed';
+
+export interface ExpenseCatalogItem {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface ExpenseCatalogs {
+  concepts: ExpenseCatalogItem[];
+  types: ExpenseCatalogItem[];
+  departments: string[];
+}
+
+export interface ExpenseLineItem {
+  id: string;
+  lineDate: string;
+  vendor: string;
+  conceptId: string | null;
+  conceptName: string | null;
+  expenseTypeId: string | null;
+  expenseTypeName: string | null;
+  subtotal: string;
+  tip: string;
+  extras: string;
+  total: string;
+  hasInvoice: boolean;
+  invoiceOriginalName: string | null;
+  notes: string | null;
+  sortOrder: number;
+}
+
+export interface ExpenseReportItem {
+  id: string;
+  documentCode: string;
+  documentVersion: string;
+  documentClassification: string;
+  reportNumber: string | null;
+  requesterId: string;
+  requester?: { id: string; name: string | null; email: string } | null;
+  requesterEmployee?: { id: string; fullName: string } | null;
+  authorizerId: string | null;
+  authorizerEmployee?: { id: string; fullName: string } | null;
+  department: string | null;
+  motive: string;
+  periodStart: string;
+  periodEnd: string;
+  totalSubtotal: string;
+  totalTip: string;
+  totalExtras: string;
+  totalAmount: string;
+  status: ExpenseReportStatus;
+  authorizedAt: string | null;
+  authorizationNote: string | null;
+  processedAt: string | null;
+  paymentDate: string | null;
+  paymentNote: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  lines?: ExpenseLineItem[];
+}
+
+export interface PaginatedExpenseReports {
+  items: ExpenseReportItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface ExpenseLinePayload {
+  lineDate: string;
+  vendor: string;
+  conceptId?: string;
+  expenseTypeId?: string;
+  subtotal?: number;
+  tip?: number;
+  extras?: number;
+  notes?: string;
+  sortOrder?: number;
+}
+
+export interface ExpenseReportPayload {
+  authorizerEmployeeId?: string;
+  department?: string;
+  motive: string;
+  periodStart: string;
+  periodEnd: string;
+  lines?: ExpenseLinePayload[];
+}
+
+export interface ExpenseReportFilters {
+  status?: string;
+  requester?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+function expenseQuery(filters: ExpenseReportFilters): string {
+  const qs = new URLSearchParams();
+  if (filters.status) qs.set('status', filters.status);
+  if (filters.requester) qs.set('requester', filters.requester);
+  if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) qs.set('dateTo', filters.dateTo);
+  if (filters.page) qs.set('page', String(filters.page));
+  if (filters.limit) qs.set('limit', String(filters.limit));
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+export function getExpenseCatalogs(): Promise<ExpenseCatalogs> {
+  return apiFetchWithRetry<ExpenseCatalogs>('/expenses/catalogs');
+}
+
+export function getMyExpenseReports(
+  filters: ExpenseReportFilters = {},
+): Promise<PaginatedExpenseReports> {
+  return apiFetchWithRetry<PaginatedExpenseReports>(`/expenses${expenseQuery(filters)}`);
+}
+
+export function getAllExpenseReports(
+  filters: ExpenseReportFilters = {},
+): Promise<PaginatedExpenseReports> {
+  return apiFetchWithRetry<PaginatedExpenseReports>(`/expenses/all${expenseQuery(filters)}`);
+}
+
+export function getExpenseReport(id: string): Promise<ExpenseReportItem> {
+  return apiFetchWithRetry<ExpenseReportItem>(`/expenses/${id}`);
+}
+
+export function createExpenseReport(payload: ExpenseReportPayload): Promise<ExpenseReportItem> {
+  return apiFetch<ExpenseReportItem>('/expenses', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateExpenseReport(
+  id: string,
+  payload: ExpenseReportPayload,
+): Promise<ExpenseReportItem> {
+  return apiFetch<ExpenseReportItem>(`/expenses/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteExpenseReport(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/expenses/${id}`, { method: 'DELETE' });
+}
+
+export function submitExpenseReport(id: string): Promise<ExpenseReportItem> {
+  return apiFetch<ExpenseReportItem>(`/expenses/${id}/submit`, { method: 'PATCH' });
+}
+
+export function authorizeExpenseReport(
+  id: string,
+  payload: { action: 'authorized' | 'rejected'; note?: string },
+): Promise<ExpenseReportItem> {
+  return apiFetch<ExpenseReportItem>(`/expenses/${id}/authorize`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function processExpenseReport(
+  id: string,
+  payload: { paymentDate: string; note?: string },
+): Promise<ExpenseReportItem> {
+  return apiFetch<ExpenseReportItem>(`/expenses/${id}/process`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
