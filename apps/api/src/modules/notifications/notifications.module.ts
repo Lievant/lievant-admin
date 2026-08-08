@@ -3,9 +3,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
+import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { VacationsModule } from '../vacations/vacations.module';
 import { EmailService } from './email.service';
+import { FlowRecipient } from './entities/flow-recipient.entity';
 import { Notification } from './entities/notification.entity';
+import { NotificationFlow } from './entities/notification-flow.entity';
+import { NotificationFlowsService } from './notification-flows.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsGateway } from './notifications.gateway';
 import { NotificationsService } from './notifications.service';
@@ -18,7 +22,13 @@ import { NotificationsService } from './notifications.service';
  */
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Notification, User]),
+    TypeOrmModule.forFeature([
+      Notification,
+      NotificationFlow,
+      FlowRecipient,
+      EmployeeRecord,
+      User,
+    ]),
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -30,7 +40,7 @@ import { NotificationsService } from './notifications.service';
     forwardRef(() => VacationsModule),
   ],
   controllers: [NotificationsController],
-  providers: [EmailService, NotificationsService, NotificationsGateway],
-  exports: [EmailService, NotificationsService],
+  providers: [EmailService, NotificationsService, NotificationFlowsService, NotificationsGateway],
+  exports: [EmailService, NotificationsService, NotificationFlowsService],
 })
 export class NotificationsModule {}

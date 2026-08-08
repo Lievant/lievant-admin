@@ -145,12 +145,15 @@ export class NotificationsService {
   }
 
   /**
-   * Aprueba o rechaza la solicitud de vacaciones vinculada y avisa al
-   * colaborador del resultado.
+   * Aprueba o rechaza la solicitud de vacaciones vinculada.
    *
    * Usa approveRequest/rejectRequest (flujo de jefe) y no las variantes admin:
    * esas se saltan la verificación de jefe directo, así que responder una
    * notificación reenviada permitiría aprobar vacaciones ajenas.
+   *
+   * No avisa al colaborador: de eso se encargan approveRequest/rejectRequest,
+   * que también corren cuando se aprueba desde la pantalla de vacaciones.
+   * Duplicarlo aquí le mandaría dos notificaciones por la misma decisión.
    */
   private async applyVacationResponse(
     notification: Notification,
@@ -169,29 +172,6 @@ export class NotificationsService {
         note ?? 'Rechazada desde notificaciones sin motivo especificado.',
       );
     }
-
-    // El remitente de la notificación es el colaborador que pidió las vacaciones.
-    // Sin senderId (alta por un flujo sin usuario) no hay a quién avisar.
-    const collaboratorId = notification.senderId;
-    if (!collaboratorId) return;
-
-    await this.create({
-      recipientId: collaboratorId,
-      senderName: 'Sistema',
-      title:
-        action === 'aceptada'
-          ? '¡Tus vacaciones fueron aprobadas!'
-          : 'Tu solicitud de vacaciones fue rechazada',
-      message:
-        action === 'aceptada'
-          ? 'Tu solicitud de vacaciones ha sido aprobada.'
-          : `Tu solicitud fue rechazada.${note ? ` Nota: ${note}` : ''}`,
-      type: 'informativa',
-      module: 'vacaciones',
-      entityId: requestId,
-      entityType: 'vacation_request',
-      actionUrl: '/herramientas/vacaciones',
-    });
   }
 
   // ==========================================================================
