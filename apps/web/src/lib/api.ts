@@ -3622,3 +3622,220 @@ export function processExpenseReport(
     body: JSON.stringify(payload),
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tarjetas de crédito y reportes de gastos de tarjeta (FIN-RE-06)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type CardReportStatus = 'draft' | 'submitted' | 'processed';
+
+export interface CreditCardItem {
+  id: string;
+  lastFour: string;
+  alias: string | null;
+  holderEmployeeId: string;
+  holderEmployee?: { id: string; fullName: string } | null;
+  holderUserId: string | null;
+  isActive: boolean;
+  notes: string | null;
+}
+
+export interface CardExpenseLineItem {
+  id: string;
+  lineDate: string;
+  collaborator: string | null;
+  motive: string | null;
+  vendor: string;
+  conceptId: string | null;
+  conceptName: string | null;
+  expenseTypeId: string | null;
+  expenseTypeName: string | null;
+  subtotal: string;
+  tip: string;
+  extras: string;
+  total: string;
+  hasInvoice: boolean;
+  invoiceOriginalName: string | null;
+  invoiceUrl?: string | null;
+  sortOrder: number;
+}
+
+export interface CardExpenseReportItem {
+  id: string;
+  documentCode: string;
+  documentVersion: string;
+  documentClassification: string;
+  reportNumber: string | null;
+  creditCardId: string;
+  creditCard?: CreditCardItem | null;
+  creatorId: string;
+  creator?: { id: string; name: string | null; email: string } | null;
+  creatorEmployee?: { id: string; fullName: string } | null;
+  department: string | null;
+  periodStart: string;
+  periodEnd: string;
+  observations: string | null;
+  totalSubtotal: string;
+  totalTip: string;
+  totalExtras: string;
+  totalAmount: string;
+  status: CardReportStatus;
+  processedAt: string | null;
+  paymentDate: string | null;
+  paymentNote: string | null;
+  submittedAt: string | null;
+  createdAt: string;
+  lines?: CardExpenseLineItem[];
+}
+
+export interface PaginatedCardReports {
+  items: CardExpenseReportItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface CardExpenseLinePayload {
+  lineDate: string;
+  collaborator?: string;
+  motive?: string;
+  vendor: string;
+  conceptId?: string;
+  expenseTypeId?: string;
+  subtotal?: number;
+  tip?: number;
+  extras?: number;
+  sortOrder?: number;
+}
+
+export interface CardReportPayload {
+  creditCardId: string;
+  department?: string;
+  periodStart: string;
+  periodEnd: string;
+  observations?: string;
+  lines?: CardExpenseLinePayload[];
+}
+
+export interface CreditCardPayload {
+  lastFour: string;
+  alias?: string;
+  holderEmployeeId: string;
+  notes?: string;
+}
+
+export interface CardReportFilters {
+  status?: string;
+  creditCardId?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+function cardQuery(filters: CardReportFilters): string {
+  const qs = new URLSearchParams();
+  if (filters.status) qs.set('status', filters.status);
+  if (filters.creditCardId) qs.set('creditCardId', filters.creditCardId);
+  if (filters.search) qs.set('search', filters.search);
+  if (filters.dateFrom) qs.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) qs.set('dateTo', filters.dateTo);
+  if (filters.page) qs.set('page', String(filters.page));
+  if (filters.limit) qs.set('limit', String(filters.limit));
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
+// ── Maestro de tarjetas ─────────────────────────────────────────────────────
+
+export function getCreditCards(includeInactive = false): Promise<CreditCardItem[]> {
+  return apiFetchWithRetry<CreditCardItem[]>(
+    `/credit-cards${includeInactive ? '?includeInactive=true' : ''}`,
+  );
+}
+
+export function getActiveCreditCards(): Promise<CreditCardItem[]> {
+  return apiFetchWithRetry<CreditCardItem[]>('/credit-cards/active');
+}
+
+export function createCreditCard(payload: CreditCardPayload): Promise<CreditCardItem> {
+  return apiFetch<CreditCardItem>('/credit-cards', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCreditCard(
+  id: string,
+  payload: Partial<CreditCardPayload>,
+): Promise<CreditCardItem> {
+  return apiFetch<CreditCardItem>(`/credit-cards/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function toggleCreditCard(id: string): Promise<CreditCardItem> {
+  return apiFetch<CreditCardItem>(`/credit-cards/${id}/toggle`, { method: 'PATCH' });
+}
+
+export function deleteCreditCard(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/credit-cards/${id}`, { method: 'DELETE' });
+}
+
+// ── Reportes ────────────────────────────────────────────────────────────────
+
+export function getMyCardReports(
+  filters: CardReportFilters = {},
+): Promise<PaginatedCardReports> {
+  return apiFetchWithRetry<PaginatedCardReports>(`/credit-cards/reports${cardQuery(filters)}`);
+}
+
+export function getAllCardReports(
+  filters: CardReportFilters = {},
+): Promise<PaginatedCardReports> {
+  return apiFetchWithRetry<PaginatedCardReports>(`/credit-cards/reports/all${cardQuery(filters)}`);
+}
+
+export function getCardReport(id: string): Promise<CardExpenseReportItem> {
+  return apiFetchWithRetry<CardExpenseReportItem>(`/credit-cards/reports/${id}`);
+}
+
+export function createCardReport(payload: CardReportPayload): Promise<CardExpenseReportItem> {
+  return apiFetch<CardExpenseReportItem>('/credit-cards/reports', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateCardReport(
+  id: string,
+  payload: CardReportPayload,
+): Promise<CardExpenseReportItem> {
+  return apiFetch<CardExpenseReportItem>(`/credit-cards/reports/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteCardReport(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/credit-cards/reports/${id}`, { method: 'DELETE' });
+}
+
+export function submitCardReport(id: string): Promise<CardExpenseReportItem> {
+  return apiFetch<CardExpenseReportItem>(`/credit-cards/reports/${id}/submit`, {
+    method: 'PATCH',
+  });
+}
+
+export function processCardReport(
+  id: string,
+  payload: { paymentDate: string; note?: string },
+): Promise<CardExpenseReportItem> {
+  return apiFetch<CardExpenseReportItem>(`/credit-cards/reports/${id}/process`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}

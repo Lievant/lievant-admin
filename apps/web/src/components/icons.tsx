@@ -126,6 +126,15 @@ export function CloseIcon(props: IconProps) {
   );
 }
 
+export function CreditCardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M3 10h18M6 14h3" />
+    </Svg>
+  );
+}
+
 export function TrashIcon(props: IconProps) {
   return (
     <Svg {...props}>

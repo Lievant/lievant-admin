@@ -8,6 +8,7 @@ import {
   BellIcon,
   BuildingIcon,
   ChartDotsIcon,
+  CreditCardIcon,
   CpuIcon,
   DoorIcon,
   GearIcon,
@@ -80,12 +81,20 @@ export function Sidebar({ user }: SidebarProps) {
   const showNotificaciones = hasModule(user, 'herramientas', 'notificaciones', 'read');
   const showReembolsos = hasModule(user, 'herramientas', 'reembolsos', 'read');
   const showReembolsosFinanzas = hasModule(user, 'finanzas', 'reembolsos', 'read');
+  const showGastosTarjeta = hasModule(user, 'herramientas', 'gastos-tarjeta', 'read');
+  const showTarjetasFinanzas = hasModule(user, 'finanzas', 'tarjetas', 'read');
   const showSalas = hasModule(user, 'herramientas', 'salas');
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
   const showIsobot = hasModule(user, 'herramientas', 'isobot');
   const showVacaciones = hasModule(user, 'herramientas', 'vacaciones', 'read');
   const showHerramientas =
-    showNotificaciones || showReembolsos || showSalas || showSoporte || showIsobot || showVacaciones;
+    showNotificaciones ||
+    showReembolsos ||
+    showGastosTarjeta ||
+    showSalas ||
+    showSoporte ||
+    showIsobot ||
+    showVacaciones;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -116,6 +125,15 @@ export function Sidebar({ user }: SidebarProps) {
             </NavLink>
             {pathname.startsWith('/finanzas') && (
               <SubMenu>
+                {showTarjetasFinanzas && (
+                  <NavSubLink
+                    href="/finanzas/tarjetas"
+                    active={pathname.startsWith('/finanzas/tarjetas')}
+                  >
+                    <CreditCardIcon className="h-4 w-4" />
+                    Tarjetas de Lievant
+                  </NavSubLink>
+                )}
                 <NavSubLink href="/finanzas/proyectos" active={pathname.startsWith('/finanzas/proyectos')}>
                   <ListIcon className="h-4 w-4" />
                   Proyectos
@@ -277,6 +295,15 @@ export function Sidebar({ user }: SidebarProps) {
               >
                 <WalletIcon className="h-5 w-5" />
                 Mis Reembolsos
+              </NavLink>
+            )}
+            {showGastosTarjeta && (
+              <NavLink
+                href="/herramientas/mis-gastos-tarjeta"
+                active={pathname.startsWith('/herramientas/mis-gastos-tarjeta')}
+              >
+                <CreditCardIcon className="h-5 w-5" />
+                Mis Gastos de Tarjeta
               </NavLink>
             )}
             {showSalas && (
