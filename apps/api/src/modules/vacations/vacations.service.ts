@@ -13,6 +13,7 @@ import { DataSource, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
+import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateVacationRequestDto } from './dto/create-vacation-request.dto';
 import { Holiday } from './entities/holiday.entity';
@@ -81,6 +82,8 @@ export class VacationsService {
     // notificación aprueba/rechaza la solicitud.
     @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
+    @Inject(forwardRef(() => NotificationFlowsService))
+    private readonly notificationFlows: NotificationFlowsService,
   ) {}
 
   // ==========================================================================
@@ -438,6 +441,24 @@ export class VacationsService {
     // Fuera de la transacción: notificar dentro dejaría una notificación viva
     // apuntando a una solicitud inexistente si el commit fallara.
     await this.notifyManagerOfNewRequest(employee, request, userId, workingDays);
+    await this.notifyRequesterOfNewRequest(request, userId, workingDays);
+
+    // Destinatarios configurables (RRHH, dirección…). El acuse al solicitante y
+    // el aviso al jefe siguen siendo código porque son parte del contrato del
+    // módulo: sin ellos el flujo de aprobación no funciona.
+    await this.notificationFlows.notify('vacaciones', 'solicitud_creada', {
+      requesterId: employee.authUserId,
+      requesterEmployeeId: employee.id,
+      actorId: userId,
+      entityId: request.id,
+      entityType: 'vacation_request',
+      senderName: employee.fullName,
+      title: `Solicitud de vacaciones — ${employee.fullName}`,
+      message:
+        `${employee.fullName} solicitó vacaciones del ${formatLongDate(request.startDate)} ` +
+        `al ${formatLongDate(request.endDate)} (${workingDays} días hábiles).`,
+      actionUrl: `/rrhh/empleados/${employee.id}?tab=vacaciones`,
+    });
 
     return request;
   }
@@ -483,6 +504,107 @@ export class VacationsService {
     } catch (err) {
       this.logger.error(
         `No se pudo notificar al jefe de la solicitud ${request.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Acuse de recibo para quien pidió las vacaciones: sin esto el colaborador no
+   * tiene forma de saber que su solicitud salió, porque la pantalla de
+   * vacaciones no distingue "enviada" de "aún no enviada".
+   */
+  private async notifyRequesterOfNewRequest(
+    request: VacationRequest,
+    userId: string,
+    workingDays: number,
+  ): Promise<void> {
+    try {
+      await this.notificationsService.create({
+        recipientId: userId,
+        senderName: 'Sistema',
+        title: 'Solicitud de vacaciones enviada',
+        message:
+          `Tu solicitud de vacaciones del ${formatLongDate(request.startDate)} al ` +
+          `${formatLongDate(request.endDate)} (${workingDays} días) ha sido enviada y está ` +
+          `pendiente de aprobación de tu jefe inmediato.`,
+        type: 'informativa',
+        module: 'vacaciones',
+        entityId: request.id,
+        entityType: 'vacation_request',
+        actionUrl: '/herramientas/vacaciones',
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar al solicitante de ${request.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Avisa al colaborador del resultado y dispara el flujo configurable del
+   * evento. Vive aquí y no en NotificationsService porque aprobar/rechazar
+   * también ocurre desde la pantalla de vacaciones, no solo respondiendo la
+   * notificación: si el aviso colgara de la respuesta, aprobar desde la pantalla
+   * dejaría al colaborador sin enterarse.
+   */
+  private async notifyVacationOutcome(
+    request: VacationRequest,
+    actorId: string,
+    approved: boolean,
+    note: string | null,
+  ): Promise<void> {
+    try {
+      const employee = await this.employeesRepo.findOne({ where: { id: request.employeeId } });
+      if (!employee) return;
+
+      const rango = `del ${formatLongDate(request.startDate)} al ${formatLongDate(request.endDate)}`;
+      const title = approved ? '¡Vacaciones aprobadas!' : 'Solicitud de vacaciones rechazada';
+      const message = approved
+        ? `Tu solicitud de vacaciones ${rango} ha sido aprobada.`
+        : `Tu solicitud de vacaciones ${rango} ha sido rechazada.${note ? ` ${note}` : ''}`;
+
+      if (employee.authUserId) {
+        await this.notificationsService.create({
+          recipientId: employee.authUserId,
+          senderName: 'Sistema',
+          title,
+          message,
+          type: 'informativa',
+          module: 'vacaciones',
+          entityId: request.id,
+          entityType: 'vacation_request',
+          actionUrl: '/herramientas/vacaciones',
+        });
+      }
+
+      await this.notificationFlows.notify(
+        'vacaciones',
+        approved ? 'solicitud_aprobada' : 'solicitud_rechazada',
+        {
+          requesterId: employee.authUserId,
+          requesterEmployeeId: employee.id,
+          actorId,
+          entityId: request.id,
+          entityType: 'vacation_request',
+          senderName: employee.fullName,
+          title: approved
+            ? `Vacaciones aprobadas — ${employee.fullName}`
+            : `Vacaciones rechazadas — ${employee.fullName}`,
+          message: approved
+            ? `Se aprobaron las vacaciones de ${employee.fullName} ${rango} ` +
+              `(${request.workingDaysTaken} días hábiles).`
+            : `Se rechazaron las vacaciones de ${employee.fullName} ${rango}.` +
+              `${note ? ` ${note}` : ''}`,
+          actionUrl: `/rrhh/empleados/${employee.id}?tab=vacaciones`,
+        },
+      );
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar el resultado de ${request.displayId}: ${
           err instanceof Error ? err.message : String(err)
         }`,
       );
@@ -537,8 +659,7 @@ export class VacationsService {
       }),
     );
 
-    // TODO: enviar notificación al colaborador (placeholder)
-    this.logger.log(`TODO notificación: solicitud ${request.displayId} aprobada.`);
+    await this.notifyVacationOutcome(request, user.id, true, null);
 
     return request;
   }
@@ -581,8 +702,7 @@ export class VacationsService {
       );
     });
 
-    // TODO: enviar notificación al colaborador (placeholder)
-    this.logger.log(`TODO notificación: solicitud ${request.displayId} rechazada.`);
+    await this.notifyVacationOutcome(request, user.id, false, reason ? `Nota: ${reason}` : null);
 
     return request;
   }

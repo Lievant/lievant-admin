@@ -49,7 +49,9 @@ import { MediaAuditLog } from '../modules/media/entities/media-audit-log.entity'
 import { PacingSnapshot } from '../modules/media/entities/pacing-snapshot.entity';
 import { Platform } from '../modules/media/entities/platform.entity';
 import { SyncLog } from '../modules/media/entities/sync-log.entity';
+import { FlowRecipient } from '../modules/notifications/entities/flow-recipient.entity';
 import { Notification } from '../modules/notifications/entities/notification.entity';
+import { NotificationFlow } from '../modules/notifications/entities/notification-flow.entity';
 import { ProjectBillingMilestone } from '../modules/projects/entities/project-billing-milestone.entity';
 import { ProjectBusinessUnit } from '../modules/projects/entities/project-business-unit.entity';
 import { ProjectDocument } from '../modules/projects/entities/project-document.entity';
@@ -138,6 +140,8 @@ const AppDataSource = new DataSource({
     MediaAuditLog,
     SyncLog,
     Notification,
+    NotificationFlow,
+    FlowRecipient,
   ],
   migrations: [__dirname + '/migrations/*{.js,.ts}'],
   migrationsTableName: 'migrations',

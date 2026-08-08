@@ -89,7 +89,8 @@ export function Sidebar({ user }: SidebarProps) {
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
   const showPermisos = hasModule(user, 'admin', 'roles');
   const showCatalogos = hasModule(user, 'admin', 'catalogos');
-  const showAdmin = showUsuarios || showPermisos || showCatalogos;
+  const showFlujos = hasModule(user, 'admin', 'configuracion', 'write');
+  const showAdmin = showUsuarios || showPermisos || showCatalogos || showFlujos;
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-black text-white">
@@ -310,6 +311,15 @@ export function Sidebar({ user }: SidebarProps) {
               <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
                 <ListIcon className="h-5 w-5" />
                 Catálogos
+              </NavLink>
+            )}
+            {showFlujos && (
+              <NavLink
+                href="/admin/flujos-notificacion"
+                active={pathname.startsWith('/admin/flujos-notificacion')}
+              >
+                <BellIcon className="h-5 w-5" />
+                Flujos de notificación
               </NavLink>
             )}
           </>
