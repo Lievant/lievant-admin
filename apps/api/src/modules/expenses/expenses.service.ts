@@ -324,7 +324,31 @@ export class ExpensesService {
   async getReportDetail(id: string, user: User): Promise<ExpenseReport> {
     const report = await this.getReportOrFail(id);
     this.assertCanRead(report, user);
+    await this.attachInvoiceUrls(report);
     return report;
+  }
+
+  /**
+   * Adjunta a cada línea con factura una URL prefirmada de una hora, para que
+   * el detalle pueda abrir el comprobante sin un salto extra al servidor.
+   *
+   * Un fallo firmando no tumba el detalle: sin credenciales de S3 —el caso de
+   * un entorno local— el reporte debe seguir viéndose, solo sin el enlace.
+   */
+  private async attachInvoiceUrls(report: ExpenseReport): Promise<void> {
+    for (const line of report.lines ?? []) {
+      if (!line.hasInvoice || !line.invoiceS3Key) continue;
+      try {
+        line.invoiceUrl = await this.storage.getPresignedUrl(line.invoiceS3Key, 3600);
+      } catch (err) {
+        line.invoiceUrl = null;
+        this.logger.warn(
+          `No se pudo firmar la factura de la línea ${line.id}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
   }
 
   // ==========================================================================

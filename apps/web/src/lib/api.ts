@@ -3472,6 +3472,8 @@ export interface ExpenseLineItem {
   total: string;
   hasInvoice: boolean;
   invoiceOriginalName: string | null;
+  /** Prefirmada, válida 1 hora. Solo viene en el detalle, no en los listados. */
+  invoiceUrl?: string | null;
   notes: string | null;
   sortOrder: number;
 }

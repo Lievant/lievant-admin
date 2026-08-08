@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { ExpensesModule } from '../expenses/expenses.module';
 import { VacationsModule } from '../vacations/vacations.module';
 import { EmailService } from './email.service';
 import { FlowRecipient } from './entities/flow-recipient.entity';
@@ -38,6 +39,7 @@ import { NotificationsService } from './notifications.service';
       }),
     }),
     forwardRef(() => VacationsModule),
+    forwardRef(() => ExpensesModule),
   ],
   controllers: [NotificationsController],
   providers: [EmailService, NotificationsService, NotificationFlowsService, NotificationsGateway],
