@@ -73,4 +73,10 @@ export class ExpenseLine {
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
+
+  /**
+   * URL prefirmada de la factura. No es columna: la calcula getReportDetail()
+   * al vuelo porque caduca, y guardarla dejaría enlaces muertos en la base.
+   */
+  invoiceUrl?: string | null;
 }
