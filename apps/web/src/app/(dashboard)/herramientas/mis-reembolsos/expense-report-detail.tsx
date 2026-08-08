@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
+import { EyeIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
-import type { ExpenseReportItem } from '@/lib/api';
+import type { ExpenseLineItem, ExpenseReportItem } from '@/lib/api';
 import {
   authorizeExpenseReportAction,
   processExpenseReportAction,
@@ -126,17 +127,7 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
                   <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
                   <td className="px-3 py-2 text-center">
-                    {line.hasInvoice ? (
-                      <a
-                        href={`/api/expenses/${report.id}/lines/${line.id}/invoice`}
-                        className="text-xs font-medium text-emerald-600 hover:underline"
-                        title={line.invoiceOriginalName ?? 'Ver factura'}
-                      >
-                        ✓ Ver
-                      </a>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
+                    <InvoiceLink line={line} />
                   </td>
                 </tr>
               ))}
@@ -298,6 +289,39 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * La URL prefirmada viene en el detalle y apunta directo a S3, así que abre el
+ * comprobante en una pestaña nueva sin pasar por el servidor. Si el backend no
+ * pudo firmarla (sin credenciales de S3) se avisa en vez de dejar un enlace
+ * muerto.
+ */
+function InvoiceLink({ line }: { line: ExpenseLineItem }) {
+  if (!line.hasInvoice) {
+    return <span className="text-xs text-slate-400">Sin factura</span>;
+  }
+
+  if (!line.invoiceUrl) {
+    return (
+      <span className="text-xs text-amber-600" title="El comprobante existe pero no se pudo generar el enlace">
+        No disponible
+      </span>
+    );
+  }
+
+  return (
+    <a
+      href={line.invoiceUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline"
+      title={line.invoiceOriginalName ?? 'Ver factura'}
+    >
+      <EyeIcon className="h-3.5 w-3.5" />
+      Ver factura
+    </a>
   );
 }
 

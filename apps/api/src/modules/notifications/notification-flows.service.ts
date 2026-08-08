@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  forwardRef,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
@@ -48,6 +55,10 @@ export class NotificationFlowsService {
     @InjectRepository(NotificationFlow) private readonly flowsRepo: Repository<NotificationFlow>,
     @InjectRepository(FlowRecipient) private readonly recipientsRepo: Repository<FlowRecipient>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
+    // forwardRef aunque viva en el mismo módulo: NotificationsService participa
+    // en los ciclos con vacaciones y gastos, así que cuando Nest construye este
+    // provider todavía no lo tiene listo y llegaría undefined.
+    @Inject(forwardRef(() => NotificationsService))
     private readonly notificationsService: NotificationsService,
   ) {}
 

@@ -9,6 +9,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { ExpensesService } from '../expenses/expenses.service';
 import { VacationsService } from '../vacations/vacations.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
@@ -36,6 +37,10 @@ export class NotificationsService {
     // aprueba/rechaza la solicitud. forwardRef lo resuelve en ambos sentidos.
     @Inject(forwardRef(() => VacationsService))
     private readonly vacationsService: VacationsService,
+    // Mismo ciclo que vacaciones: gastos crea notificaciones y responder una
+    // autoriza el reporte.
+    @Inject(forwardRef(() => ExpensesService))
+    private readonly expensesService: ExpensesService,
   ) {}
 
   // ==========================================================================
@@ -159,6 +164,10 @@ export class NotificationsService {
       await this.applyVacationResponse(notification, user, dto.action, note);
     }
 
+    if (notification.entityType === 'expense_report' && notification.entityId) {
+      await this.applyExpenseResponse(notification.entityId, user, dto.action, note);
+    }
+
     notification.status = dto.action;
     notification.responseNote = note;
     notification.respondedAt = new Date();
@@ -169,6 +178,29 @@ export class NotificationsService {
     this.gateway.sendUnreadCount(user.id, await this.getUnreadCount(user.id));
 
     return notification;
+  }
+
+  /**
+   * Autoriza o rechaza el reporte de gastos vinculado.
+   *
+   * authorizeReport valida que quien responde sea el autorizador designado y
+   * que el reporte siga en 'submitted'; si algo de eso falla lanza, respond()
+   * corta antes de marcar la notificación y no quedan estado y notificación
+   * desincronizados.
+   *
+   * No avisa al solicitante: authorizeReport ya lo hace, igual que cuando se
+   * resuelve desde la pantalla del reporte.
+   */
+  private async applyExpenseResponse(
+    reportId: string,
+    user: User,
+    action: 'aceptada' | 'rechazada',
+    note: string | null,
+  ): Promise<void> {
+    await this.expensesService.authorizeReport(reportId, user, {
+      action: action === 'aceptada' ? 'authorized' : 'rejected',
+      ...(note ? { note } : {}),
+    });
   }
 
   /**
