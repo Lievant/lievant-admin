@@ -37,6 +37,10 @@ import { EquipmentBrand } from '../modules/inventory/entities/equipment-brand.en
 import { EquipmentHistory } from '../modules/inventory/entities/equipment-history.entity';
 import { EquipmentStatus } from '../modules/inventory/entities/equipment-status.entity';
 import { EquipmentType } from '../modules/inventory/entities/equipment-type.entity';
+import { CatalogExpenseConcept } from '../modules/expenses/entities/catalog-expense-concept.entity';
+import { CatalogExpenseType } from '../modules/expenses/entities/catalog-expense-type.entity';
+import { ExpenseLine } from '../modules/expenses/entities/expense-line.entity';
+import { ExpenseReport } from '../modules/expenses/entities/expense-report.entity';
 import { EmployeeLicense } from '../modules/licenses/entities/employee-license.entity';
 import { ToolAssignment } from '../modules/licenses/entities/tool-assignment.entity';
 import { ToolCatalog } from '../modules/licenses/entities/tool-catalog.entity';
@@ -142,6 +146,10 @@ const AppDataSource = new DataSource({
     Notification,
     NotificationFlow,
     FlowRecipient,
+    ExpenseReport,
+    ExpenseLine,
+    CatalogExpenseConcept,
+    CatalogExpenseType,
   ],
   migrations: [__dirname + '/migrations/*{.js,.ts}'],
   migrationsTableName: 'migrations',
