@@ -14,6 +14,9 @@ export function TerminationDialog({ employee, onClose }: { employee: EmployeeDet
   const [references, setReferences] = useState('');
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // Se muestra el acuse antes de cerrar: la baja dispara efectos en otros
+  // módulos (accesos, ticket de TI, notificaciones) que conviene enunciar.
+  const [done, setDone] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -34,12 +37,38 @@ export function TerminationDialog({ employee, onClose }: { employee: EmployeeDet
 
       const result = await updateTerminationAction(employee.id, payload);
       if (result.success) {
-        onClose();
+        setDone(true);
       } else {
         setError(result.error ?? 'No se pudo registrar la baja.');
       }
     });
   };
+
+  if (done) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
+        <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+          <h2 className="text-lg font-bold text-navy">Baja registrada</h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Se han enviado las notificaciones correspondientes y se ha creado el ticket de TI.
+          </p>
+          <ul className="mt-3 space-y-1 text-sm text-slate-500">
+            <li>· El usuario de {employee.fullName} quedó desactivado en Lievant Admin.</li>
+            <li>· TI, CORE y Operaciones recibieron la tarea para marcarla como atendida.</li>
+          </ul>
+          <div className="mt-5 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800"
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">

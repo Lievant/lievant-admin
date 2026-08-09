@@ -12,6 +12,7 @@ import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { CreateFlowRecipientDto } from './dto/create-flow-recipient.dto';
 import { UpdateFlowRecipientDto } from './dto/update-flow-recipient.dto';
 import { FlowRecipient, type FlowRecipientType } from './entities/flow-recipient.entity';
+import type { NotificationType } from './entities/notification.entity';
 import { NotificationFlow } from './entities/notification-flow.entity';
 import { NotificationsService } from './notifications.service';
 
@@ -34,6 +35,13 @@ export interface NotifyContext {
   message: string;
   actionUrl?: string | null;
   senderName?: string | null;
+  /**
+   * Fuerza el tipo de las notificaciones del disparo, ignorando el configurado
+   * en cada destinatario. Lo usan los eventos donde el tipo es parte del
+   * contrato del proceso —una baja siempre se acusa con 'atencion'— y no una
+   * preferencia de quien lo recibe.
+   */
+  notificationType?: NotificationType;
 }
 
 interface UserIdRow {
@@ -94,6 +102,33 @@ export class NotificationFlowsService {
     return flow;
   }
 
+  /**
+   * Etiqueta con la que un usuario participa en un flujo ('TI', 'CORE'…).
+   *
+   * Solo resuelve destinatarios de tipo 'empleado': son los únicos que apuntan a
+   * una persona concreta, que es lo que se necesita para saber en nombre de qué
+   * área respondió. Devuelve null si el usuario no es destinatario del flujo o
+   * si el destinatario no tiene etiqueta.
+   */
+  async getRecipientLabelForUser(
+    module: string,
+    event: string,
+    userId: string,
+  ): Promise<string | null> {
+    const flow = await this.getFlow(module, event);
+    if (!flow) return null;
+
+    for (const recipient of flow.recipients ?? []) {
+      if (recipient.recipientType !== 'empleado' || !recipient.employeeId) continue;
+      const employee =
+        recipient.employee ??
+        (await this.employeesRepo.findOne({ where: { id: recipient.employeeId } }));
+      if (employee?.authUserId === userId) return recipient.label;
+    }
+
+    return null;
+  }
+
   async addRecipient(flowId: string, dto: CreateFlowRecipientDto): Promise<FlowRecipient> {
     const flow = await this.flowsRepo.findOne({ where: { id: flowId } });
     if (!flow) throw new NotFoundException('Flujo no encontrado.');
@@ -107,6 +142,7 @@ export class NotificationFlowsService {
         employeeId,
         permissionKey,
         notificationType: dto.notificationType ?? 'informativa',
+        label: dto.label ?? null,
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
       }),
@@ -138,6 +174,7 @@ export class NotificationFlowsService {
     recipient.employeeId = employeeId;
     recipient.permissionKey = permissionKey;
     if (dto.notificationType !== undefined) recipient.notificationType = dto.notificationType;
+    if (dto.label !== undefined) recipient.label = dto.label;
     if (dto.sortOrder !== undefined) recipient.sortOrder = dto.sortOrder;
     if (dto.isActive !== undefined) recipient.isActive = dto.isActive;
 
@@ -227,7 +264,7 @@ export class NotificationFlowsService {
           ...(context.senderName ? { senderName: context.senderName } : {}),
           title: context.title,
           message: context.message,
-          type: recipient.notificationType,
+          type: context.notificationType ?? recipient.notificationType,
           module,
           ...(context.entityId ? { entityId: context.entityId } : {}),
           ...(context.entityType ? { entityType: context.entityType } : {}),

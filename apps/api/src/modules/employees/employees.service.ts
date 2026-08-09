@@ -1,8 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
+import { HelpdeskService } from '../helpdesk/helpdesk.service';
+import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { EmployeeStatus } from './constants/employee-status.constant';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -23,8 +25,57 @@ import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
 import { EmployeeStorageService } from './employee-storage.service';
 
+/**
+ * Correos que abren y reciben el ticket de baja.
+ *
+ * Van como constantes y no en base porque el ticket necesita un solicitante
+ * concreto antes de que exista cualquier configuración; los destinatarios de las
+ * notificaciones sí son configurables desde /admin/flujos-notificacion.
+ */
+const TERMINATION_TICKET_REQUESTER = 'claudia.vazquez@lievant.com';
+// Debe ser un agente de helpdesk.ticket_assignees, no cualquier usuario: la FK
+// de assignee_id apunta a esa tabla. Hoy el único agente activo de TI es
+// daniel@lievant.com; si se da de alta a otro, basta cambiar este correo.
+const TERMINATION_TICKET_ASSIGNEE = 'daniel@lievant.com';
+
+function msg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Checklist que TI recibe en el ticket. */
+function buildTerminationDescription(
+  employee: EmployeeRecord,
+  termination: TerminationData,
+  equipos: string[],
+): string {
+  return [
+    'BAJA DE EMPLEADO — Proceso automático',
+    '',
+    `Empleado: ${employee.fullName}`,
+    `ID: ${employee.displayId ?? '—'}`,
+    `Área: ${employee.area ?? '—'}`,
+    `Puesto: ${employee.position ?? '—'}`,
+    `Fecha de baja: ${termination.terminationDate ?? '—'}`,
+    `Motivo: ${termination.reason ?? '—'}`,
+    '',
+    'Acciones requeridas:',
+    '- Revocar accesos a todos los sistemas (Lievant Admin, correo, VPN y SSO)',
+    '- Recuperar el equipo asignado que se lista abajo',
+    '- BIOMÉTRICOS: eliminar la huella y el registro facial de los lectores de',
+    '  acceso de todas las sedes; confirmar que la credencial física ya no abre',
+    '- CORE: revocar el acceso del usuario y reasignar los proyectos y cuentas',
+    '  que tuviera a su cargo antes de desactivarlo',
+    '- Actualizar nómina y dar de baja ante el IMSS',
+    '',
+    'Equipos asignados (inventario):',
+    ...(equipos.length ? equipos.map((e) => `- ${e}`) : ['- Sin equipos asignados en inventario']),
+  ].join('\n');
+}
+
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     @InjectRepository(EmployeeRecord) private readonly employeesRepository: Repository<EmployeeRecord>,
     @InjectRepository(PersonalData) private readonly personalDataRepository: Repository<PersonalData>,
@@ -35,6 +86,8 @@ export class EmployeesService {
     @InjectRepository(EmployeeDocument) private readonly documentsRepository: Repository<EmployeeDocument>,
     @InjectRepository(CatalogDocumentType) private readonly catalogDocTypesRepository: Repository<CatalogDocumentType>,
     private readonly storageService: EmployeeStorageService,
+    private readonly helpdeskService: HelpdeskService,
+    private readonly notificationFlows: NotificationFlowsService,
   ) {}
 
   async searchForAssignment(q: string, limit = 10) {
@@ -363,12 +416,119 @@ export class EmployeesService {
 
     const saved = await this.terminationRepository.save(termination);
 
-    if (dto.terminationDate && employee.status !== EmployeeStatus.INACTIVE) {
+    // La automatización se dispara en la transición a INACTIVE, no en cada
+    // guardado: editar la nota de una baja ya registrada no debe volver a
+    // desactivar accesos ni abrir otro ticket.
+    const esLaBaja = !!dto.terminationDate && employee.status !== EmployeeStatus.INACTIVE;
+
+    if (esLaBaja) {
       employee.status = EmployeeStatus.INACTIVE;
       await this.employeesRepository.save(employee);
+      await this.runTerminationAutomation(employee, saved);
     }
 
     return saved;
+  }
+
+  /**
+   * Efectos colaterales de una baja: desactivar el acceso, abrir el ticket de TI
+   * y avisar a las áreas involucradas.
+   *
+   * Cada paso va en su propio try/catch y ninguno revierte la baja: la baja ya
+   * está guardada y es el dato de verdad. Un fallo aquí deja rastro en el log
+   * para reponerlo a mano, no una baja a medias.
+   */
+  private async runTerminationAutomation(
+    employee: EmployeeRecord,
+    termination: TerminationData,
+  ): Promise<void> {
+    // PASO 1 — Revocar el acceso a la plataforma.
+    try {
+      if (employee.corporateEmail) {
+        const user = await this.usersRepository.findOne({
+          where: { email: employee.corporateEmail },
+        });
+        if (user?.isActive) {
+          user.isActive = false;
+          await this.usersRepository.save(user);
+          this.logger.log(`Usuario desactivado por baja: ${employee.corporateEmail}`);
+        }
+      }
+    } catch (err) {
+      this.logger.error(`No se pudo desactivar el usuario de ${employee.fullName}: ${msg(err)}`);
+    }
+
+    // PASO 2 — Ticket de HelpDesk con el checklist de la baja.
+    try {
+      const equipos = await this.listAssignedEquipment(employee.id);
+      const ticket = await this.helpdeskService.createSystemTicket({
+        title: `Baja de empleado: ${employee.fullName}`,
+        description: buildTerminationDescription(employee, termination, equipos),
+        categoryName: 'altas_bajas',
+        createdByEmployeeEmail: TERMINATION_TICKET_REQUESTER,
+        assignedToEmployeeEmail: TERMINATION_TICKET_ASSIGNEE,
+        priority: 'high',
+        impact: 'alto',
+      });
+      this.logger.log(`Ticket de baja creado: ${ticket.displayId} (${employee.fullName})`);
+    } catch (err) {
+      this.logger.error(`No se pudo crear el ticket de baja de ${employee.fullName}: ${msg(err)}`);
+    }
+
+    // PASO 3 — Avisar a las áreas que deben ejecutar su parte.
+    //
+    // Los destinatarios se configuran en /admin/flujos-notificacion, cada uno
+    // con su `label` ('TI', 'CORE', 'Operaciones'), que es lo que determina qué
+    // flujo de acuse se dispara al marcar "Atendido".
+    //
+    // TODO: hoy solo CORE (Paulo Ossa) puede recibirlo. Daniel Ortiz (TI) y
+    // Alejandro Torres (Operaciones) no tienen usuario en auth.users, así que no
+    // se pueden dar de alta como destinatarios todavía. Cuando se les cree la
+    // cuenta basta agregarlos al flujo con su label; no requiere tocar código.
+    try {
+      await this.notificationFlows.notify('rrhh', 'baja_registrada', {
+        requesterId: employee.authUserId,
+        requesterEmployeeId: employee.id,
+        entityId: employee.id,
+        entityType: 'employee_termination',
+        senderName: 'Sistema',
+        title: `Baja de empleado: ${employee.fullName}`,
+        message:
+          `Se registró la baja de ${employee.fullName} (${employee.area ?? 'sin área'}) con fecha ` +
+          `${termination.terminationDate ?? 'no especificada'}. Marca como atendido cuando ` +
+          `completes las tareas que le corresponden a tu área.`,
+        actionUrl: `/rrhh/empleados/${employee.id}`,
+        // El tipo es parte del proceso, no preferencia del destinatario: cada
+        // área acusa que ya lo hizo, no decide si procede.
+        notificationType: 'atencion',
+      });
+    } catch (err) {
+      this.logger.error(`No se pudo notificar la baja de ${employee.fullName}: ${msg(err)}`);
+    }
+  }
+
+  /** Equipos de inventario todavía asignados al empleado. */
+  private async listAssignedEquipment(employeeId: string): Promise<string[]> {
+    try {
+      const rows = (await this.employeesRepository.query(
+        `SELECT e.display_id, e.brand, e.model, e.serial_number
+         FROM inventory.equipment e
+         WHERE e.assigned_to_employee_id = $1 AND e.deleted_at IS NULL
+         ORDER BY e.display_id`,
+        [employeeId],
+      )) as { display_id: string; brand: string | null; model: string | null; serial_number: string | null }[];
+
+      return rows.map((r) =>
+        [r.display_id, [r.brand, r.model].filter(Boolean).join(' '), r.serial_number ? `S/N ${r.serial_number}` : null]
+          .filter(Boolean)
+          .join(' — '),
+      );
+    } catch (err) {
+      // El inventario es informativo dentro del ticket; si cambia el esquema no
+      // debe impedir que el ticket se cree.
+      this.logger.warn(`No se pudo leer el inventario asignado: ${msg(err)}`);
+      return [];
+    }
   }
 
   async getDocuments(

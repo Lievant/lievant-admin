@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { HelpdeskCategory } from './entities/category.entity';
 import { HelpdeskSubcategory } from './entities/subcategory.entity';
@@ -21,6 +22,7 @@ import { HelpdeskService } from './helpdesk.service';
       HelpdeskCategory,
       HelpdeskSubcategory,
       EmployeeRecord,
+      User,
     ]),
   ],
   controllers: [HelpdeskController],

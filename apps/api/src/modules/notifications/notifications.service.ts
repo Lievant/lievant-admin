@@ -3,18 +3,21 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { ExpensesService } from '../expenses/expenses.service';
 import { VacationsService } from '../vacations/vacations.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { QueryNotificationsDto } from './dto/query-notifications.dto';
 import { RespondNotificationDto } from './dto/respond-notification.dto';
 import { Notification } from './entities/notification.entity';
+import { NotificationFlowsService } from './notification-flows.service';
 import { NotificationsGateway } from './notifications.gateway';
 
 export interface PaginatedNotifications {
@@ -28,11 +31,28 @@ export interface PaginatedNotifications {
 
 const DEFAULT_LIMIT = 20;
 
+/**
+ * Label del destinatario → flujo que se dispara cuando esa área da "Atendido".
+ * Se compara en minúsculas para que 'TI', 'ti' o 'Ti' resuelvan igual.
+ */
+const TERMINATION_EVENT_BY_LABEL: Record<string, string> = {
+  ti: 'baja_atendida_ti',
+  core: 'baja_atendida_core',
+  operaciones: 'baja_atendida_operaciones',
+};
+
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectRepository(Notification) private readonly repo: Repository<Notification>,
+    @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
     private readonly gateway: NotificationsGateway,
+    // Mismo módulo, pero NotificationFlowsService ya depende de este servicio:
+    // sin forwardRef el grafo no se puede ordenar.
+    @Inject(forwardRef(() => NotificationFlowsService))
+    private readonly flowsService: NotificationFlowsService,
     // Ciclo real: vacaciones crea notificaciones y responder una notificación
     // aprueba/rechaza la solicitud. forwardRef lo resuelve en ambos sentidos.
     @Inject(forwardRef(() => VacationsService))
@@ -168,6 +188,13 @@ export class NotificationsService {
       await this.applyExpenseResponse(notification.entityId, user, dto.action, note);
     }
 
+    if (notification.entityType === 'employee_termination') {
+      if (notification.type === 'atencion' && dto.action === 'rechazada') {
+        throw new BadRequestException('Esta notificación solo admite marcarse como atendida.');
+      }
+      await this.notifyHrOfTerminationStep(notification, user, note);
+    }
+
     notification.status = dto.action;
     notification.responseNote = note;
     notification.respondedAt = new Date();
@@ -178,6 +205,60 @@ export class NotificationsService {
     this.gateway.sendUnreadCount(user.id, await this.getUnreadCount(user.id));
 
     return notification;
+  }
+
+  /**
+   * Avisa a RRHH que un área terminó su parte del proceso de baja.
+   *
+   * El área sale del `label` con el que la persona está dada de alta como
+   * destinataria del flujo rrhh.baja_registrada ('TI', 'CORE', 'Operaciones'),
+   * no de su expediente: el responsable de CORE está en Transformación Digital
+   * y el de Operaciones en Recursos Humanos, así que el nombre del área no
+   * identifica el rol. Sin label se cae a 'core' y el aviso sale igual, con el
+   * nombre de quien respondió.
+   *
+   * Quien recibe el aviso son los destinatarios configurados de
+   * rrhh.baja_atendida_*, no una persona fija en código.
+   */
+  private async notifyHrOfTerminationStep(
+    notification: Notification,
+    user: User,
+    note: string | null,
+  ): Promise<void> {
+    try {
+      const employee = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
+      const label = await this.flowsService.getRecipientLabelForUser(
+        'rrhh',
+        'baja_registrada',
+        user.id,
+      );
+
+      const evento = TERMINATION_EVENT_BY_LABEL[(label ?? '').toLowerCase()] ?? 'baja_atendida_core';
+      const areaLegible = label ?? employee?.fullName ?? user.name ?? user.email;
+      // El título de la notificación de baja trae el nombre del empleado.
+      const empleado = notification.title.replace(/^Baja de empleado:\s*/i, '');
+
+      await this.flowsService.notify('rrhh', evento, {
+        requesterId: user.id,
+        requesterEmployeeId: employee?.id ?? null,
+        actorId: user.id,
+        entityId: notification.entityId,
+        entityType: 'employee_termination',
+        senderName: 'Sistema',
+        title: `${areaLegible} ha completado el proceso de baja`,
+        message:
+          `${areaLegible} confirmó que completó las tareas correspondientes a la baja de ` +
+          `${empleado}.${note ? ` Nota: ${note}` : ''}`,
+        actionUrl: '/herramientas/mis-notificaciones',
+        notificationType: 'informativa',
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar a RRHH del avance de la baja: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -254,9 +335,10 @@ export class NotificationsService {
     }
 
     if (filters.status === 'pendientes') {
-      // Acciones que aún esperan respuesta del usuario.
+      // Acciones que aún esperan respuesta del usuario, 'atencion' incluida:
+      // también espera que alguien confirme que ya la ejecutó.
       qb.andWhere('n.type IN (:...actionTypes)', {
-        actionTypes: ['accion', 'accion_con_nota'],
+        actionTypes: ['accion', 'accion_con_nota', 'atencion'],
       }).andWhere('n.status = :pending', { pending: 'no_leida' });
     } else if (filters.status === 'informativa') {
       qb.andWhere('n.type = :type', { type: 'informativa' });

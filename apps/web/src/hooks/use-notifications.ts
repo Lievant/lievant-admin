@@ -10,7 +10,9 @@ export interface NotificationItem {
   senderName: string | null;
   title: string;
   message: string;
-  type: 'informativa' | 'accion' | 'accion_con_nota';
+  // 'atencion' es una acción de una sola vía: se confirma que ya se ejecutó, no
+  // se puede rechazar.
+  type: 'informativa' | 'accion' | 'accion_con_nota' | 'atencion';
   status: 'no_leida' | 'leida' | 'aceptada' | 'rechazada';
   responseNote: string | null;
   respondedAt: string | null;

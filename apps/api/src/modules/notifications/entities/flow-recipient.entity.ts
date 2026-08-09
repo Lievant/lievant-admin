@@ -54,6 +54,15 @@ export class FlowRecipient {
   @Column({ name: 'notification_type', type: 'varchar', length: 20, default: 'informativa' })
   notificationType!: NotificationType;
 
+  /**
+   * Rol con el que este destinatario participa en el flujo: 'TI', 'CORE',
+   * 'Operaciones'… Permite saber en nombre de qué área respondió sin deducirlo
+   * del expediente, que no siempre coincide (el responsable de CORE está en
+   * Transformación Digital).
+   */
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  label!: string | null;
+
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder!: number;
 
