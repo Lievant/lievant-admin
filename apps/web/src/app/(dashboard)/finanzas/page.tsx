@@ -14,8 +14,10 @@ export default async function FinanzasPage() {
     clientsResult.status === 'fulfilled' ? clientsResult.value.total : null;
   const missingDocs =
     missingDocsResult.status === 'fulfilled' ? missingDocsResult.value.length : null;
+  // listVendors ahora devuelve una página; el total viene del conteo del
+  // servidor y ya no del largo del arreglo.
   const activeVendors =
-    vendorsResult.status === 'fulfilled' ? vendorsResult.value.length : null;
+    vendorsResult.status === 'fulfilled' ? vendorsResult.value.total : null;
   const activeProjects =
     projectStatsResult.status === 'fulfilled' ? projectStatsResult.value.active : null;
 

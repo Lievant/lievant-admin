@@ -14,6 +14,9 @@ import { Vendor, VendorStatus } from './entities/vendor.entity';
 import { VendorDocument } from './entities/vendor-document.entity';
 import { VendorProduct } from './entities/vendor-product.entity';
 import { VendorStorageService } from './vendor-storage.service';
+// Se reutiliza el cursor de clientes: mismo formato base64url { createdAt, id }
+// para que ambas pantallas paginen igual y no existan dos codificaciones.
+import { decodeCursor, encodeCursor } from '../clients/utils/cursor.util';
 
 export type InvoiceWithUrl = Invoice & { pdfUrl?: string };
 
@@ -29,6 +32,14 @@ export type VendorDocumentWithUrl = VendorDocument & { downloadUrl?: string };
 export type DocStatus = 'complete' | 'incomplete' | 'no_required';
 
 export type VendorListItem = Vendor & { docStatus: DocStatus };
+
+export interface PaginatedVendors {
+  data: VendorListItem[];
+  nextCursor: string | null;
+  total: number;
+}
+
+const DEFAULT_VENDORS_LIMIT = 20;
 
 /**
  * Tipos de documento obligatorios para proveedor. Se repite como subconsulta en
@@ -58,7 +69,9 @@ export class VendorsService {
    * en un solo agregado, de modo que filtrar por docStatus va en el WHERE y no
    * obliga a materializar el catálogo completo.
    */
-  async findAll(query: QueryVendorsDto): Promise<VendorListItem[]> {
+  async findAll(query: QueryVendorsDto): Promise<PaginatedVendors> {
+    const limit = query.limit ?? DEFAULT_VENDORS_LIMIT;
+
     const condiciones: string[] = ['v.deleted_at IS NULL'];
     const parametros: unknown[] = [];
 
@@ -78,43 +91,96 @@ export class VendorsService {
       condiciones.push(`(v.name ILIKE ${p} OR v.trade_name ILIKE ${p} OR v.rfc ILIKE ${p})`);
     }
 
-    // El estado se define en el SELECT, así que filtrar por él exige repetir la
-    // expresión o envolver la consulta; se envuelve para no duplicar el CASE.
-    const filtroDocStatus = query.docStatus ? 'WHERE q.doc_status = $' + (parametros.length + 1) : '';
-    if (query.docStatus) parametros.push(query.docStatus);
+    // doc_status se define en el SELECT, así que filtrar por él exige envolver
+    // la consulta; se envuelve una vez y no se duplica el CASE.
+    const filtrosExternos: string[] = [];
+    if (query.docStatus) {
+      parametros.push(query.docStatus);
+      filtrosExternos.push(`q.doc_status = $${parametros.length}`);
+    }
 
+    const base = `
+      SELECT
+        v.id, v.name, v.trade_name, v.rfc, v.category_id, v.status,
+        v.payment_terms_days, v.clabe, v.bank_name, v.bank_account, v.notes,
+        v.created_at, v.updated_at, v.deleted_at, v.created_by, v.updated_by,
+        CASE
+          WHEN req.total = 0 THEN 'no_required'
+          WHEN COALESCE(doc.uploaded, 0) >= req.total THEN 'complete'
+          ELSE 'incomplete'
+        END AS doc_status
+      FROM vendors.vendors v
+      CROSS JOIN (
+        SELECT COUNT(*)::int AS total FROM catalogs.document_types
+        WHERE applies_to = 'vendor' AND is_required = true AND is_active = true
+      ) req
+      LEFT JOIN (
+        SELECT vendor_id, COUNT(DISTINCT type)::int AS uploaded
+        FROM vendors.vendor_documents
+        WHERE deleted_at IS NULL AND type IN (${REQUIRED_VENDOR_DOC_TYPES})
+        GROUP BY vendor_id
+      ) doc ON doc.vendor_id = v.id
+      WHERE ${condiciones.join(' AND ')}
+    `;
+
+    const whereExterno = (extra: string[]) => {
+      const todos = [...filtrosExternos, ...extra];
+      return todos.length ? `WHERE ${todos.join(' AND ')}` : '';
+    };
+
+    // El total se calcula sin el cursor: es el tamaño del resultado filtrado, no
+    // lo que resta por recorrer, para que no encoja al avanzar de página.
+    const totalRows = (await this.vendorsRepository.query(
+      `SELECT COUNT(*)::int AS total FROM (${base}) q ${whereExterno([])}`,
+      parametros,
+    )) as { total: number }[];
+    const total = totalRows[0]?.total ?? 0;
+
+    const condicionesPagina: string[] = [];
+    if (query.cursor) {
+      const cursor = decodeCursor(query.cursor);
+      parametros.push(cursor.createdAt, cursor.id);
+      const pCreated = `$${parametros.length - 1}`;
+      const pId = `$${parametros.length}`;
+      // Orden estable por (created_at, id): sin el desempate por id, dos
+      // proveedores con el mismo timestamp podrían repetirse o saltarse entre
+      // páginas. La carga masiva dejó miles de filas con created_at casi igual.
+      condicionesPagina.push(
+        `(q.created_at < ${pCreated}::timestamptz OR (q.created_at = ${pCreated}::timestamptz AND q.id < ${pId}::uuid))`,
+      );
+    }
+
+    parametros.push(limit + 1); // una de más para saber si hay siguiente página
     const filas = (await this.vendorsRepository.query(
       `
-      SELECT * FROM (
-        SELECT
-          v.id, v.name, v.trade_name, v.rfc, v.category_id, v.status,
-          v.payment_terms_days, v.clabe, v.bank_name, v.bank_account, v.notes,
-          v.created_at, v.updated_at, v.deleted_at, v.created_by, v.updated_by,
-          CASE
-            WHEN req.total = 0 THEN 'no_required'
-            WHEN COALESCE(doc.uploaded, 0) >= req.total THEN 'complete'
-            ELSE 'incomplete'
-          END AS doc_status
-        FROM vendors.vendors v
-        CROSS JOIN (
-          SELECT COUNT(*)::int AS total FROM catalogs.document_types
-          WHERE applies_to = 'vendor' AND is_required = true AND is_active = true
-        ) req
-        LEFT JOIN (
-          SELECT vendor_id, COUNT(DISTINCT type)::int AS uploaded
-          FROM vendors.vendor_documents
-          WHERE deleted_at IS NULL AND type IN (${REQUIRED_VENDOR_DOC_TYPES})
-          GROUP BY vendor_id
-        ) doc ON doc.vendor_id = v.id
-        WHERE ${condiciones.join(' AND ')}
-      ) q
-      ${filtroDocStatus}
+      SELECT q.*, q.created_at::text AS cursor_created_at
+      FROM (${base}) q
+      ${whereExterno(condicionesPagina)}
       ORDER BY q.created_at DESC, q.id DESC
+      LIMIT $${parametros.length}
       `,
       parametros,
     )) as Record<string, unknown>[];
 
-    return filas.map((f) => this.toVendorListItem(f));
+    const hayMas = filas.length > limit;
+    const pagina = hayMas ? filas.slice(0, limit) : filas;
+    const ultima = pagina[pagina.length - 1];
+
+    return {
+      data: pagina.map((f) => this.toVendorListItem(f)),
+      // El cursor lleva created_at como texto de Postgres, con microsegundos.
+      // Pasarlo por Date lo truncaría a milisegundos y, como la carga masiva
+      // dejó miles de filas dentro del mismo milisegundo, cada salto de página
+      // se comía las que caían entre el milisegundo y el microsegundo exactos.
+      nextCursor:
+        hayMas && ultima
+          ? encodeCursor({
+              createdAt: ultima.cursor_created_at as string,
+              id: ultima.id as string,
+            })
+          : null,
+      total,
+    };
   }
 
   /** El SQL crudo devuelve snake_case; la API expone camelCase. */
