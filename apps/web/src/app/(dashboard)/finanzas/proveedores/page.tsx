@@ -4,6 +4,7 @@ import {
   listVendors,
   type ErrorKind,
   type ListVendorsParams,
+  type VendorDocStatus,
   type VendorStatus,
 } from '@/lib/api';
 import { VendorsScreen } from './vendors-screen';
@@ -31,11 +32,13 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
   const status = asString(params.status) as VendorStatus | undefined;
   const categoryId = asString(params.category_id);
   const search = asString(params.search);
+  const docStatus = asString(params.docStatus) as VendorDocStatus | undefined;
 
   const query: ListVendorsParams = {};
   if (status) query.status = status;
   if (categoryId) query.category_id = categoryId;
   if (search) query.search = search;
+  if (docStatus) query.docStatus = docStatus;
 
   const [vendorsResult, categoriesResult] = await Promise.all([
     safe(listVendors(query)),
@@ -48,7 +51,12 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
         vendors={vendorsResult.data ?? []}
         categories={categoriesResult.data ?? []}
         errorKind={vendorsResult.errorKind}
-        filters={{ status: status ?? '', category_id: categoryId ?? '', search: search ?? '' }}
+        filters={{
+          status: status ?? '',
+          category_id: categoryId ?? '',
+          search: search ?? '',
+          docStatus: docStatus ?? '',
+        }}
       />
     </div>
   );
