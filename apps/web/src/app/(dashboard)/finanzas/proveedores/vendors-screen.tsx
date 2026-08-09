@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { CatalogItem, ErrorKind, VendorDocStatus, VendorListItem } from '@/lib/api';
+import type { CatalogItem, ErrorKind, VendorDocStatus, VendorsPage } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { deleteVendorAction } from './actions';
@@ -21,10 +21,12 @@ interface VendorsFilters {
 }
 
 interface VendorsScreenProps {
-  vendors: VendorListItem[];
+  page: VendorsPage;
   categories: CatalogItem[];
   errorKind: ErrorKind | null;
   filters: VendorsFilters;
+  cursor: string;
+  cursorsStack: string[];
 }
 
 const DOC_STATUS_OPTIONS: { value: VendorDocStatus | ''; label: string }[] = [
@@ -34,7 +36,15 @@ const DOC_STATUS_OPTIONS: { value: VendorDocStatus | ''; label: string }[] = [
   { value: 'no_required', label: 'Sin requeridos' },
 ];
 
-export function VendorsScreen({ vendors, categories, errorKind, filters }: VendorsScreenProps) {
+export function VendorsScreen({
+  page,
+  categories,
+  errorKind,
+  filters,
+  cursor,
+  cursorsStack,
+}: VendorsScreenProps) {
+  const vendors = page.data;
   const router = useRouter();
   const currentUser = useCurrentUser();
   const isSuperAdmin = currentUser?.roles?.some((r) => r.name === 'SUPER_ADMIN') ?? false;
@@ -56,24 +66,57 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  function updateParams(overrides: Record<string, string | null>) {
+  /** `keepPagination` distingue cambiar de página de cambiar un filtro: al
+      filtrar hay que volver a la primera página o el cursor apuntaría a un
+      conjunto que ya no existe. */
+  function buildParams(overrides: Record<string, string | null>, keepPagination: boolean) {
     const sp = new URLSearchParams();
     if (filters.status) sp.set('status', filters.status);
     if (filters.category_id) sp.set('category_id', filters.category_id);
     if (filters.search) sp.set('search', filters.search);
     if (filters.docStatus) sp.set('docStatus', filters.docStatus);
+    if (keepPagination) {
+      if (cursor) sp.set('cursor', cursor);
+      if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
+    }
     Object.entries(overrides).forEach(([key, value]) => {
       if (value === null || value === '') sp.delete(key);
       else sp.set(key, value);
     });
+    return sp;
+  }
+
+  function updateParams(overrides: Record<string, string | null>) {
+    const sp = buildParams(overrides, false);
     const qs = sp.toString();
     router.push(`/finanzas/proveedores${qs ? `?${qs}` : ''}`);
+  }
+
+  function goNext() {
+    if (!page.nextCursor) return;
+    const sp = buildParams({}, true);
+    sp.set('cursors', [...cursorsStack, cursor].join(','));
+    sp.set('cursor', page.nextCursor);
+    router.push(`/finanzas/proveedores?${sp.toString()}`);
+  }
+
+  function goPrev() {
+    if (cursorsStack.length === 0) return;
+    const stack = [...cursorsStack];
+    const prev = stack.pop() ?? '';
+    const sp = buildParams({}, true);
+    if (prev) sp.set('cursor', prev);
+    else sp.delete('cursor');
+    if (stack.length) sp.set('cursors', stack.join(','));
+    else sp.delete('cursors');
+    router.push(`/finanzas/proveedores?${sp.toString()}`);
   }
 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
   const hasFilters = Boolean(
     filters.status || filters.category_id || filters.search || filters.docStatus,
   );
+  const isFirstPage = cursorsStack.length === 0 && !cursor;
 
   if (errorKind === 'forbidden') {
     return <NoPermissions />;
@@ -84,7 +127,10 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
       <header className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy">Proveedores</h1>
-          <p className="mt-1 text-sm text-slate-500">Finanzas · Directorio de proveedores</p>
+          <p className="mt-1 text-sm text-slate-500">
+            Finanzas · {page.total} proveedor{page.total === 1 ? '' : 'es'}
+            {hasFilters ? ' con los filtros aplicados' : ' en el directorio'}
+          </p>
         </div>
         <Link
           href="/finanzas/proveedores/nuevo"
@@ -266,6 +312,31 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
           </tbody>
         </table>
         </ScrollableTable>
+
+        {/* El pager se mantiene también con docStatus activo: a diferencia de
+            clientes, aquí el filtro va en el WHERE del SQL y la paginación
+            sigue siendo válida. */}
+        <div className="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-xs text-slate-500">
+          <span>Página {cursorsStack.length + 1}</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={isFirstPage}
+              onClick={goPrev}
+              className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
+            >
+              ←
+            </button>
+            <button
+              type="button"
+              disabled={!page.nextCursor}
+              onClick={goNext}
+              className="rounded-md border border-slate-200 px-2 py-1 disabled:opacity-40"
+            >
+              →
+            </button>
+          </div>
+        </div>
       </div>
 
       {deleteTarget && (
