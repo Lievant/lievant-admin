@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -27,6 +27,11 @@ export class IsobotStorageService {
       }),
     );
     return key;
+  }
+
+  /** Borra el objeto al reemplazar o retirar un documento. */
+  async deleteDocument(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
   async getPresignedUrl(key: string, fileName?: string, expiresIn = 3600): Promise<string> {
