@@ -30,6 +30,8 @@ import { NotificationsService } from './notifications.service';
       EmployeeRecord,
       User,
     ]),
+    // NotificationFlowsService debe exportarse para que RRHH dispare el flujo de
+    // baja; ya estaba en exports junto al resto.
     ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

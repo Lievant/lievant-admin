@@ -10,8 +10,15 @@ import {
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
 
-/** Informativa solo se lee; las de acción esperan aceptar/rechazar. */
-export type NotificationType = 'informativa' | 'accion' | 'accion_con_nota';
+/**
+ * Informativa solo se lee; las de acción esperan aceptar/rechazar.
+ *
+ * 'atencion' es una acción de una sola vía: quien la recibe confirma que hizo lo
+ * suyo ("Atendido") y no puede rechazarla. Se usa para tareas repartidas entre
+ * áreas —una baja de empleado, por ejemplo— donde el área no decide si procede,
+ * solo acusa que ya la ejecutó.
+ */
+export type NotificationType = 'informativa' | 'accion' | 'accion_con_nota' | 'atencion';
 
 export type NotificationStatus = 'no_leida' | 'leida' | 'aceptada' | 'rechazada';
 
