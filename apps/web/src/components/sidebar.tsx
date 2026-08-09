@@ -74,7 +74,12 @@ export function Sidebar({ user }: SidebarProps) {
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
   const showMedios = hasSection(user, 'medios');
-  const showModulos = showFinanzas || showMedios || showRrhh || showTransformacion;
+  // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
+  // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
+  // para poder delegarlo sin dar usuarios, roles y catálogos.
+  const showSgsiIsobot = hasModule(user, 'sgsi', 'isobot', 'write');
+  const showModulos =
+    showFinanzas || showRrhh || showMedios || showSgsiIsobot || showTransformacion;
 
   // Herramientas: cada link se controla por su módulo y la sección entera se
   // oculta si el usuario no conserva ninguno.
@@ -82,9 +87,6 @@ export function Sidebar({ user }: SidebarProps) {
   const showReembolsos = hasModule(user, 'herramientas', 'reembolsos', 'read');
   const showReembolsosFinanzas = hasModule(user, 'finanzas', 'reembolsos', 'read');
   const showGastosTarjeta = hasModule(user, 'herramientas', 'gastos-tarjeta', 'read');
-  // Sección propia: administrar el SGSI no es lo mismo que consultarlo desde
-  // Herramientas, y su permiso vive fuera de 'admin' para poder delegarlo.
-  const showSgsiIsobot = hasModule(user, 'sgsi', 'isobot', 'write');
   const showTarjetasFinanzas = hasModule(user, 'finanzas', 'tarjetas', 'read');
   const showSalas = hasModule(user, 'herramientas', 'salas');
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
@@ -167,13 +169,24 @@ export function Sidebar({ user }: SidebarProps) {
           </>
         )}
 
-        {showSgsiIsobot && (
+        {showRrhh && (
           <>
-            <SectionLabel>SGSI</SectionLabel>
-            <NavLink href="/sgsi/isobot" active={pathname.startsWith('/sgsi/isobot')}>
-              <ShieldLockIcon className="h-5 w-5" />
-              Admin ISOBOT
+            <NavLink href="/rrhh" active={pathname.startsWith('/rrhh')}>
+              <PeopleIcon className="h-5 w-5" />
+              RRHH
             </NavLink>
+            {pathname.startsWith('/rrhh') && (
+              <SubMenu>
+                <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
+                  <IdCardIcon className="h-4 w-4" />
+                  Empleados
+                </NavSubLink>
+                <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
+                  <TableIcon className="h-4 w-4" />
+                  Reportes
+                </NavSubLink>
+              </SubMenu>
+            )}
           </>
         )}
 
@@ -221,25 +234,11 @@ export function Sidebar({ user }: SidebarProps) {
           </>
         )}
 
-        {showRrhh && (
-          <>
-            <NavLink href="/rrhh" active={pathname.startsWith('/rrhh')}>
-              <PeopleIcon className="h-5 w-5" />
-              RRHH
-            </NavLink>
-            {pathname.startsWith('/rrhh') && (
-              <SubMenu>
-                <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
-                  <IdCardIcon className="h-4 w-4" />
-                  Empleados
-                </NavSubLink>
-                <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
-                  <TableIcon className="h-4 w-4" />
-                  Reportes
-                </NavSubLink>
-              </SubMenu>
-            )}
-          </>
+        {showSgsiIsobot && (
+          <NavLink href="/sgsi/isobot" active={pathname.startsWith('/sgsi')}>
+            <ShieldLockIcon className="h-5 w-5" />
+            SGSI
+          </NavLink>
         )}
 
         {/* Ecommerce, Marketing Digital y Omnicanalidad no tienen módulos ni
@@ -301,6 +300,12 @@ export function Sidebar({ user }: SidebarProps) {
                 <UnreadBadge />
               </NavLink>
             )}
+            {showSalas && (
+              <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
+                <DoorIcon className="h-5 w-5" />
+                Reserva de salas
+              </NavLink>
+            )}
             {showReembolsos && (
               <NavLink
                 href="/herramientas/mis-reembolsos"
@@ -317,12 +322,6 @@ export function Sidebar({ user }: SidebarProps) {
               >
                 <CreditCardIcon className="h-5 w-5" />
                 Mis Gastos de Tarjeta
-              </NavLink>
-            )}
-            {showSalas && (
-              <NavLink href="/herramientas/salas" active={pathname.startsWith('/herramientas/salas')}>
-                <DoorIcon className="h-5 w-5" />
-                Reserva de salas
               </NavLink>
             )}
             {showSoporte && (
