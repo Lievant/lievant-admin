@@ -2,13 +2,16 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -17,13 +20,65 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AssignEmployeeDto } from './dto/assign-employee.dto';
 import { CreateEquipmentDto } from './dto/create-equipment.dto';
 import { QueryEquipmentDto } from './dto/query-equipment.dto';
+import { QueryEmployeesWithEquipmentDto } from './dto/query-employees.dto';
 import { UpdateEquipmentDto } from './dto/update-equipment.dto';
+import { InventoryResponsivasService } from './inventory-responsivas.service';
 import { InventoryService } from './inventory.service';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('inventory')
 export class InventoryController {
-  constructor(private readonly service: InventoryService) {}
+  constructor(
+    private readonly service: InventoryService,
+    private readonly responsivas: InventoryResponsivasService,
+  ) {}
+
+  // ── Vista por colaborador y responsivas ────────────────────────────────────
+  // Declaradas antes de las rutas de /equipment para que Nest no las confunda,
+  // y con el mismo permiso que el resto del inventario.
+
+  @Get('employees')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  listEmployeesWithEquipment(@Query() query: QueryEmployeesWithEquipmentDto) {
+    return this.responsivas.listEmployeesWithEquipment(query);
+  }
+
+  @Get('employees/:employeeId')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  getEmployeeDetail(@Param('employeeId', ParseUUIDPipe) employeeId: string) {
+    return this.responsivas.getEmployeeDetail(employeeId);
+  }
+
+  @Post('employees/:employeeId/responsiva')
+  @RequirePermission('transformacion', 'inventario', 'write')
+  generateResponsiva(
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.responsivas.generateResponsiva(employeeId, user.id);
+  }
+
+  @Get('employees/:employeeId/responsiva/download')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  )
+  async downloadResponsiva(
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = await this.responsivas.buildResponsivaDocx(employeeId);
+    // El nombre lleva acentos y espacios: filename* en UTF-8 y un filename
+    // ASCII de respaldo para los clientes que no entienden RFC 5987.
+    const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader('Content-Length', String(buffer.length));
+    res.end(buffer);
+  }
 
   // ── Catálogos ──────────────────────────────────────────────────────────────
 

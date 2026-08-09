@@ -263,10 +263,22 @@ export function Sidebar({ user }: SidebarProps) {
                 </NavSubLink>
                 <NavSubLink
                   href="/transformacion/inventario"
-                  active={pathname.startsWith('/transformacion/inventario')}
+                  // Excluye /colaboradores para que no queden los dos sub-items
+                  // marcados a la vez.
+                  active={
+                    pathname.startsWith('/transformacion/inventario') &&
+                    !pathname.startsWith('/transformacion/inventario/colaboradores')
+                  }
                 >
                   <LaptopIcon className="h-4 w-4" />
                   Inventario Tecnológico
+                </NavSubLink>
+                <NavSubLink
+                  href="/transformacion/inventario/colaboradores"
+                  active={pathname.startsWith('/transformacion/inventario/colaboradores')}
+                >
+                  <IdCardIcon className="h-4 w-4" />
+                  Colaboradores y Responsivas
                 </NavSubLink>
                 <NavSubLink
                   href="/transformacion/tickets"
