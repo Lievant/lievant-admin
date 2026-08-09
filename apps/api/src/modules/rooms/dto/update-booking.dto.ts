@@ -4,12 +4,18 @@ import {
   IsISO8601,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { AttendeeDto } from './create-booking.dto';
 
 export class UpdateBookingDto {
+  /** Mover la reserva a otra sala de la misma oficina. */
+  @IsOptional()
+  @IsUUID()
+  room_id?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(255)

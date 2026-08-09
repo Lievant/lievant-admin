@@ -1,11 +1,11 @@
 'use client';
 
-import { useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Booking, BookingAttendee, CreateBookingPayload, Room, UpdateBookingPayload } from '@/lib/api';
 import { AlertIcon, CheckIcon, CloseIcon } from '@/components/icons';
 import { AttendeesPicker, type AttendeePickerHandle } from '@/components/ui/attendees-picker';
-import { createBookingAction, updateBookingAction } from './actions';
+import { createBookingAction, listRoomsByOfficeAction, updateBookingAction } from './actions';
 import {
   MAX_BOOKING_MINUTES,
   MIN_BOOKING_MINUTES,
@@ -75,11 +75,33 @@ export function BookRoomDialog({
   const [success, setSuccess] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  // Cambio de sala: solo en edición. Al crear, la sala ya la eligió el usuario
+  // en la pantalla anterior y el diálogo se abre sobre ella.
+  const [roomId, setRoomId] = useState(booking?.roomId ?? room.id);
+  const [officeRooms, setOfficeRooms] = useState<Room[]>([]);
+
+  useEffect(() => {
+    if (!isEdit) return;
+    let vigente = true;
+    void (async () => {
+      // Se filtra por la oficina de la reserva: mover una reserva a otra sede
+      // cambiaría su zona horaria y el backend lo rechaza.
+      const rooms = await listRoomsByOfficeAction(room.officeId);
+      if (vigente && rooms) setOfficeRooms(rooms.filter((r) => r.isActive || r.id === room.id));
+    })();
+    return () => {
+      vigente = false;
+    };
+  }, [isEdit, room.officeId, room.id]);
+
+  /** La sala elegida; hasta que cargue el listado, la original. */
+  const selectedRoom = officeRooms.find((r) => r.id === roomId) ?? room;
+
   const startISO = buildIsoDateTime(date, startTime);
   const endISO = buildIsoDateTime(date, endTime);
   const durationMinutes = timeToMinutes(endTime) - timeToMinutes(startTime);
   const maxRecurrenceDate = maxRecurrenceEndDate(date);
-  const requiresApproval = durationMinutes / 60 > room.requiresApprovalOverHours;
+  const requiresApproval = durationMinutes / 60 > selectedRoom.requiresApprovalOverHours;
 
   /** Devuelve el mensaje de error de horario, o null si es válido. */
   function validateRange(): string | null {
@@ -134,6 +156,8 @@ export function BookRoomDialog({
           end_time: endISO,
           notes: notes.trim(),
           attendees: finalAttendees,
+          // Solo viaja si cambió: el backend revalida solapamiento al recibirlo.
+          ...(roomId !== booking.roomId ? { room_id: roomId } : {}),
         };
         const result = await updateBookingAction(booking.id, payload);
         if (result.success) {
@@ -204,6 +228,18 @@ export function BookRoomDialog({
         </div>
 
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
+          {isEdit && (
+            <SelectField id="booking-room" label="Sala" value={roomId} onChange={setRoomId}>
+              {/* Mientras carga el listado se muestra al menos la sala actual,
+                  para que el select nunca aparezca vacío. */}
+              {(officeRooms.length > 0 ? officeRooms : [room]).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} · {r.capacity} personas
+                </option>
+              ))}
+            </SelectField>
+          )}
+
           <div className="grid grid-cols-2 gap-4 rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-600">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Oficina</p>
@@ -211,8 +247,16 @@ export function BookRoomDialog({
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Capacidad</p>
-              <p className="mt-0.5 font-medium text-navy">{room.capacity} personas</p>
+              <p className="mt-0.5 font-medium text-navy">{selectedRoom.capacity} personas</p>
             </div>
+            {selectedRoom.amenities && selectedRoom.amenities.length > 0 && (
+              <div className="col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Amenidades
+                </p>
+                <p className="mt-0.5 text-navy">{selectedRoom.amenities.join(' · ')}</p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-4">
