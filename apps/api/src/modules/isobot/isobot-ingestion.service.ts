@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { DocumentChunk } from './entities/document-chunk.entity';
 import { IsobotDocument } from './entities/document.entity';
 import { IsobotStorageService } from './isobot-storage.service';
+// Mismo formato de cursor que clientes y proveedores.
+import { decodeCursor, encodeCursor } from '../clients/utils/cursor.util';
 import { getOpenAI } from './openai-client';
 import { toVectorLiteral } from './vector.util';
 
@@ -45,6 +47,32 @@ export interface ProcessDocumentResult {
 interface Chunk {
   content: string;
   tokenCount: number;
+}
+
+export interface AdminDocumentItem {
+  id: string;
+  title: string;
+  fileName: string;
+  fileType: string | null;
+  macroprocess: string | null;
+  category: string | null;
+  fileSize: number | null;
+  chunkCount: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminDocumentsPage {
+  data: AdminDocumentItem[];
+  nextCursor: string | null;
+  total: number;
+  stats: {
+    documentos: number;
+    chunks: number;
+    macroprocesos: number;
+    ultimaActualizacion: string | null;
+  };
 }
 
 export interface DocumentListItem {
@@ -162,30 +190,66 @@ export class IsobotIngestionService {
 
   async processDocument(filePath: string, metadata: DocumentMetadata = {}): Promise<ProcessDocumentResult> {
     const fileName = path.basename(filePath);
-    const fileType = this.fileTypeFromPath(filePath);
     const buffer = fs.readFileSync(filePath);
+    return this.indexar(
+      buffer,
+      fileName,
+      this.fileTypeFromPath(filePath),
+      buffer.length,
+      metadata,
+    );
+  }
 
+  /**
+   * Núcleo compartido: extrae texto, sube a S3, reemplaza los chunks y genera
+   * los embeddings. Lo usan el seed (desde disco), el alta y el reemplazo.
+   *
+   * `documentIdExistente` fuerza el destino en el reemplazo; sin él se hace
+   * upsert por file_name, que es la clave única de la tabla.
+   */
+  private async indexar(
+    buffer: Buffer,
+    fileName: string,
+    fileType: string,
+    fileSize: number,
+    metadata: DocumentMetadata = {},
+    documentIdExistente?: string,
+  ): Promise<ProcessDocumentResult> {
     const text = await this.extractText(buffer, fileType);
     const title = metadata.title ?? path.basename(fileName, path.extname(fileName));
 
     const s3Key = await this.storage.uploadDocument(buffer, fileName, MIME_TYPES[fileType]!);
 
-    const insertedRows = await this.documentsRepo.manager.query<Array<{ id: string }>>(
-      `
-      INSERT INTO isobot.documents (title, file_name, s3_key, file_type, macroprocess, category)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (file_name) DO UPDATE SET
-        title = EXCLUDED.title,
-        s3_key = EXCLUDED.s3_key,
-        file_type = EXCLUDED.file_type,
-        macroprocess = EXCLUDED.macroprocess,
-        category = EXCLUDED.category,
-        updated_at = NOW()
-      RETURNING id
-      `,
-      [title, fileName, s3Key, fileType, metadata.macroprocess ?? null, metadata.category ?? null],
-    );
-    const documentId = insertedRows[0]!.id;
+    let documentId: string;
+    if (documentIdExistente) {
+      await this.documentsRepo.manager.query(
+        `UPDATE isobot.documents
+         SET s3_key = $2, file_type = $3, file_size = $4, updated_at = NOW()
+         WHERE id = $1`,
+        [documentIdExistente, s3Key, fileType, fileSize],
+      );
+      documentId = documentIdExistente;
+    } else {
+      const insertedRows = await this.documentsRepo.manager.query<Array<{ id: string }>>(
+        `
+        INSERT INTO isobot.documents (title, file_name, s3_key, file_type, file_size, macroprocess, category)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (file_name) DO UPDATE SET
+          title = EXCLUDED.title,
+          s3_key = EXCLUDED.s3_key,
+          file_type = EXCLUDED.file_type,
+          file_size = EXCLUDED.file_size,
+          macroprocess = EXCLUDED.macroprocess,
+          category = EXCLUDED.category,
+          is_active = true,
+          deleted_at = NULL,
+          updated_at = NOW()
+        RETURNING id
+        `,
+        [title, fileName, s3Key, fileType, fileSize, metadata.macroprocess ?? null, metadata.category ?? null],
+      );
+      documentId = insertedRows[0]!.id;
+    }
 
     // Re-indexar: si el documento ya existía, sus chunks quedan obsoletos.
     await this.chunksRepo.manager.query(`DELETE FROM isobot.document_chunks WHERE document_id = $1`, [documentId]);
@@ -225,12 +289,199 @@ export class IsobotIngestionService {
   // Gestión de documentos
   // -------------------------------------------------------------------------
 
+  // -------------------------------------------------------------------------
+  // Panel de administración (sgsi.isobot.write)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Indexa un archivo subido por HTTP. `processDocument` lee de disco porque
+   * nació para el seed; aquí el contenido llega en memoria desde Multer, así que
+   * ambos comparten `indexar()` y solo cambia de dónde sale el buffer.
+   */
+  async uploadDocument(
+    file: Express.Multer.File,
+    metadata: DocumentMetadata = {},
+  ): Promise<ProcessDocumentResult> {
+    const fileType = this.fileTypeFromPath(file.originalname);
+    return this.indexar(file.buffer, file.originalname, fileType, file.size, metadata);
+  }
+
+  /**
+   * Reemplaza el archivo de un documento y lo reindexa por completo.
+   *
+   * El archivo anterior se borra de S3 después de subir el nuevo: si el borrado
+   * fuera primero y la subida fallara, el documento quedaría sin archivo.
+   */
+  async replaceDocument(id: string, file: Express.Multer.File): Promise<ProcessDocumentResult> {
+    const documento = await this.documentsRepo.findOne({ where: { id } });
+    if (!documento) throw new NotFoundException(`Documento ${id} no encontrado`);
+
+    const claveAnterior = documento.s3Key;
+    const fileType = this.fileTypeFromPath(file.originalname);
+
+    const resultado = await this.indexar(
+      file.buffer,
+      documento.fileName, // conserva el nombre: file_name es UNIQUE y la clave del documento
+      fileType,
+      file.size,
+      { title: documento.title, macroprocess: documento.macroprocess, category: documento.category },
+      id,
+    );
+
+    if (claveAnterior) {
+      try {
+        await this.storage.deleteDocument(claveAnterior);
+      } catch {
+        // El documento ya apunta al archivo nuevo; un huérfano en S3 no debe
+        // hacer fallar la operación.
+      }
+    }
+
+    return resultado;
+  }
+
+  /**
+   * Retira un documento del chatbot. La fila se conserva (borrado lógico) pero
+   * los chunks se eliminan de verdad: son lo que consulta la búsqueda vectorial
+   * y dejarlos haría que el bot siguiera citando un documento retirado.
+   */
+  async softDeleteDocument(id: string): Promise<{ deleted: true; chunksRemoved: number }> {
+    const documento = await this.documentsRepo.findOne({ where: { id } });
+    if (!documento) throw new NotFoundException(`Documento ${id} no encontrado`);
+
+    // RETURNING y no rowCount: TypeORM devuelve solo `rows` en query(), así que
+    // un DELETE sin RETURNING llega como arreglo vacío y perdería la cuenta.
+    const borrados = (await this.chunksRepo.manager.query(
+      `DELETE FROM isobot.document_chunks WHERE document_id = $1 RETURNING id`,
+      [id],
+    )) as unknown[];
+    const chunksRemoved = borrados.length;
+
+    await this.documentsRepo.manager.query(
+      `UPDATE isobot.documents SET is_active = false, deleted_at = NOW(), updated_at = NOW() WHERE id = $1`,
+      [id],
+    );
+
+    if (documento.s3Key) {
+      try {
+        await this.storage.deleteDocument(documento.s3Key);
+      } catch {
+        // Igual que arriba: el documento ya está retirado del chatbot.
+      }
+    }
+
+    return { deleted: true, chunksRemoved };
+  }
+
+  /** Listado del panel, paginado por cursor sobre (updated_at, id). */
+  async getAdminDocuments(filtros: {
+    search?: string;
+    macroprocess?: string;
+    fileType?: string;
+    cursor?: string;
+    limit?: number;
+  }): Promise<AdminDocumentsPage> {
+    const limit = filtros.limit ?? 20;
+    const condiciones = ['d.deleted_at IS NULL'];
+    const params: unknown[] = [];
+
+    if (filtros.search) {
+      params.push(`%${filtros.search}%`);
+      condiciones.push(`(d.title ILIKE $${params.length} OR d.file_name ILIKE $${params.length})`);
+    }
+    if (filtros.macroprocess) {
+      params.push(filtros.macroprocess);
+      condiciones.push(`d.macroprocess = $${params.length}`);
+    }
+    if (filtros.fileType) {
+      params.push(filtros.fileType);
+      condiciones.push(`d.file_type = $${params.length}`);
+    }
+
+    const where = condiciones.join(' AND ');
+
+    const totales = (await this.documentsRepo.manager.query(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(DISTINCT d.macroprocess)::int AS macroprocesos,
+              COALESCE((SELECT COUNT(*)::int FROM isobot.document_chunks), 0) AS chunks,
+              MAX(d.updated_at) AS ultima_actualizacion
+       FROM isobot.documents d WHERE ${where}`,
+      params,
+    )) as { total: number; macroprocesos: number; chunks: number; ultima_actualizacion: string | null }[];
+
+    const condicionesPagina = [...condiciones];
+    if (filtros.cursor) {
+      const cursor = decodeCursor(filtros.cursor);
+      params.push(cursor.createdAt, cursor.id);
+      condicionesPagina.push(
+        `(d.updated_at < $${params.length - 1}::timestamptz OR (d.updated_at = $${params.length - 1}::timestamptz AND d.id < $${params.length}::uuid))`,
+      );
+    }
+
+    params.push(limit + 1);
+    const filas = (await this.documentsRepo.manager.query(
+      `SELECT d.id, d.title, d.file_name, d.file_type, d.macroprocess, d.category,
+              d.file_size, d.is_active, d.created_at, d.updated_at,
+              d.updated_at::text AS cursor_updated_at,
+              (SELECT COUNT(*)::int FROM isobot.document_chunks c WHERE c.document_id = d.id) AS chunk_count
+       FROM isobot.documents d
+       WHERE ${condicionesPagina.join(' AND ')}
+       ORDER BY d.updated_at DESC, d.id DESC
+       LIMIT $${params.length}`,
+      params,
+    )) as Record<string, unknown>[];
+
+    const hayMas = filas.length > limit;
+    const pagina = hayMas ? filas.slice(0, limit) : filas;
+    const ultima = pagina[pagina.length - 1];
+
+    return {
+      data: pagina.map((f) => ({
+        id: f.id as string,
+        title: f.title as string,
+        fileName: f.file_name as string,
+        fileType: (f.file_type as string) ?? null,
+        macroprocess: (f.macroprocess as string) ?? null,
+        category: (f.category as string) ?? null,
+        fileSize: (f.file_size as number) ?? null,
+        chunkCount: f.chunk_count as number,
+        isActive: f.is_active as boolean,
+        createdAt: f.created_at as string,
+        updatedAt: f.updated_at as string,
+      })),
+      // Mismo criterio que proveedores: el cursor lleva el timestamp con
+      // microsegundos, porque pasarlo por Date lo truncaría a milisegundos y
+      // los documentos cargados en lote comparten milisegundo.
+      nextCursor:
+        hayMas && ultima
+          ? encodeCursor({ createdAt: ultima.cursor_updated_at as string, id: ultima.id as string })
+          : null,
+      total: totales[0]?.total ?? 0,
+      stats: {
+        documentos: totales[0]?.total ?? 0,
+        chunks: totales[0]?.chunks ?? 0,
+        macroprocesos: totales[0]?.macroprocesos ?? 0,
+        ultimaActualizacion: totales[0]?.ultima_actualizacion ?? null,
+      },
+    };
+  }
+
+  /** Macroprocesos existentes, para el autocompletado del alta. */
+  async getMacroprocesses(): Promise<string[]> {
+    const filas = (await this.documentsRepo.manager.query(
+      `SELECT DISTINCT macroprocess FROM isobot.documents
+       WHERE macroprocess IS NOT NULL AND deleted_at IS NULL ORDER BY macroprocess`,
+    )) as { macroprocess: string }[];
+    return filas.map((f) => f.macroprocess);
+  }
+
   async listDocuments(): Promise<DocumentListItem[]> {
     return this.documentsRepo.manager.query<DocumentListItem[]>(`
       SELECT d.id, d.title, d.file_name, d.file_type, d.macroprocess, d.category,
         d.is_active, d.created_at, COUNT(dc.id)::int as chunk_count
       FROM isobot.documents d
       LEFT JOIN isobot.document_chunks dc ON dc.document_id = d.id
+      WHERE d.deleted_at IS NULL
       GROUP BY d.id
       ORDER BY d.title ASC
     `);

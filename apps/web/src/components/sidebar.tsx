@@ -82,6 +82,9 @@ export function Sidebar({ user }: SidebarProps) {
   const showReembolsos = hasModule(user, 'herramientas', 'reembolsos', 'read');
   const showReembolsosFinanzas = hasModule(user, 'finanzas', 'reembolsos', 'read');
   const showGastosTarjeta = hasModule(user, 'herramientas', 'gastos-tarjeta', 'read');
+  // Sección propia: administrar el SGSI no es lo mismo que consultarlo desde
+  // Herramientas, y su permiso vive fuera de 'admin' para poder delegarlo.
+  const showSgsiIsobot = hasModule(user, 'sgsi', 'isobot', 'write');
   const showTarjetasFinanzas = hasModule(user, 'finanzas', 'tarjetas', 'read');
   const showSalas = hasModule(user, 'herramientas', 'salas');
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
@@ -161,6 +164,16 @@ export function Sidebar({ user }: SidebarProps) {
                 )}
               </SubMenu>
             )}
+          </>
+        )}
+
+        {showSgsiIsobot && (
+          <>
+            <SectionLabel>SGSI</SectionLabel>
+            <NavLink href="/sgsi/isobot" active={pathname.startsWith('/sgsi/isobot')}>
+              <ShieldLockIcon className="h-5 w-5" />
+              Admin ISOBOT
+            </NavLink>
           </>
         )}
 

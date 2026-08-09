@@ -23,8 +23,17 @@ export class IsobotDocument {
   @Column({ type: 'varchar', length: 100, nullable: true })
   category!: string | null;
 
+  @Column({ name: 'file_size', type: 'int', nullable: true })
+  fileSize!: number | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive!: boolean;
+
+  // Columna simple, no @DeleteDateColumn: los documentos retirados deben seguir
+  // siendo visibles para el panel de administración, y @DeleteDateColumn los
+  // ocultaría en todos los find() del módulo.
+  @Column({ name: 'deleted_at', type: 'timestamptz', nullable: true })
+  deletedAt!: Date | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
