@@ -33,12 +33,16 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
   const categoryId = asString(params.category_id);
   const search = asString(params.search);
   const docStatus = asString(params.docStatus) as VendorDocStatus | undefined;
+  const cursor = asString(params.cursor) ?? '';
+  const cursorsParam = asString(params.cursors) ?? '';
+  const cursorsStack = cursorsParam ? cursorsParam.split(',').filter(Boolean) : [];
 
   const query: ListVendorsParams = {};
   if (status) query.status = status;
   if (categoryId) query.category_id = categoryId;
   if (search) query.search = search;
   if (docStatus) query.docStatus = docStatus;
+  if (cursor) query.cursor = cursor;
 
   const [vendorsResult, categoriesResult] = await Promise.all([
     safe(listVendors(query)),
@@ -48,7 +52,9 @@ export default async function ProveedoresPage({ searchParams }: ProveedoresPageP
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <VendorsScreen
-        vendors={vendorsResult.data ?? []}
+        page={vendorsResult.data ?? { data: [], nextCursor: null, total: 0 }}
+        cursor={cursor}
+        cursorsStack={cursorsStack}
         categories={categoriesResult.data ?? []}
         errorKind={vendorsResult.errorKind}
         filters={{
