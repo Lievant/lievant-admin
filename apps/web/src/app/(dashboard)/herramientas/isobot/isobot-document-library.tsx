@@ -3,6 +3,19 @@
 import { useEffect, useState } from 'react';
 import { CloseIcon } from '@/components/icons';
 
+/**
+ * Los macroprocesos vienen numerados ("1. DIRECCIÓN", "10. SERVICIO DE
+ * POST-VENTA"), y el orden alfabético los deja mal: "10." y "11." caen antes que
+ * "2.". Se ordena por el número inicial; los que no lo llevan (Formatos,
+ * Políticas, NORMAS ISO27001, SGSI 27001) van al final, alfabéticamente.
+ */
+export function compararMacroprocesos(a: string, b: string): number {
+  const na = Number(a.match(/^\s*(\d+)\s*\./)?.[1] ?? Number.POSITIVE_INFINITY);
+  const nb = Number(b.match(/^\s*(\d+)\s*\./)?.[1] ?? Number.POSITIVE_INFINITY);
+  if (na !== nb) return na - nb;
+  return a.localeCompare(b, 'es');
+}
+
 interface IsobotDocumentListItem {
   id: string;
   title: string;
@@ -32,7 +45,12 @@ export function IsobotDocumentLibrary({ onClose }: { onClose: () => void }) {
       .then((data) => {
         if (cancelled) return;
         setDocuments(data);
-        setOpenGroup(data[0] ? (data[0].macroprocess ?? 'Sin macroproceso') : null);
+        // Se abre el primero según el mismo orden que la lista, no el primero
+        // que devuelva la API (que llega ordenada por título).
+        const primero = [...new Set(data.map((d) => d.macroprocess ?? 'Sin macroproceso'))].sort(
+          compararMacroprocesos,
+        )[0];
+        setOpenGroup(primero ?? null);
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Error al cargar documentos');
@@ -64,6 +82,8 @@ export function IsobotDocumentLibrary({ onClose }: { onClose: () => void }) {
     return acc;
   }, {});
 
+  const gruposOrdenados = Object.entries(groups).sort(([a], [b]) => compararMacroprocesos(a, b));
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40" onClick={onClose}>
       <div
@@ -84,7 +104,7 @@ export function IsobotDocumentLibrary({ onClose }: { onClose: () => void }) {
             <p className="text-sm text-slate-400">No hay documentos disponibles.</p>
           )}
 
-          {Object.entries(groups).map(([macroprocess, docs]) => (
+          {gruposOrdenados.map(([macroprocess, docs]) => (
             <div key={macroprocess} className="border-b border-slate-100 last:border-b-0">
               <button
                 type="button"
