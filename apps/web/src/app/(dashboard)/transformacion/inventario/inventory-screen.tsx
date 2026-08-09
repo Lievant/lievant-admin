@@ -295,7 +295,22 @@ export function InventoryScreen({
                     {item.model && <span className="ml-1 text-slate-500">{item.model}</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <EmployeeAvatar name={item.assignedEmployeeName} email={item.assignedEmployeeEmail} />
+                    {item.assignedToEmployeeId ? (
+                      <Link
+                        href={`/transformacion/inventario/colaboradores/${item.assignedToEmployeeId}`}
+                        className="inline-block rounded hover:underline"
+                      >
+                        <EmployeeAvatar
+                          name={item.assignedEmployeeName}
+                          email={item.assignedEmployeeEmail}
+                        />
+                      </Link>
+                    ) : (
+                      <EmployeeAvatar
+                        name={item.assignedEmployeeName}
+                        email={item.assignedEmployeeEmail}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{item.area ?? '—'}</td>
                   <td className="px-4 py-3 text-slate-600">{item.location ?? '—'}</td>
