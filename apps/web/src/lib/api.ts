@@ -1222,6 +1222,13 @@ export interface Vendor {
   updatedBy: string;
 }
 
+/** Estado documental calculado en el backend, igual que en clientes. */
+export type VendorDocStatus = 'complete' | 'incomplete' | 'no_required';
+
+export interface VendorListItem extends Vendor {
+  docStatus: VendorDocStatus;
+}
+
 export interface VendorDetail extends Vendor {
   products: VendorProduct[];
   purchaseOrders: PurchaseOrder[];
@@ -1239,16 +1246,18 @@ export interface ListVendorsParams {
   category_id?: string;
   status?: VendorStatus;
   search?: string;
+  docStatus?: VendorDocStatus;
 }
 
-export function listVendors(params: ListVendorsParams = {}): Promise<Vendor[]> {
+export function listVendors(params: ListVendorsParams = {}): Promise<VendorListItem[]> {
   const query = new URLSearchParams();
   if (params.category_id) query.set('category_id', params.category_id);
   if (params.status) query.set('status', params.status);
   if (params.search) query.set('search', params.search);
+  if (params.docStatus) query.set('docStatus', params.docStatus);
 
   const qs = query.toString();
-  return apiFetchWithRetry<Vendor[]>(`/vendors${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<VendorListItem[]>(`/vendors${qs ? `?${qs}` : ''}`);
 }
 
 export function getVendor(id: string): Promise<VendorDetail> {

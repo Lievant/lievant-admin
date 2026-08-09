@@ -25,6 +25,20 @@ export interface VendorStatement {
 
 export type VendorDocumentWithUrl = VendorDocument & { downloadUrl?: string };
 
+/** Mismos valores que en clientes, para que ambas pantallas hablen igual. */
+export type DocStatus = 'complete' | 'incomplete' | 'no_required';
+
+export type VendorListItem = Vendor & { docStatus: DocStatus };
+
+/**
+ * Tipos de documento obligatorios para proveedor. Se repite como subconsulta en
+ * dos lugares del CASE, así que vive aquí para que no se desincronicen.
+ */
+const REQUIRED_VENDOR_DOC_TYPES = `
+  SELECT name FROM catalogs.document_types
+  WHERE applies_to = 'vendor' AND is_required = true AND is_active = true
+`;
+
 @Injectable()
 export class VendorsService {
   constructor(
@@ -36,24 +50,94 @@ export class VendorsService {
     private readonly storageService: VendorStorageService,
   ) {}
 
-  async findAll(query: QueryVendorsDto): Promise<Vendor[]> {
-    const qb = this.vendorsRepository.createQueryBuilder('vendor').orderBy('vendor.createdAt', 'DESC');
+  /**
+   * El estado documental se calcula en SQL y no en memoria como en clientes:
+   * con más de dos mil proveedores, traerlos todos junto a sus documentos para
+   * agrupar en JavaScript hace crecer el costo con cada alta. Aquí el conteo de
+   * obligatorios se resuelve una vez (CROSS JOIN de una fila) y el de subidos
+   * en un solo agregado, de modo que filtrar por docStatus va en el WHERE y no
+   * obliga a materializar el catálogo completo.
+   */
+  async findAll(query: QueryVendorsDto): Promise<VendorListItem[]> {
+    const condiciones: string[] = ['v.deleted_at IS NULL'];
+    const parametros: unknown[] = [];
 
     if (query.category_id) {
-      qb.andWhere('vendor.categoryId = :categoryId', { categoryId: query.category_id });
+      parametros.push(query.category_id);
+      condiciones.push(`v.category_id = $${parametros.length}`);
     }
 
     if (query.status) {
-      qb.andWhere('vendor.status = :status', { status: query.status });
+      parametros.push(query.status);
+      condiciones.push(`v.status = $${parametros.length}`);
     }
 
     if (query.search) {
-      qb.andWhere('(vendor.name ILIKE :search OR vendor.tradeName ILIKE :search OR vendor.rfc ILIKE :search)', {
-        search: `%${query.search}%`,
-      });
+      parametros.push(`%${query.search}%`);
+      const p = `$${parametros.length}`;
+      condiciones.push(`(v.name ILIKE ${p} OR v.trade_name ILIKE ${p} OR v.rfc ILIKE ${p})`);
     }
 
-    return qb.getMany();
+    // El estado se define en el SELECT, así que filtrar por él exige repetir la
+    // expresión o envolver la consulta; se envuelve para no duplicar el CASE.
+    const filtroDocStatus = query.docStatus ? 'WHERE q.doc_status = $' + (parametros.length + 1) : '';
+    if (query.docStatus) parametros.push(query.docStatus);
+
+    const filas = (await this.vendorsRepository.query(
+      `
+      SELECT * FROM (
+        SELECT
+          v.id, v.name, v.trade_name, v.rfc, v.category_id, v.status,
+          v.payment_terms_days, v.clabe, v.bank_name, v.bank_account, v.notes,
+          v.created_at, v.updated_at, v.deleted_at, v.created_by, v.updated_by,
+          CASE
+            WHEN req.total = 0 THEN 'no_required'
+            WHEN COALESCE(doc.uploaded, 0) >= req.total THEN 'complete'
+            ELSE 'incomplete'
+          END AS doc_status
+        FROM vendors.vendors v
+        CROSS JOIN (
+          SELECT COUNT(*)::int AS total FROM catalogs.document_types
+          WHERE applies_to = 'vendor' AND is_required = true AND is_active = true
+        ) req
+        LEFT JOIN (
+          SELECT vendor_id, COUNT(DISTINCT type)::int AS uploaded
+          FROM vendors.vendor_documents
+          WHERE deleted_at IS NULL AND type IN (${REQUIRED_VENDOR_DOC_TYPES})
+          GROUP BY vendor_id
+        ) doc ON doc.vendor_id = v.id
+        WHERE ${condiciones.join(' AND ')}
+      ) q
+      ${filtroDocStatus}
+      ORDER BY q.created_at DESC, q.id DESC
+      `,
+      parametros,
+    )) as Record<string, unknown>[];
+
+    return filas.map((f) => this.toVendorListItem(f));
+  }
+
+  /** El SQL crudo devuelve snake_case; la API expone camelCase. */
+  private toVendorListItem(fila: Record<string, unknown>): VendorListItem {
+    return {
+      id: fila.id,
+      name: fila.name,
+      tradeName: fila.trade_name,
+      rfc: fila.rfc,
+      categoryId: fila.category_id,
+      status: fila.status,
+      paymentTermsDays: fila.payment_terms_days,
+      clabe: fila.clabe,
+      bankName: fila.bank_name,
+      bankAccount: fila.bank_account,
+      notes: fila.notes,
+      createdAt: fila.created_at,
+      updatedAt: fila.updated_at,
+      deletedAt: fila.deleted_at,
+      createdBy: fila.created_by,
+      updatedBy: fila.updated_by,
+      docStatus: fila.doc_status,
+    } as VendorListItem;
   }
 
   async create(dto: CreateVendorDto, userId: string): Promise<Vendor> {
