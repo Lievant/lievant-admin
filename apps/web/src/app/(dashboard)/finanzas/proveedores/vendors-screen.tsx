@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import type { CatalogItem, ErrorKind, Vendor } from '@/lib/api';
+import type { CatalogItem, ErrorKind, VendorDocStatus, VendorListItem } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { deleteVendorAction } from './actions';
@@ -17,14 +17,22 @@ interface VendorsFilters {
   status: string;
   category_id: string;
   search: string;
+  docStatus: string;
 }
 
 interface VendorsScreenProps {
-  vendors: Vendor[];
+  vendors: VendorListItem[];
   categories: CatalogItem[];
   errorKind: ErrorKind | null;
   filters: VendorsFilters;
 }
+
+const DOC_STATUS_OPTIONS: { value: VendorDocStatus | ''; label: string }[] = [
+  { value: '', label: 'Documentos: Todos' },
+  { value: 'incomplete', label: 'Incompletos' },
+  { value: 'complete', label: 'Completos' },
+  { value: 'no_required', label: 'Sin requeridos' },
+];
 
 export function VendorsScreen({ vendors, categories, errorKind, filters }: VendorsScreenProps) {
   const router = useRouter();
@@ -53,6 +61,7 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
     if (filters.status) sp.set('status', filters.status);
     if (filters.category_id) sp.set('category_id', filters.category_id);
     if (filters.search) sp.set('search', filters.search);
+    if (filters.docStatus) sp.set('docStatus', filters.docStatus);
     Object.entries(overrides).forEach(([key, value]) => {
       if (value === null || value === '') sp.delete(key);
       else sp.set(key, value);
@@ -62,7 +71,9 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
   }
 
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
-  const hasFilters = Boolean(filters.status || filters.category_id || filters.search);
+  const hasFilters = Boolean(
+    filters.status || filters.category_id || filters.search || filters.docStatus,
+  );
 
   if (errorKind === 'forbidden') {
     return <NoPermissions />;
@@ -128,6 +139,18 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
             </option>
           ))}
         </select>
+
+        <select
+          value={filters.docStatus}
+          onChange={(e) => updateParams({ docStatus: e.target.value || null })}
+          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
+        >
+          {DOC_STATUS_OPTIONS.map((option) => (
+            <option key={option.value || 'todos'} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -140,6 +163,7 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
               <th className="px-4 py-3">RFC</th>
               <th className="px-4 py-3">Categoría</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Documentos</th>
               <th className="px-4 py-3">Días crédito</th>
               <th className="px-4 py-3">Acciones</th>
             </tr>
@@ -147,7 +171,7 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
           <tbody>
             {vendors.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-400">
                   {hasFilters
                     ? 'No se encontraron proveedores con los filtros seleccionados.'
                     : 'Aún no hay proveedores registrados.'}
@@ -187,6 +211,31 @@ export function VendorsScreen({ vendors, categories, errorKind, filters }: Vendo
                     >
                       {VENDOR_STATUS_LABELS[vendor.status]}
                     </span>
+                  </td>
+                  {/* El badge lleva directo a la pestaña de documentos; el
+                      stopPropagation evita que el click de la fila gane. */}
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <Link
+                      href={`/finanzas/proveedores/${vendor.id}?tab=documents`}
+                      className="inline-block"
+                      title="Ver documentos del proveedor"
+                    >
+                      {vendor.docStatus === 'complete' && (
+                        <span className="rounded-full bg-green-50 px-2 py-1 text-xs font-semibold text-green-600 hover:bg-green-100">
+                          Completo
+                        </span>
+                      )}
+                      {vendor.docStatus === 'incomplete' && (
+                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-600 hover:bg-amber-100">
+                          Incompleto
+                        </span>
+                      )}
+                      {vendor.docStatus === 'no_required' && (
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-200">
+                          Sin requeridos
+                        </span>
+                      )}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {vendor.paymentTermsDays != null ? `${vendor.paymentTermsDays} días` : '—'}

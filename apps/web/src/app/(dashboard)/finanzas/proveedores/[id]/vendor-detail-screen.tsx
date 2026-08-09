@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { CatalogItem, VendorDetail, VendorDocument, VendorStatement } from '@/lib/api';
 import { avatarColor, initials } from '@/lib/avatar';
@@ -38,7 +39,16 @@ export function VendorDetailScreen({
   documents,
   statement,
 }: VendorDetailScreenProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('general');
+  // La pestaña inicial puede venir en la URL (?tab=documents) para que el badge
+  // de estado documental del listado aterrice donde corresponde. Solo se acepta
+  // un id conocido; cualquier otro valor cae en 'general'.
+  const searchParams = useSearchParams();
+  const tabSolicitada = searchParams.get('tab');
+  const tabInicial: TabId = TABS.some((t) => t.id === tabSolicitada)
+    ? (tabSolicitada as TabId)
+    : 'general';
+
+  const [activeTab, setActiveTab] = useState<TabId>(tabInicial);
   const [isEditOpen, setEditOpen] = useState(false);
 
   const name = vendorDisplayName(vendor);
