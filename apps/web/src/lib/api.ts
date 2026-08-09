@@ -1649,6 +1649,8 @@ export function createBooking(payload: CreateBookingPayload): Promise<Booking[]>
 }
 
 export interface UpdateBookingPayload {
+  /** Mover la reserva a otra sala de la misma oficina. */
+  room_id?: string;
   title?: string;
   start_time?: string;
   end_time?: string;

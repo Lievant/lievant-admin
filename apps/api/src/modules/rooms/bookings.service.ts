@@ -190,20 +190,57 @@ export class BookingsService {
       throw new BadRequestException('No se puede modificar una reserva cancelada');
     }
 
-    // Cambio de horario → re-validar
+    // Cambio de sala → la reserva se valida contra la sala destino, no la actual.
+    const salaAnterior = booking.room;
+    const nuevaSalaId =
+      dto.room_id !== undefined && dto.room_id !== booking.roomId ? dto.room_id : null;
+    const roomChanged = nuevaSalaId !== null;
+    let targetRoom = booking.room;
+
+    if (nuevaSalaId) {
+      const nueva = await this.roomsRepository.findOne({
+        where: { id: nuevaSalaId },
+        relations: { office: { city: true } },
+      });
+      if (!nueva) {
+        throw new NotFoundException(`Sala ${nuevaSalaId} no encontrada`);
+      }
+      if (!nueva.isActive) {
+        throw new BadRequestException('La sala seleccionada está desactivada');
+      }
+      // Mover una reserva a otra oficina cambiaría su zona horaria y su horario
+      // de servicio; el cambio de sala es dentro de la misma sede.
+      if (nueva.officeId !== salaAnterior.officeId) {
+        throw new BadRequestException('Solo puedes cambiar a una sala de la misma oficina');
+      }
+      targetRoom = nueva;
+    }
+
+    // El solapamiento se revalida también cuando solo cambia la sala: el horario
+    // puede seguir igual y estar ocupado en la sala destino.
     const timeChanged = dto.start_time !== undefined || dto.end_time !== undefined;
-    if (timeChanged) {
+    if (timeChanged || roomChanged) {
       const startTime = dto.start_time ? new Date(dto.start_time) : booking.startTime;
       const endTime = dto.end_time ? new Date(dto.end_time) : booking.endTime;
       if (endTime <= startTime) {
         throw new BadRequestException('end_time debe ser posterior a start_time');
       }
-      this.assertWithinOfficeHours(booking.room, startTime, endTime);
-      if (await this.hasOverlap(booking.roomId, startTime, endTime, booking.id)) {
+      this.assertWithinOfficeHours(targetRoom, startTime, endTime);
+      if (await this.hasOverlap(targetRoom.id, startTime, endTime, booking.id)) {
         throw new BadRequestException('La sala ya está reservada en el horario solicitado');
       }
       booking.startTime = startTime;
       booking.endTime = endTime;
+    }
+
+    if (roomChanged) {
+      booking.roomId = targetRoom.id;
+      booking.room = targetRoom;
+      // No hay tabla de auditoría para reservas; queda en el log del servicio.
+      this.logger.log(
+        `Reserva ${booking.id}: sala cambiada de "${salaAnterior.name}" (${salaAnterior.id}) ` +
+          `a "${targetRoom.name}" (${targetRoom.id}) por ${currentUser.email}`,
+      );
     }
 
     if (dto.title !== undefined) booking.title = dto.title;
@@ -212,9 +249,10 @@ export class BookingsService {
 
     const saved = await this.bookingsRepository.save(booking);
 
-    // Sincronizar M365
+    // Sincronizar M365 — con la sala destino, para que el evento refleje el
+    // cambio de ubicación y no la sala anterior.
     if (saved.status === BookingStatus.CONFIRMADA) {
-      const timeZone = booking.room.office?.city?.timezone ?? 'America/Mexico_City';
+      const timeZone = targetRoom.office?.city?.timezone ?? 'America/Mexico_City';
       if (saved.msEventId) {
         try {
           const hasAttendees = (saved.attendees ?? []).length > 0;
@@ -222,9 +260,9 @@ export class BookingsService {
             subject: saved.title,
             start: { dateTime: this.toGraphDateTime(saved.startTime), timeZone },
             end: { dateTime: this.toGraphDateTime(saved.endTime), timeZone },
-            location: { displayName: booking.room.name },
+            location: { displayName: targetRoom.name },
             attendees: this.toGraphAttendees(saved.attendees),
-            body: this.buildEventBody(booking.room, saved.notes),
+            body: this.buildEventBody(targetRoom, saved.notes),
             ...(hasAttendees ? { isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness' as const } : {}),
           });
         } catch (error) {
@@ -233,7 +271,7 @@ export class BookingsService {
         }
       } else {
         // No tenía evento (p. ej. antes falló) → intentar crearlo ahora.
-        await this.syncCalendarEvent(saved, booking.room, booking.user);
+        await this.syncCalendarEvent(saved, targetRoom, booking.user);
       }
     }
 
