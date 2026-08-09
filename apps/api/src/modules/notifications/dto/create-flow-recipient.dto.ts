@@ -21,8 +21,14 @@ export class CreateFlowRecipientDto {
   permissionKey?: string;
 
   @IsOptional()
-  @IsIn(['informativa', 'accion', 'accion_con_nota'])
+  @IsIn(['informativa', 'accion', 'accion_con_nota', 'atencion'])
   notificationType?: NotificationType;
+
+  /** Rol en el flujo ('TI', 'CORE', 'Operaciones'…). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  label?: string;
 
   @IsOptional()
   @IsInt()

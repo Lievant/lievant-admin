@@ -111,9 +111,12 @@ export function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Nota por notificación, solo para las de tipo accion_con_nota.
+  // Nota por notificación, para las de tipo accion_con_nota y atencion.
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Marcar una baja como atendida es irreversible y afecta a otra área: se
+  // confirma antes.
+  const [confirmingAtencion, setConfirmingAtencion] = useState<NotificationItem | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -265,7 +268,10 @@ export function NotificationsScreen() {
             const Icon = moduleIcon(item.module);
             const unread = item.status === 'no_leida';
             const needsResponse =
-              (item.type === 'accion' || item.type === 'accion_con_nota') && unread;
+              (item.type === 'accion' ||
+                item.type === 'accion_con_nota' ||
+                item.type === 'atencion') &&
+              unread;
 
             return (
               <li
@@ -326,7 +332,7 @@ export function NotificationsScreen() {
                 {/* Acciones — fuera del área clicable para no navegar al responder */}
                 {needsResponse && (
                   <div className="mt-3 border-t border-slate-100 pt-3">
-                    {item.type === 'accion_con_nota' && (
+                    {(item.type === 'accion_con_nota' || item.type === 'atencion') && (
                       <textarea
                         value={notes[item.id] ?? ''}
                         onChange={(e) =>
@@ -338,26 +344,40 @@ export function NotificationsScreen() {
                       />
                     )}
 
-                    <div className="flex gap-2">
+                    {/* 'atencion' es de una sola vía: no hay nada que rechazar,
+                        solo confirmar que ya se ejecutó. */}
+                    {item.type === 'atencion' ? (
                       <button
                         type="button"
-                        onClick={() => void respond(item, 'aceptada')}
+                        onClick={() => setConfirmingAtencion(item)}
                         disabled={busyId === item.id}
                         className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                       >
                         <CheckIcon className="h-3.5 w-3.5" />
-                        Aceptar
+                        Atendido
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void respond(item, 'rechazada')}
-                        disabled={busyId === item.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
-                      >
-                        <CloseIcon className="h-3.5 w-3.5" />
-                        Rechazar
-                      </button>
-                    </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void respond(item, 'aceptada')}
+                          disabled={busyId === item.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                        >
+                          <CheckIcon className="h-3.5 w-3.5" />
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void respond(item, 'rechazada')}
+                          disabled={busyId === item.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                        >
+                          <CloseIcon className="h-3.5 w-3.5" />
+                          Rechazar
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </li>
@@ -391,6 +411,55 @@ export function NotificationsScreen() {
         </div>
       )}
 
+      {confirmingAtencion && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirmar-atendido"
+        >
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
+            <h3 id="confirmar-atendido" className="text-base font-semibold text-navy">
+              ¿Confirmas que completaste todas las tareas correspondientes a esta baja?
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">{confirmingAtencion.title}</p>
+
+            <textarea
+              rows={2}
+              value={notes[confirmingAtencion.id] ?? ''}
+              onChange={(e) =>
+                setNotes((prev) => ({ ...prev, [confirmingAtencion.id]: e.target.value }))
+              }
+              placeholder="Nota (opcional)…"
+              className="mt-3 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
+            />
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmingAtencion(null)}
+                disabled={busyId === confirmingAtencion.id}
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const item = confirmingAtencion;
+                  setConfirmingAtencion(null);
+                  void respond(item, 'aceptada');
+                }}
+                disabled={busyId === confirmingAtencion.id}
+                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckIcon className="h-3.5 w-3.5" />
+                Sí, atendido
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

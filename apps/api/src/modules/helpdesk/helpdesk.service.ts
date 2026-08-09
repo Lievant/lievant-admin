@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -30,8 +31,24 @@ const CATEGORY_PRIORITY: Record<string, string> = {
 // Seconds per SLA hour-limit (for inline CASE expression)
 const SLA_SECONDS: Record<string, number> = { P1: 14400, P2: 28800, P3: 86400, P4: 259200 };
 
+/** Los tickets usan P1–P4; los módulos que los generan hablan en etiquetas. */
+const PRIORITY_LABELS: Record<string, string> = {
+  urgent: 'P1',
+  high: 'P2',
+  medium: 'P3',
+  low: 'P4',
+};
+
+function resolvePriority(value: string | undefined, categoryBase: string | null): string {
+  if (!value) return categoryBase ?? 'P3';
+  if (/^P[1-4]$/.test(value)) return value;
+  return PRIORITY_LABELS[value] ?? categoryBase ?? 'P3';
+}
+
 @Injectable()
 export class HelpdeskService {
+  private readonly logger = new Logger(HelpdeskService.name);
+
   constructor(
     @InjectRepository(Ticket) private readonly ticketsRepo: Repository<Ticket>,
     @InjectRepository(TicketAssignee) private readonly assigneesRepo: Repository<TicketAssignee>,
@@ -40,6 +57,8 @@ export class HelpdeskService {
     @InjectRepository(HelpdeskCategory) private readonly categoriesRepo: Repository<HelpdeskCategory>,
     @InjectRepository(HelpdeskSubcategory) private readonly subcategoriesRepo: Repository<HelpdeskSubcategory>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
+    // Los tickets automáticos llegan con correos, no con ids de usuario.
+    @InjectRepository(User) private readonly usersRepo: Repository<User>,
     private readonly storage: HelpdeskStorageService,
   ) {}
 
@@ -220,6 +239,81 @@ export class HelpdeskService {
 
     const saved = await this.ticketsRepo.save(ticket);
     await this.addHistory(saved.id, user, 'creado', null, 'abierto');
+    return saved;
+  }
+
+  /**
+   * Crea un ticket a nombre de un usuario, disparado por un proceso automático.
+   *
+   * Resuelve por correo y por nombre de categoría en lugar de por id: el módulo
+   * que lo llama (RRHH al registrar una baja) no debe conocer los identificadores
+   * de HelpDesk. Si el solicitante no existe se lanza, porque un ticket sin
+   * requester no aparecería en ninguna bandeja; si el asignado no existe, el
+   * ticket se crea igual y queda sin asignar para que TI lo tome.
+   */
+  async createSystemTicket(dto: CreateSystemTicketDto): Promise<Ticket> {
+    const requester = await this.usersRepo.findOne({
+      where: { email: dto.createdByEmployeeEmail },
+    });
+    if (!requester) {
+      throw new NotFoundException(
+        `No existe un usuario con el correo ${dto.createdByEmployeeEmail}.`,
+      );
+    }
+
+    // Los tickets guardan el slug de la categoría, no su id; se acepta también
+    // el nombre visible para que quien llama no dependa del slug.
+    const category = await this.categoriesRepo
+      .createQueryBuilder('c')
+      .where('c.slug = :v OR LOWER(c.name) = LOWER(:v)', { v: dto.categoryName })
+      .getOne();
+    if (!category) {
+      throw new NotFoundException(`No existe la categoría de HelpDesk "${dto.categoryName}".`);
+    }
+
+    // assignee_id apunta a helpdesk.ticket_assignees (la mesa de servicio), no a
+    // auth.users: un asignado puede no tener cuenta en la plataforma. Si el
+    // correo no corresponde a ningún agente, el ticket se crea sin asignar y TI
+    // lo toma desde su bandeja.
+    const assignee = dto.assignedToEmployeeEmail
+      ? await this.assigneesRepo.findOne({
+          where: { email: dto.assignedToEmployeeEmail, isActive: true },
+        })
+      : null;
+
+    if (dto.assignedToEmployeeEmail && !assignee) {
+      this.logger.warn(
+        `No hay agente de HelpDesk con el correo ${dto.assignedToEmployeeEmail}; el ticket queda sin asignar.`,
+      );
+    }
+
+    const [last, employee] = await Promise.all([
+      this.ticketsRepo.findOne({
+        where: { displayId: Like(`TIC-${new Date().getFullYear()}-%`) },
+        order: { displayId: 'DESC' },
+      }),
+      this.employeesRepo.findOne({ where: { authUserId: requester.id } }),
+    ]);
+    const seq = last ? parseInt(last.displayId.split('-').at(2) ?? '0', 10) + 1 : 1;
+    const displayId = `TIC-${new Date().getFullYear()}-${String(seq).padStart(3, '0')}`;
+
+    const ticket = this.ticketsRepo.create({
+      displayId,
+      requesterId: requester.id,
+      requesterName: employee?.fullName ?? requester.name,
+      requesterArea: employee?.area ?? employee?.division ?? null,
+      // Lo abre la plataforma en nombre de RRHH, no la mesa de servicio.
+      openedByTd: false,
+      category: category.slug,
+      description: `${dto.title}\n\n${dto.description}`,
+      impact: dto.impact ?? 'alto',
+      priority: resolvePriority(dto.priority, category.priorityBase),
+      assignedTo: assignee?.id ?? null,
+      status: 'abierto',
+    });
+
+    const saved = await this.ticketsRepo.save(ticket);
+    await this.addHistory(saved.id, requester, 'creado', null, 'abierto');
     return saved;
   }
 

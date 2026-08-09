@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
+import { HelpdeskModule } from '../helpdesk/helpdesk.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { DocumentsService } from './documents.service';
 import { EmployeeAssignmentSearchController } from './employee-assignment-search.controller';
 import { EmployeePhotosService } from './employee-photos.service';
@@ -29,6 +31,11 @@ import { TerminationData } from './entities/termination-data.entity';
       EmployeePhoto,
       CatalogDocumentType,
     ]),
+    // La baja de un empleado abre un ticket de TI y dispara notificaciones.
+    // forwardRef en notificaciones porque ese módulo ya participa en ciclos con
+    // vacaciones y gastos.
+    HelpdeskModule,
+    forwardRef(() => NotificationsModule),
   ],
   // EmployeeAssignmentSearchController debe registrarse antes que
   // EmployeesController: su ruta estática GET /employees/search-for-assignment
