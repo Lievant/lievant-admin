@@ -80,6 +80,26 @@ export class InventoryController {
     res.end(buffer);
   }
 
+  @Get('employees/:employeeId/bitacora/download')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  @Header(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  )
+  async downloadBitacora(
+    @Param('employeeId', ParseUUIDPipe) employeeId: string,
+    @Res() res: Response,
+  ) {
+    const { buffer, fileName } = await this.responsivas.buildBitacoraDocx(employeeId);
+    const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+    );
+    res.setHeader('Content-Length', String(buffer.length));
+    res.end(buffer);
+  }
+
   // ── Catálogos ──────────────────────────────────────────────────────────────
 
   @Get('equipment-types')
