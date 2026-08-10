@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import JSZip from 'jszip';
 import { DataSource, IsNull, Repository } from 'typeorm';
@@ -26,11 +26,57 @@ const TEMPLATE_FOLIO_SEQ = '0114';
  * `modules/**\/templates/*.docx` como asset. Se prueban ambas para que un
  * `ts-node` sobre src y el build compilado funcionen igual.
  */
-const TEMPLATE_CANDIDATES = [
-  path.join(__dirname, 'templates', 'carta-responsiva.docx'),
-  path.join(process.cwd(), 'src', 'modules', 'inventory', 'templates', 'carta-responsiva.docx'),
-  path.join(process.cwd(), 'apps', 'api', 'src', 'modules', 'inventory', 'templates', 'carta-responsiva.docx'),
-];
+function rutaPlantilla(nombre: string): string | undefined {
+  return [
+    path.join(__dirname, 'templates', nombre),
+    path.join(process.cwd(), 'src', 'modules', 'inventory', 'templates', nombre),
+    path.join(process.cwd(), 'apps', 'api', 'src', 'modules', 'inventory', 'templates', nombre),
+  ].find((p) => fs.existsSync(p));
+}
+
+// ── Bitácora TIC-RE-10 ───────────────────────────────────────────────────────
+
+/**
+ * Formato de las tres tablas del documento: la fila 0 es el encabezado, la 1
+ * trae el ejemplo con datos y de la 2 en adelante van vacías para escribir a
+ * mano. Se descarta la fila de ejemplo (son datos de otro colaborador) y se
+ * conservan las vacías al final.
+ */
+const BITACORA_FILA_EJEMPLO = 1;
+const BITACORA_TEXTO_FOLIO = 'Folio de la carta Responsiva';
+
+// Formato de los runs de la tabla, copiado de la plantilla para que las filas
+// generadas se vean igual que las escritas a mano.
+const BITACORA_RPR =
+  '<w:rPr><w:rFonts w:ascii="Aptos Narrow" w:eastAsia="Aptos Narrow" w:hAnsi="Aptos Narrow" w:cs="Aptos Narrow"/>' +
+  '<w:color w:val="000000" w:themeColor="text1"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>';
+
+const MESES_ES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/** 13/abr/2026, el formato que ya usa la bitácora en papel. */
+function formatearFechaBitacora(iso: string | null): string {
+  if (!iso) return '';
+  const [anio, mes, dia] = iso.slice(0, 10).split('-');
+  if (!anio || !mes || !dia) return '';
+  return `${dia}/${MESES_ES[Number(mes) - 1] ?? mes}/${anio}`;
+}
+
+function formatearPrecio(valor: string | number | null): string {
+  const n = typeof valor === 'string' ? Number(valor) : (valor ?? 0);
+  if (!Number.isFinite(n) || n === 0) return '';
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+interface EquipoBitacora {
+  esAlta: boolean;
+  displayId: string;
+  equipmentType: string;
+  marcaModelo: string;
+  serialNumber: string;
+  observacion: string;
+  precio: string;
+  fecha: string;
+}
 
 export interface ResponsivaInfo {
   code: string;
@@ -332,7 +378,7 @@ export class InventoryResponsivasService {
       throw new NotFoundException('El colaborador no tiene responsiva generada');
     }
 
-    const plantilla = TEMPLATE_CANDIDATES.find((p) => fs.existsSync(p));
+    const plantilla = rutaPlantilla('carta-responsiva.docx');
     if (!plantilla) {
       throw new NotFoundException(
         'No se encontró la plantilla carta-responsiva.docx en el servidor',
@@ -377,5 +423,189 @@ export class InventoryResponsivasService {
 
     const nombreArchivo = `${responsiva.code} Carta Responsiva Equipo de Computo ${detalle.employee.fullName}.docx`;
     return { buffer, fileName: nombreArchivo, code: responsiva.code };
+  }
+
+  // ── Bitácora TIC-RE-10 ─────────────────────────────────────────────────────
+
+  /**
+   * Bitácora de asignación: el anexo de la responsiva donde se listan las altas
+   * y bajas de equipo del colaborador.
+   */
+  async buildBitacoraDocx(
+    employeeId: string,
+  ): Promise<{ buffer: Buffer; fileName: string; code: string; filas: number }> {
+    const empleado = await this.employeesRepo.findOne({ where: { id: employeeId } });
+    if (!empleado) throw new NotFoundException(`Empleado ${employeeId} no encontrado`);
+
+    const responsiva = await this.responsivasRepo.findOne({ where: { employeeId } });
+    if (!responsiva) {
+      throw new BadRequestException('El colaborador no tiene carta responsiva asignada');
+    }
+
+    const equipos = await this.equiposParaBitacora(employeeId);
+
+    const plantilla = rutaPlantilla('bitacora-asignacion.docx');
+    if (!plantilla) {
+      throw new NotFoundException(
+        'No se encontró la plantilla bitacora-asignacion.docx en el servidor',
+      );
+    }
+
+    const zip = await JSZip.loadAsync(fs.readFileSync(plantilla));
+    const documento = zip.file('word/document.xml');
+    if (!documento) throw new NotFoundException('La plantilla no tiene word/document.xml');
+
+    let xml = await documento.async('string');
+    xml = this.sustituirFolioBitacora(xml, responsiva.code);
+    xml = this.rellenarTablaBitacora(xml, equipos);
+
+    zip.file('word/document.xml', xml, { createFolders: false });
+    const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+    const nombrePlano = empleado.fullName.replace(/\s+/g, '_');
+    const fileName = `TIC-RE-10-${responsiva.code}-BITACORA-${nombrePlano}.docx`;
+    return { buffer, fileName, code: responsiva.code, filas: equipos.length };
+  }
+
+  /**
+   * Equipos que han pasado por el colaborador: los que tiene hoy (alta) y los
+   * que tuvo y ya no (baja).
+   *
+   * inventory.equipment_history no tiene columna employee_id; las asignaciones
+   * se registran con field_changed='assignedToEmployeeId' y el UUID del
+   * empleado en new_value (alta) u old_value (baja), así que la búsqueda va por
+   * ahí. Hoy la tabla está vacía, de modo que en la práctica solo salen altas.
+   */
+  private async equiposParaBitacora(employeeId: string): Promise<EquipoBitacora[]> {
+    const filas = (await this.equipmentRepo.manager.query(
+      `
+      -- El mismo id va dos veces: $1 como uuid contra equipment y $2 como text
+      -- contra equipment_history, donde old_value/new_value son TEXT. Con un
+      -- solo parámetro Postgres unifica el tipo a uuid y la comparación con la
+      -- columna de texto falla con "operator does not exist: text = uuid".
+      SELECT e.display_id, e.equipment_type, e.brand, e.model, e.serial_number,
+             e.operating_system, e.notes, e.purchase_value, e.assignment_date,
+             (e.assigned_to_employee_id = $1 AND e.deleted_at IS NULL) AS es_alta,
+             (SELECT MAX(h.created_at) FROM inventory.equipment_history h
+              WHERE h.equipment_id = e.id
+                AND h.field_changed = 'assignedToEmployeeId'
+                AND h.old_value = $2) AS fecha_baja
+      FROM inventory.equipment e
+      WHERE (e.assigned_to_employee_id = $1 AND e.deleted_at IS NULL)
+         OR EXISTS (
+           SELECT 1 FROM inventory.equipment_history h
+           WHERE h.equipment_id = e.id
+             AND h.field_changed = 'assignedToEmployeeId'
+             AND (h.new_value = $2 OR h.old_value = $2)
+         )
+      ORDER BY (e.assigned_to_employee_id = $1 AND e.deleted_at IS NULL) DESC,
+               e.assignment_date ASC NULLS LAST, e.display_id ASC
+      `,
+      [employeeId, employeeId],
+    )) as Array<Record<string, unknown>>;
+
+    // Fecha real de entrega del equipo. Solo se cae a hoy cuando el registro no
+    // tiene assignment_date, para no dejar la celda en blanco en un documento
+    // que se firma.
+    const hoy = formatearFechaBitacora(new Date().toISOString());
+
+    return filas.map((f) => {
+      const esAlta = Boolean(f.es_alta);
+      const fechaBaja = f.fecha_baja ? aIsoDate(f.fecha_baja as Date) : null;
+      return {
+        esAlta,
+        displayId: (f.display_id as string) ?? '',
+        equipmentType: (f.equipment_type as string) ?? '',
+        marcaModelo: [f.brand, f.model].filter(Boolean).join(' ').trim(),
+        serialNumber: (f.serial_number as string) ?? '',
+        // La plantilla usa esta columna para el sistema operativo (ej. "Win 11
+        // Pro"); si el equipo no lo trae, se cae a las notas.
+        observacion: ((f.operating_system as string) || (f.notes as string) || '').slice(0, 120),
+        precio: formatearPrecio(f.purchase_value as string | null),
+        fecha: esAlta
+          ? formatearFechaBitacora(aIsoDate(f.assignment_date as string | null)) || hoy
+          : formatearFechaBitacora(fechaBaja) || hoy,
+      };
+    });
+  }
+
+  /**
+   * El folio del encabezado viene partido en runs ("TIC-RE-02-00" + "77"), así
+   * que se reconstruye el párrafo completo: el código va en el primer <w:t> y
+   * los demás quedan vacíos.
+   */
+  private sustituirFolioBitacora(xml: string, code: string): string {
+    const parrafos = xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
+    const objetivo = parrafos.find((p) => this.textoDe(p).includes(BITACORA_TEXTO_FOLIO));
+    if (!objetivo) return xml;
+
+    let primero = true;
+    const nuevo = objetivo.replace(/(<w:t(?:\s[^>]*)?>)([\s\S]*?)(<\/w:t>)/g, (_m, abre: string) => {
+      if (primero) {
+        primero = false;
+        const apertura = abre.includes('xml:space') ? abre : '<w:t xml:space="preserve">';
+        return `${apertura}${escaparXml(`${BITACORA_TEXTO_FOLIO} ${code}`)}</w:t>`;
+      }
+      return `${abre}</w:t>`;
+    });
+
+    return xml.replace(objetivo, nuevo);
+  }
+
+  /** Texto plano de un fragmento OOXML, solo de los <w:t> reales. */
+  private textoDe(fragmento: string): string {
+    const partes = fragmento.match(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>/g) ?? [];
+    return partes
+      .map((t) => t.replace(/<[^>]+>/g, ''))
+      .join('')
+      .replace(/&amp;/g, '&');
+  }
+
+  /**
+   * Sustituye la fila de ejemplo por una fila por equipo, conservando las filas
+   * vacías del final para que se pueda seguir escribiendo a mano.
+   */
+  private rellenarTablaBitacora(xml: string, equipos: EquipoBitacora[]): string {
+    const tabla = xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/);
+    if (!tabla) return xml;
+
+    const filas = tabla[0].match(/<w:tr[\s>][\s\S]*?<\/w:tr>/g) ?? [];
+    const ejemplo = filas[BITACORA_FILA_EJEMPLO];
+    if (!ejemplo) return xml;
+
+    // Los <w:tcPr> de la fila de ejemplo llevan el ancho de cada columna; se
+    // reutilizan para que las filas generadas no descuadren la tabla.
+    const celdasEjemplo = ejemplo.match(/<w:tc>[\s\S]*?<\/w:tc>/g) ?? [];
+    const props = celdasEjemplo.map((c) => c.match(/<w:tcPr>[\s\S]*?<\/w:tcPr>/)?.[0] ?? '');
+    const trAbre = ejemplo.match(/^<w:tr[^>]*>/)?.[0] ?? '<w:tr>';
+
+    const construir = (valores: string[]): string => {
+      const celdas = valores.map((valor, i) => {
+        const contenido = valor
+          ? `<w:r>${BITACORA_RPR}<w:t xml:space="preserve">${escaparXml(valor)}</w:t></w:r>`
+          : '';
+        return `<w:tc>${props[i] ?? ''}<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${contenido}</w:p></w:tc>`;
+      });
+      return `${trAbre}${celdas.join('')}</w:tr>`;
+    };
+
+    const nuevas = equipos.map((e) =>
+      construir([
+        e.esAlta ? 'X' : '',
+        e.esAlta ? '' : 'X',
+        e.displayId,
+        e.equipmentType,
+        e.marcaModelo,
+        e.serialNumber,
+        e.observacion,
+        e.precio,
+        e.fecha,
+        '', // FIRMA EMPLEADO: se firma a mano
+      ]),
+    );
+
+    // La fila de ejemplo se reemplaza; el encabezado y las vacías se conservan.
+    const tablaNueva = tabla[0].replace(ejemplo, nuevas.join(''));
+    return xml.replace(tabla[0], tablaNueva);
   }
 }

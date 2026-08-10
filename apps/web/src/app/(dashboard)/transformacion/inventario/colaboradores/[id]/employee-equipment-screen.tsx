@@ -49,6 +49,11 @@ function descargar(employeeId: string) {
   window.location.href = `/api/inventory/employees/${employeeId}/responsiva/download`;
 }
 
+/** Bitácora TIC-RE-10, el anexo de equipos de la responsiva. */
+function descargarBitacora(employeeId: string) {
+  window.location.href = `/api/inventory/employees/${employeeId}/bitacora`;
+}
+
 export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) {
   const [detalle, setDetalle] = useState<EmployeeDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,11 +189,18 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
           </div>
 
           <div className="flex flex-col items-end gap-2">
-            {responsiva ? (
-              <>
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
-                  Responsiva: {responsiva.code}
-                </span>
+            <span
+              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                responsiva
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-rose-50 text-rose-700 ring-rose-200'
+              }`}
+            >
+              {responsiva ? `Responsiva: ${responsiva.code}` : 'Sin responsiva'}
+            </span>
+
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {responsiva ? (
                 <button
                   type="button"
                   onClick={() => descargar(employeeId)}
@@ -197,12 +209,7 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
                   <DownloadIcon className="h-4 w-4" />
                   Descargar responsiva
                 </button>
-              </>
-            ) : (
-              <>
-                <span className="inline-flex items-center rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700 ring-1 ring-rose-200">
-                  Sin responsiva
-                </span>
+              ) : (
                 <button
                   type="button"
                   onClick={() => setConfirmando(true)}
@@ -210,8 +217,25 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
                 >
                   Generar responsiva
                 </button>
-              </>
-            )}
+              )}
+
+              {/* La bitácora lleva impreso el folio de la responsiva, así que
+                  sin folio no hay documento que generar. */}
+              <button
+                type="button"
+                onClick={() => descargarBitacora(employeeId)}
+                disabled={!responsiva}
+                title={
+                  responsiva
+                    ? 'Bitácora de asignación de equipos TIC-RE-10'
+                    : 'Genera primero la carta responsiva'
+                }
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-navy hover:border-navy disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-slate-200"
+              >
+                <DownloadIcon className="h-4 w-4" />
+                Descargar bitácora
+              </button>
+            </div>
           </div>
         </div>
       </header>
