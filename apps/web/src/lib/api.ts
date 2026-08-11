@@ -3538,6 +3538,9 @@ export interface PaginatedExpenseReports {
 }
 
 export interface ExpenseLinePayload {
+  /** Id de la línea ya guardada. Sin él el servidor la trata como nueva y se
+   *  pierde la factura adjunta. */
+  id?: string;
   lineDate: string;
   vendor: string;
   conceptId?: string;
@@ -3718,6 +3721,9 @@ export interface PaginatedCardReports {
 }
 
 export interface CardExpenseLinePayload {
+  /** Id de la línea ya guardada. Sin él el servidor la trata como nueva y se
+   *  pierde la factura adjunta. */
+  id?: string;
   lineDate: string;
   collaborator?: string;
   motive?: string;

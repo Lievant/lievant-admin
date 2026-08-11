@@ -76,6 +76,14 @@ export class QueryCreditCardsDto {
 // ── Reportes ─────────────────────────────────────────────────────────────────
 
 export class CardExpenseLineDto {
+  /**
+   * Id de la línea ya guardada. Sin él el servidor la trataría como nueva y se
+   * perdería la factura adjunta (vive en la propia línea).
+   */
+  @IsOptional()
+  @IsUUID()
+  id?: string;
+
   @IsDateString()
   lineDate!: string;
 
@@ -147,7 +155,10 @@ export class CreateCardReportDto {
   lines?: CardExpenseLineDto[];
 }
 
-/** Las líneas se reemplazan completas, igual que en reembolsos. */
+/**
+ * El cliente manda la tabla completa y el servidor la sincroniza por `id` de
+ * línea, igual que en reembolsos.
+ */
 export class UpdateCardReportDto extends CreateCardReportDto {}
 
 export class ProcessCardReportDto {

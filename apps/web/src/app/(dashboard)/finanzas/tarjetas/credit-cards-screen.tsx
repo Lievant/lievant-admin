@@ -32,10 +32,24 @@ import type {
 interface Props {
   cards: CreditCardItem[];
   reports: CardExpenseReportItem[];
+  /** Falla del maestro de tarjetas (finanzas.tarjetas.read). */
   errorKind: ErrorKind | null;
+  /** Falla de los reportes (finanzas.gastos-tarjeta.read), permiso distinto. */
+  reportsErrorKind: ErrorKind | null;
   activeTab: 'tarjetas' | 'reportes';
   activeStatus: string;
   activeCardId: string;
+}
+
+function AccessDenied({ permission }: { permission: string }) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-10 text-center shadow-sm">
+      <p className="text-sm font-semibold text-amber-700">Acceso restringido</p>
+      <p className="mt-1 text-sm text-amber-600">
+        Necesitas el permiso <span className="font-mono">{permission}</span> para ver esta pantalla.
+      </p>
+    </div>
+  );
 }
 
 const STATUS_FILTERS = [
@@ -50,6 +64,7 @@ export function CreditCardsScreen({
   cards,
   reports,
   errorKind,
+  reportsErrorKind,
   activeTab,
   activeStatus,
   activeCardId,
@@ -61,15 +76,7 @@ export function CreditCardsScreen({
   const [confirmingDelete, setConfirmingDelete] = useState<CreditCardItem | null>(null);
 
   if (errorKind === 'forbidden') {
-    return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 p-10 text-center shadow-sm">
-        <p className="text-sm font-semibold text-amber-700">Acceso restringido</p>
-        <p className="mt-1 text-sm text-amber-600">
-          Necesitas el permiso <span className="font-mono">finanzas.tarjetas</span> para ver esta
-          pantalla.
-        </p>
-      </div>
-    );
+    return <AccessDenied permission="finanzas.tarjetas.read" />;
   }
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
@@ -249,7 +256,13 @@ export function CreditCardsScreen({
             </select>
           </div>
 
-          {reports.length === 0 ? (
+          {reportsErrorKind === 'forbidden' ? (
+            <AccessDenied permission="finanzas.gastos-tarjeta.read" />
+          ) : reportsErrorKind ? (
+            <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+              No se pudieron cargar los reportes de tarjeta.
+            </div>
+          ) : reports.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
               No hay reportes que coincidan con el filtro.
             </div>

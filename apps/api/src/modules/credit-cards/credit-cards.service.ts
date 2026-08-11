@@ -447,13 +447,32 @@ export class CreditCardsService {
     return `FIN-TC-${new Date().getUTCFullYear()}-${String(seq).padStart(3, '0')}`;
   }
 
+  /**
+   * Sincroniza las líneas con lo que manda el cliente: las que llegan con `id`
+   * se actualizan en su lugar, las nuevas se insertan y las ausentes se borran.
+   *
+   * No se puede borrar todo y reinsertar: la factura vive en la propia línea
+   * (has_invoice / invoice_s3_key) y se sube antes de guardar, así que un
+   * DELETE + INSERT dejaba el comprobante huérfano en S3 y la línea sin factura.
+   */
   private async replaceLines(
     mgr: { getRepository: DataSource['getRepository'] },
     reportId: string,
     lines: CardExpenseLineDto[],
   ): Promise<void> {
     const linesRepo = mgr.getRepository(CardExpenseLine);
-    await linesRepo.delete({ reportId });
+
+    const existing = await linesRepo.find({ where: { reportId } });
+    const existingById = new Map(existing.map((l) => [l.id, l]));
+
+    const keptIds = new Set(
+      lines.map((l) => l.id).filter((id): id is string => !!id && existingById.has(id)),
+    );
+    const removedIds = existing.filter((l) => !keptIds.has(l.id)).map((l) => l.id);
+    if (removedIds.length > 0) {
+      await linesRepo.delete({ id: In(removedIds) });
+    }
+
     if (lines.length === 0) return;
 
     const conceptIds = lines.map((l) => l.conceptId).filter((v): v is string => !!v);
@@ -472,8 +491,20 @@ export class CreditCardsService {
     const typeName = new Map(types.map((t) => [t.id, t.name]));
 
     await linesRepo.save(
-      lines.map((line, index) =>
-        linesRepo.create({
+      lines.map((line, index) => {
+        // Un id desconocido (de otro reporte, o ya borrado) entra como línea nueva.
+        const current = line.id ? existingById.get(line.id) : undefined;
+
+        return linesRepo.create({
+          ...(current
+            ? {
+                id: current.id,
+                // La factura no viaja en el payload: se conserva la ya adjunta.
+                hasInvoice: current.hasInvoice,
+                invoiceS3Key: current.invoiceS3Key,
+                invoiceOriginalName: current.invoiceOriginalName,
+              }
+            : {}),
           reportId,
           lineDate: line.lineDate,
           collaborator: line.collaborator ?? null,
@@ -487,8 +518,8 @@ export class CreditCardsService {
           tip: (line.tip ?? 0).toFixed(2),
           extras: (line.extras ?? 0).toFixed(2),
           sortOrder: line.sortOrder ?? index,
-        }),
-      ),
+        });
+      }),
     );
   }
 
@@ -515,7 +546,17 @@ export class CreditCardsService {
 
   private async attachInvoiceUrls(report: CardExpenseReport): Promise<void> {
     for (const line of report.lines ?? []) {
-      if (!line.hasInvoice || !line.invoiceS3Key) continue;
+      if (!line.hasInvoice) continue;
+
+      // has_invoice sin key es un estado inconsistente: la línea se muestra
+      // "sin factura", pero queda registrado para poder rastrearlo.
+      if (!line.invoiceS3Key) {
+        this.logger.error(
+          `La línea ${line.id} del reporte ${report.id} tiene has_invoice=true sin invoice_s3_key.`,
+        );
+        continue;
+      }
+
       try {
         line.invoiceUrl = await this.storage.getPresignedUrl(line.invoiceS3Key, 3600);
       } catch (err) {

@@ -18,18 +18,30 @@ export default async function FinanzasTarjetasPage({
   let cards: CreditCardItem[] = [];
   let reports: CardExpenseReportItem[] = [];
   let errorKind: ErrorKind | null = null;
+  let reportsErrorKind: ErrorKind | null = null;
 
-  try {
-    [cards, reports] = await Promise.all([
-      getCreditCards(true),
-      getAllCardReports({
-        ...(status ? { status } : {}),
-        ...(creditCardId ? { creditCardId } : {}),
-        limit: 100,
-      }).then((p) => p.items),
-    ]);
-  } catch (err) {
-    errorKind = errorKindOf(err);
+  // Cada pestaña se resuelve por separado: el maestro pide finanzas.tarjetas.read
+  // y los reportes finanzas.gastos-tarjeta.read. Con un Promise.all, un 403 en
+  // los reportes tumbaba también la pestaña de tarjetas.
+  const [cardsResult, reportsResult] = await Promise.allSettled([
+    getCreditCards(true),
+    getAllCardReports({
+      ...(status ? { status } : {}),
+      ...(creditCardId ? { creditCardId } : {}),
+      limit: 100,
+    }).then((p) => p.items),
+  ]);
+
+  if (cardsResult.status === 'fulfilled') {
+    cards = cardsResult.value;
+  } else {
+    errorKind = errorKindOf(cardsResult.reason);
+  }
+
+  if (reportsResult.status === 'fulfilled') {
+    reports = reportsResult.value;
+  } else {
+    reportsErrorKind = errorKindOf(reportsResult.reason);
   }
 
   return (
@@ -38,6 +50,7 @@ export default async function FinanzasTarjetasPage({
         cards={cards}
         reports={reports}
         errorKind={errorKind}
+        reportsErrorKind={reportsErrorKind}
         activeTab={tab === 'reportes' ? 'reportes' : 'tarjetas'}
         activeStatus={status ?? ''}
         activeCardId={creditCardId ?? ''}

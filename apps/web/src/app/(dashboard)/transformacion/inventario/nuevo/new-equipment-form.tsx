@@ -25,10 +25,12 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion | nul
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) { setSuggestions([]); setOpen(false); return; }
     try {
-      const res = await fetch(`/api/employees?search=${encodeURIComponent(q)}&limit=8`);
+      // /employees/picker en vez del listado de RRHH: ese exige
+      // rrhh.empleados.read y devolvía 403 a cualquier colaborador.
+      const res = await fetch(`/api/employees/picker?search=${encodeURIComponent(q)}&limit=8`);
       if (res.ok) {
-        const page = (await res.json()) as { data: EmployeeSuggestion[] };
-        setSuggestions(page.data ?? []);
+        const rows = (await res.json()) as EmployeeSuggestion[];
+        setSuggestions(Array.isArray(rows) ? rows : []);
         setOpen(true);
       }
     } catch { /* noop */ }

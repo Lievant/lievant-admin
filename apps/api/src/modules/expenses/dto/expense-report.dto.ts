@@ -85,9 +85,9 @@ export class CreateExpenseReportDto {
 }
 
 /**
- * Las líneas se reemplazan completas al guardar: la tabla se edita en línea y
- * mandar un diff por fila obligaría al cliente a llevar el estado de altas,
- * bajas y cambios.
+ * El cliente manda la tabla completa; el servidor la sincroniza por `id` de
+ * línea (las que llegan sin id son nuevas, las ausentes se borran). El id es
+ * indispensable: sin él no hay forma de conservar la factura ya adjunta.
  */
 export class UpdateExpenseReportDto extends CreateExpenseReportDto {}
 
