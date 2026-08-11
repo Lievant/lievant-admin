@@ -1,7 +1,8 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { HelpdeskCategory } from './entities/category.entity';
 import { HelpdeskSubcategory } from './entities/subcategory.entity';
 import { Ticket } from './entities/ticket.entity';
@@ -24,6 +25,9 @@ import { HelpdeskService } from './helpdesk.service';
       EmployeeRecord,
       User,
     ]),
+    // forwardRef: RRHH importa HelpDesk (abre el ticket de baja) y notificaciones
+    // ya participa en ciclos con ese mismo grupo de módulos.
+    forwardRef(() => NotificationsModule),
   ],
   controllers: [HelpdeskController],
   providers: [HelpdeskService, HelpdeskStorageService],

@@ -1935,7 +1935,9 @@ export interface TicketDetail extends TicketSummary {
   internalNotes: string | null;
   problemStatus: string | null;
   collaboratorConfirmation: boolean | null;
+  /** Id de auth.users; para mostrar en pantalla usa `escalatedToName`. */
   escalatedTo: string | null;
+  escalatedToName: string | null;
   escalationReason: string | null;
   timesReopened: number;
   estimatedDelivery: string | null;
@@ -2029,7 +2031,8 @@ export interface UpdateTicketPayload {
 }
 
 export interface EscalateTicketPayload {
-  escalateTo: string;
+  /** Id del expediente del director (lo da el buscador de empleados). */
+  escalateToEmployeeId: string;
   reason: string;
 }
 
