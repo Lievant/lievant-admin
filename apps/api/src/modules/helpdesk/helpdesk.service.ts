@@ -3,6 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { NotificationFlowsService } from '../notifications/notification-flows.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
@@ -60,6 +62,8 @@ export class HelpdeskService {
     // Los tickets automáticos llegan con correos, no con ids de usuario.
     @InjectRepository(User) private readonly usersRepo: Repository<User>,
     private readonly storage: HelpdeskStorageService,
+    private readonly notificationsService: NotificationsService,
+    private readonly notificationFlows: NotificationFlowsService,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -138,14 +142,29 @@ export class HelpdeskService {
   async findById(id: string) {
     const ticket = await this.ticketsRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
-    const [history, assignee, attachments] = await Promise.all([
+    // escalated_to guarda un id de auth.users; el nombre legible está en el
+    // expediente, y si el director no tiene expediente se cae al de la cuenta.
+    const [history, assignee, attachments, escalatedEmployee, escalatedUser] = await Promise.all([
       this.historyRepo.find({ where: { ticketId: id }, order: { createdAt: 'ASC' } }),
       ticket.assignedTo
         ? this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } })
         : Promise.resolve(null),
       this.getAttachments(id),
+      ticket.escalatedTo
+        ? this.employeesRepo.findOne({ where: { authUserId: ticket.escalatedTo } })
+        : Promise.resolve(null),
+      ticket.escalatedTo
+        ? this.usersRepo.findOne({ where: { id: ticket.escalatedTo } })
+        : Promise.resolve(null),
     ]);
-    return { ...ticket, history, assigneeName: assignee?.name ?? null, attachments };
+
+    return {
+      ...ticket,
+      history,
+      assigneeName: assignee?.name ?? null,
+      escalatedToName: escalatedEmployee?.fullName ?? escalatedUser?.name ?? null,
+      attachments,
+    };
   }
 
   async getAttachments(ticketId: string) {
@@ -239,6 +258,11 @@ export class HelpdeskService {
 
     const saved = await this.ticketsRepo.save(ticket);
     await this.addHistory(saved.id, user, 'creado', null, 'abierto');
+
+    if (saved.assignedTo) {
+      await this.notifyAssigned(saved, saved.assignedTo, user);
+    }
+
     return saved;
   }
 
@@ -314,6 +338,11 @@ export class HelpdeskService {
 
     const saved = await this.ticketsRepo.save(ticket);
     await this.addHistory(saved.id, requester, 'creado', null, 'abierto');
+
+    if (saved.assignedTo) {
+      await this.notifyAssigned(saved, saved.assignedTo, requester);
+    }
+
     return saved;
   }
 
@@ -344,6 +373,8 @@ export class HelpdeskService {
 
   async updateTicket(id: string, dto: UpdateTicketDto, user: User) {
     const ticket = await this.getOrFail(id);
+    // Se guarda antes del bucle: ahí abajo `ticket.assignedTo` ya es el nuevo.
+    const previousAssignee = ticket.assignedTo;
     const fields: Array<keyof UpdateTicketDto> = [
       'priority', 'assignedTo', 'diagnosis', 'solution',
       'internalNotes', 'problemStatus', 'subcategory',
@@ -365,16 +396,44 @@ export class HelpdeskService {
       ticket.estimatedDelivery = dto.estimatedDelivery ? new Date(dto.estimatedDelivery) : null;
     }
 
-    return this.ticketsRepo.save(ticket);
+    const saved = await this.ticketsRepo.save(ticket);
+
+    // Solo cuando el técnico cambió de verdad: reasignar al mismo no avisa.
+    if (saved.assignedTo && saved.assignedTo !== previousAssignee) {
+      await this.notifyAssigned(saved, saved.assignedTo, user);
+    }
+
+    return saved;
   }
 
+  /**
+   * El buscador manda el id del expediente del director; `escalated_to` es una
+   * FK a auth.users, así que se traduce aquí. Un director sin cuenta en la
+   * plataforma no puede recibir el ticket ni la notificación, y se rechaza con
+   * un mensaje que dice qué pasó en vez de romper la FK.
+   */
   async escalate(id: string, dto: EscalateTicketDto, user: User) {
     const ticket = await this.getOrFail(id);
-    ticket.escalatedTo = dto.escalateTo;
+
+    const director = await this.employeesRepo.findOne({
+      where: { id: dto.escalateToEmployeeId },
+    });
+    if (!director) throw new NotFoundException('El director seleccionado no existe.');
+    if (!director.authUserId) {
+      throw new BadRequestException(
+        `${director.fullName} no tiene usuario en la plataforma, así que no puede recibir el ticket.`,
+      );
+    }
+
+    ticket.escalatedTo = director.authUserId;
     ticket.escalationReason = dto.reason;
     await this.ticketsRepo.save(ticket);
-    await this.addHistory(id, user, 'escalado', null, dto.escalateTo, dto.reason);
-    return ticket;
+    // En la bitácora va el nombre, no el uuid: es lo que se lee en la línea de tiempo.
+    await this.addHistory(id, user, 'escalado', null, director.fullName, dto.reason);
+
+    await this.notifyEscalated(ticket, director, user, dto.reason);
+
+    return { ...ticket, escalatedToName: director.fullName };
   }
 
   // -----------------------------------------------------------------------
@@ -522,6 +581,156 @@ export class HelpdeskService {
     const ticket = await this.ticketsRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
     return ticket;
+  }
+
+  // -----------------------------------------------------------------------
+  // Notificaciones
+  // -----------------------------------------------------------------------
+
+  /** Las primeras líneas de la descripción, para dar contexto sin volcarla entera. */
+  private describeTicket(ticket: Ticket): string {
+    const resumen = ticket.description.slice(0, 200);
+    return ticket.description.length > 200 ? `${resumen}…` : resumen;
+  }
+
+  /**
+   * Avisa al director al que se escaló y confirma al solicitante.
+   *
+   * Nunca lanza: el ticket ya quedó escalado y guardado, y un fallo del correo o
+   * del socket no debe devolver un error al técnico que hizo la escalación.
+   */
+  private async notifyEscalated(
+    ticket: Ticket,
+    director: EmployeeRecord,
+    actor: User,
+    reason: string,
+  ): Promise<void> {
+    const prioridad = ticket.priority ?? 'sin prioridad';
+    const nota = reason.trim() ? `\nNota: ${reason.trim()}` : '';
+
+    try {
+      if (director.authUserId) {
+        await this.notificationsService.create({
+          recipientId: director.authUserId,
+          senderId: actor.id,
+          senderName: ticket.requesterName,
+          title: `Ticket escalado — ${ticket.displayId}`,
+          message:
+            `${ticket.requesterName} ha escalado el ticket ${ticket.displayId} a tu atención.\n` +
+            `Categoría: ${ticket.category} · Prioridad: ${prioridad}\n` +
+            `${this.describeTicket(ticket)}${nota}`,
+          type: 'accion_con_nota',
+          module: 'helpdesk',
+          entityId: ticket.id,
+          entityType: 'ticket',
+          actionUrl: `/transformacion/tickets/${ticket.id}`,
+        });
+      }
+
+      // Los tickets del sistema pueden no tener solicitante con cuenta.
+      if (ticket.requesterId) {
+        await this.notificationsService.create({
+          recipientId: ticket.requesterId,
+          senderName: 'Sistema',
+          title: `Ticket ${ticket.displayId} escalado correctamente`,
+          message:
+            `Tu ticket fue escalado a ${director.fullName}. ` +
+            `Recibirás actualizaciones cuando sea atendido.`,
+          type: 'informativa',
+          module: 'helpdesk',
+          entityId: ticket.id,
+          entityType: 'ticket',
+          actionUrl: `/transformacion/tickets/${ticket.id}`,
+        });
+      }
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar la escalación del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+
+    // El flujo configurable suma destinatarios (Dirección, TI) sin tocar código.
+    await this.notificationFlows.notify('helpdesk', 'ticket_escalado', {
+      requesterId: ticket.requesterId,
+      actorId: actor.id,
+      entityId: ticket.id,
+      entityType: 'ticket',
+      senderName: ticket.requesterName,
+      title: `Ticket escalado — ${ticket.displayId}`,
+      message:
+        `${ticket.requesterName} escaló el ticket ${ticket.displayId} a ${director.fullName}.\n` +
+        `Categoría: ${ticket.category} · Prioridad: ${prioridad}${nota}`,
+      actionUrl: `/transformacion/tickets/${ticket.id}`,
+    });
+  }
+
+  /**
+   * Avisa al técnico que acaba de quedar como responsable del ticket.
+   *
+   * `assigned_to` apunta a la mesa de servicio (helpdesk.ticket_assignees), que
+   * no es auth.users: el agente se resuelve por correo y, si no tiene cuenta en
+   * la plataforma, se registra y se sigue sin notificación.
+   */
+  private async notifyAssigned(ticket: Ticket, assigneeId: string, actor: User): Promise<void> {
+    try {
+      const assignee = await this.assigneesRepo.findOne({ where: { id: assigneeId } });
+      if (!assignee?.email) {
+        this.logger.warn(
+          `El agente ${assigneeId} del ticket ${ticket.displayId} no tiene correo; sin notificación.`,
+        );
+        return;
+      }
+
+      const techUser = await this.usersRepo.findOne({ where: { email: assignee.email } });
+      if (!techUser) {
+        this.logger.warn(
+          `${assignee.email} no tiene usuario en la plataforma; el ticket ${ticket.displayId} queda asignado sin notificación.`,
+        );
+        return;
+      }
+
+      // Quien se asigna a sí mismo un ticket ya sabe que lo tomó.
+      if (techUser.id === actor.id) return;
+
+      await this.notificationsService.create({
+        recipientId: techUser.id,
+        senderId: actor.id,
+        senderName: actor.name,
+        title: `Ticket asignado — ${ticket.displayId}`,
+        message:
+          `Se te ha asignado el ticket ${ticket.displayId}.\n\n` +
+          `Solicitante: ${ticket.requesterName}\n` +
+          `Categoría: ${ticket.category}\n` +
+          `Prioridad: ${ticket.priority ?? 'sin prioridad'}\n` +
+          `${this.describeTicket(ticket)}`,
+        type: 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        actionUrl: `/transformacion/tickets/${ticket.id}`,
+      });
+
+      await this.notificationFlows.notify('helpdesk', 'ticket_asignado', {
+        requesterId: ticket.requesterId,
+        actorId: actor.id,
+        entityId: ticket.id,
+        entityType: 'ticket',
+        senderName: actor.name,
+        title: `Ticket asignado — ${ticket.displayId}`,
+        message:
+          `El ticket ${ticket.displayId} quedó asignado a ${assignee.name}.\n` +
+          `Solicitante: ${ticket.requesterName} · Prioridad: ${ticket.priority ?? 'sin prioridad'}`,
+        actionUrl: `/transformacion/tickets/${ticket.id}`,
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar la asignación del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async addHistory(
