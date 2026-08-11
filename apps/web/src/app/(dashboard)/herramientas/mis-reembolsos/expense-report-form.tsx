@@ -167,6 +167,9 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
       periodStart,
       periodEnd,
       lines: usable.map((l, index) => ({
+        // El id viaja para que el servidor actualice la línea en su lugar y no
+        // pierda la factura que ya se subió contra ella.
+        ...(l.persistedId ? { id: l.persistedId } : {}),
         lineDate: l.lineDate,
         vendor: l.vendor.trim(),
         ...(l.conceptId ? { conceptId: l.conceptId } : {}),

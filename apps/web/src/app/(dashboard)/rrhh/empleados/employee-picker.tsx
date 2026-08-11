@@ -48,13 +48,18 @@ export function EmployeePicker({ label, value, onSelect, id }: EmployeePickerPro
   const [open, setOpen] = useState(false);
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Va contra /employees/picker, no contra el listado de RRHH: ese exige el
+   * permiso rrhh.empleados.read y devolvía 403 a cualquier colaborador que
+   * abriera un reembolso o una solicitud de vacaciones.
+   */
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) { setSuggestions([]); setOpen(false); return; }
     try {
-      const res = await fetch(`/api/employees?search=${encodeURIComponent(q)}&limit=8`);
+      const res = await fetch(`/api/employees/picker?search=${encodeURIComponent(q)}&limit=8`);
       if (res.ok) {
-        const page = (await res.json()) as { data: EmployeePickerValue[] };
-        setSuggestions(page.data ?? []);
+        const rows = (await res.json()) as EmployeePickerValue[];
+        setSuggestions(Array.isArray(rows) ? rows : []);
         setOpen(true);
       }
     } catch { /* noop */ }
