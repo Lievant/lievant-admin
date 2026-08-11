@@ -7,6 +7,10 @@ import { cn } from '@/lib/utils';
 import type { TicketAssignee, TicketAttachmentItem, TicketDetail, TicketPriority, TicketStatus } from '@/lib/api';
 import { ChevronLeftIcon } from '@/components/icons';
 import {
+  EmployeePicker,
+  type EmployeePickerValue,
+} from '@/app/(dashboard)/rrhh/empleados/employee-picker';
+import {
   escalateAction,
   updatePriorityAction,
   updateStatusAction,
@@ -93,7 +97,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
   const [solution, setSolution] = useState(ticket.solution ?? '');
   const [internalNotes, setInternalNotes] = useState(ticket.internalNotes ?? '');
   const [priority, setPriority] = useState<TicketPriority | ''>(ticket.priority ?? '');
-  const [escalateTo, setEscalateTo] = useState('');
+  // El director se elige del directorio: la API necesita su id de expediente,
+  // no un nombre escrito a mano.
+  const [escalateTo, setEscalateTo] = useState<EmployeePickerValue | null>(null);
   const [escalateReason, setEscalateReason] = useState('');
   const [showEscalate, setShowEscalate] = useState(false);
 
@@ -135,9 +141,16 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
     if (!escalateTo || !escalateReason) return;
     setError(null);
     startTransition(async () => {
-      const r = await escalateAction(ticket.id, { escalateTo, reason: escalateReason });
-      if (r.success) { setShowEscalate(false); refresh(); }
-      else setError(r.error ?? 'Error.');
+      const r = await escalateAction(ticket.id, {
+        escalateToEmployeeId: escalateTo.id,
+        reason: escalateReason,
+      });
+      if (r.success) {
+        setShowEscalate(false);
+        setEscalateTo(null);
+        setEscalateReason('');
+        refresh();
+      } else setError(r.error ?? 'Error.');
     });
   }
 
@@ -308,7 +321,11 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                 <Row label="Abierto en nombre de" value={ticket.openedOnBehalfOf} />
               )}
               {ticket.escalatedTo && (
-                <Row label="Escalado a" value={ticket.escalatedTo} accent="text-red-600" />
+                <Row
+                  label="Escalado a"
+                  value={ticket.escalatedToName ?? ticket.escalatedTo}
+                  accent="text-red-600"
+                />
               )}
             </dl>
           </div>
@@ -488,12 +505,11 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                   </button>
                 ) : (
                   <div className="space-y-1.5">
-                    <input
-                      type="text"
+                    <EmployeePicker
+                      label="Nombre del director"
                       value={escalateTo}
-                      onChange={(e) => setEscalateTo(e.target.value)}
-                      placeholder="Nombre del director…"
-                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs focus:outline-none"
+                      onSelect={setEscalateTo}
+                      id={`escalate-to-${ticket.id}`}
                     />
                     <textarea
                       value={escalateReason}
