@@ -38,9 +38,10 @@ import { TerminationData } from './entities/termination-data.entity';
     forwardRef(() => NotificationsModule),
   ],
   // EmployeeAssignmentSearchController debe registrarse antes que
-  // EmployeesController: su ruta estática GET /employees/search-for-assignment
-  // sería capturada por el GET /employees/:id de EmployeesController si se
-  // registrara después (Nest/Express hacen match por orden de registro).
+  // EmployeesController: sus rutas estáticas (GET /employees/search-for-assignment,
+  // GET /employees/picker) serían capturadas por el GET /employees/:id de
+  // EmployeesController si se registrara después (Nest/Express hacen match por
+  // orden de registro).
   controllers: [EmployeeAssignmentSearchController, EmployeesController],
   providers: [EmployeesService, DocumentsService, EmployeeStorageService, EmployeePhotosService],
   exports: [EmployeesService],

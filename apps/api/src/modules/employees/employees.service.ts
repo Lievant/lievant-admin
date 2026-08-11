@@ -90,7 +90,12 @@ export class EmployeesService {
     private readonly notificationFlows: NotificationFlowsService,
   ) {}
 
-  async searchForAssignment(q: string, limit = 10) {
+  /**
+   * Directorio mínimo para los buscadores de la interfaz (asignar equipo,
+   * elegir autorizador, etc.). Solo datos de identificación —ni nómina ni datos
+   * personales— para poder exponerse sin el permiso de RRHH.
+   */
+  async searchDirectory(q: string, limit = 10) {
     const term = q.trim();
     if (!term) return [];
 
@@ -109,6 +114,7 @@ export class EmployeesService {
       corporateEmail: e.corporateEmail,
       area: e.area,
       position: e.position,
+      location: e.location,
     }));
   }
 
