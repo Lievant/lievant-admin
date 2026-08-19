@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -7,13 +7,22 @@ import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { UploadVendorDocumentDto } from './dto/upload-vendor-document.dto';
+import {
+  PresignedUploadDto,
+  RegisterVendorDocumentDto,
+  UploadVendorDocumentDto,
+} from './dto/upload-vendor-document.dto';
+import {
+  assertKeyInPrefix,
+  assertUploadAllowed,
+  MAX_UPLOAD_BYTES,
+} from '../../common/s3-upload.util';
 import { Invoice, InvoiceStatus } from './entities/invoice.entity';
 import { PurchaseOrder } from './entities/purchase-order.entity';
 import { Vendor, VendorStatus } from './entities/vendor.entity';
 import { VendorDocument } from './entities/vendor-document.entity';
 import { VendorProduct } from './entities/vendor-product.entity';
-import { VendorStorageService } from './vendor-storage.service';
+import { ALLOWED_DOCUMENT_MIME_TYPES, VendorStorageService } from './vendor-storage.service';
 // Se reutiliza el cursor de clientes: mismo formato base64url { createdAt, id }
 // para que ambas pantallas paginen igual y no existan dos codificaciones.
 import { decodeCursor, encodeCursor } from '../clients/utils/cursor.util';
@@ -359,6 +368,55 @@ export class VendorsService {
       name: dto.name,
       s3Key,
       fileSize: file.size,
+      uploadedBy: userId,
+    });
+
+    const saved = await this.documentsRepository.save(document);
+    const downloadUrl = await this.storageService.getPresignedUrl(saved.s3Key);
+    return { ...saved, downloadUrl };
+  }
+
+  /** Paso 1 del upload directo: valida tipo/tamaño declarados y firma la URL. */
+  async createPresignedUpload(
+    vendorId: string,
+    dto: PresignedUploadDto,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    await this.getVendorOrFail(vendorId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+
+    return this.storageService.getPresignedUploadUrl(dto.fileName, dto.fileType, vendorId);
+  }
+
+  /**
+   * Paso 3: el objeto ya está en S3. Revalida tipo, pertenencia de la key y el
+   * tamaño REAL del objeto, porque el declarado viene del navegador.
+   */
+  async registerDocument(
+    vendorId: string,
+    dto: RegisterVendorDocumentDto,
+    userId: string,
+  ): Promise<VendorDocumentWithUrl> {
+    await this.getVendorOrFail(vendorId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+    assertKeyInPrefix(dto.s3Key, VendorStorageService.documentPrefix(vendorId));
+
+    const actualSize = await this.storageService.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.storageService.deleteDocument(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    const document = this.documentsRepository.create({
+      vendorId,
+      type: dto.type,
+      name: dto.name,
+      s3Key: dto.s3Key,
+      fileSize: actualSize,
       uploadedBy: userId,
     });
 

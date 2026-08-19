@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
@@ -13,7 +19,16 @@ import { UpdateCompensationDto } from './dto/compensation.dto';
 import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from './dto/emergency-contact.dto';
 import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
-import { UploadEmployeeDocumentDto } from './dto/upload-employee-document.dto';
+import {
+  PresignedUploadDto,
+  RegisterEmployeeDocumentDto,
+  UploadEmployeeDocumentDto,
+} from './dto/upload-employee-document.dto';
+import {
+  assertKeyInPrefix,
+  assertUploadAllowed,
+  MAX_UPLOAD_BYTES,
+} from '../../common/s3-upload.util';
 import { Compensation } from './entities/compensation.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { EmployeeDocument } from './entities/employee-document.entity';
@@ -23,7 +38,7 @@ import { TerminationData } from './entities/termination-data.entity';
 import { DocStatus, EmployeeListItem, EmployeesPaginatedResult, EmployeeStats, ExpiringContractItem } from './interfaces/employee-list-item.interface';
 import { BirthdayReportItem } from './interfaces/birthday-report.interface';
 import { decodeCursor, encodeCursor } from './utils/cursor.util';
-import { EmployeeStorageService } from './employee-storage.service';
+import { ALLOWED_DOCUMENT_MIME_TYPES, EmployeeStorageService } from './employee-storage.service';
 
 /**
  * Correos que abren y reciben el ticket de baja.
@@ -214,16 +229,16 @@ export class EmployeesService {
       this.employeesRepository.create({
         ...dto,
         displayId,
-        fullName: dto.fullName.toUpperCase().trim(),
-        position: dto.position.toUpperCase().trim(),
-        companyName: dto.companyName?.toUpperCase().trim() ?? dto.companyName,
-        area: dto.area?.toUpperCase().trim() ?? null,
-        division: dto.division?.toUpperCase().trim() ?? null,
-        location: dto.location?.toUpperCase().trim() ?? null,
-        directReportTo: dto.directReportTo?.toUpperCase().trim() ?? null,
+        fullName: dto.fullName.trim(),
+        position: dto.position.trim(),
+        companyName: dto.companyName?.trim() ?? dto.companyName,
+        area: dto.area?.trim() ?? null,
+        division: dto.division?.trim() ?? null,
+        location: dto.location?.trim() ?? null,
+        directReportTo: dto.directReportTo?.trim() ?? null,
         directReportToId: dto.directReportToId ?? null,
         status: dto.status ?? EmployeeStatus.ACTIVE,
-        nationality: dto.nationality?.toUpperCase().trim() ?? 'MEXICANA',
+        nationality: dto.nationality?.trim() ?? 'MEXICANA',
       }),
     );
 
@@ -263,18 +278,18 @@ export class EmployeesService {
 
     if (dto.codNom !== undefined) record.codNom = dto.codNom ?? null;
     if (dto.companyCode !== undefined) record.companyCode = dto.companyCode;
-    if (dto.companyName !== undefined) record.companyName = dto.companyName?.toUpperCase().trim() ?? dto.companyName;
-    if (dto.division !== undefined) record.division = dto.division?.toUpperCase().trim() ?? null;
-    if (dto.area !== undefined) record.area = dto.area?.toUpperCase().trim() ?? null;
+    if (dto.companyName !== undefined) record.companyName = dto.companyName?.trim() ?? dto.companyName;
+    if (dto.division !== undefined) record.division = dto.division?.trim() ?? null;
+    if (dto.area !== undefined) record.area = dto.area?.trim() ?? null;
     if (dto.project !== undefined) record.project = dto.project ?? null;
     if (dto.level !== undefined) record.level = dto.level ?? null;
-    if (dto.position !== undefined) record.position = dto.position.toUpperCase().trim();
+    if (dto.position !== undefined) record.position = dto.position.trim();
     if (dto.emailSignature !== undefined) record.emailSignature = dto.emailSignature ?? null;
-    if (dto.location !== undefined) record.location = dto.location?.toUpperCase().trim() ?? null;
+    if (dto.location !== undefined) record.location = dto.location?.trim() ?? null;
     if (dto.modality !== undefined) record.modality = dto.modality ?? null;
     if (dto.contractSchema !== undefined) record.contractSchema = dto.contractSchema ?? null;
-    if (dto.fullName !== undefined) record.fullName = dto.fullName.toUpperCase().trim();
-    if (dto.directReportTo !== undefined) record.directReportTo = dto.directReportTo?.toUpperCase().trim() ?? null;
+    if (dto.fullName !== undefined) record.fullName = dto.fullName.trim();
+    if (dto.directReportTo !== undefined) record.directReportTo = dto.directReportTo?.trim() ?? null;
     if (dto.directReportToId !== undefined) record.directReportToId = dto.directReportToId ?? null;
     if (dto.gender !== undefined) record.gender = dto.gender ?? null;
     if (dto.nationality !== undefined) record.nationality = dto.nationality ?? null;
@@ -575,6 +590,59 @@ export class EmployeesService {
         name: dto.name,
         s3Key,
         fileSize: file.size,
+        uploadedBy: userId,
+      }),
+    );
+    const downloadUrl = await this.storageService.getPresignedUrl(doc.s3Key);
+    const uploader = await this.usersRepository.findOne({
+      where: { id: userId },
+      select: { id: true, name: true },
+    });
+    return { ...doc, uploadedByName: uploader?.name ?? null, downloadUrl };
+  }
+
+  /** Paso 1 del upload directo: valida tipo/tamaño declarados y firma la URL. */
+  async createPresignedUpload(
+    employeeId: string,
+    dto: PresignedUploadDto,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    await this.getEmployeeOrFail(employeeId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+
+    return this.storageService.getPresignedUploadUrl(dto.fileName, dto.fileType, employeeId);
+  }
+
+  /**
+   * Paso 3: el objeto ya está en S3. Revalida tipo, pertenencia de la key y el
+   * tamaño REAL del objeto, porque el declarado viene del navegador.
+   */
+  async registerDocument(
+    employeeId: string,
+    dto: RegisterEmployeeDocumentDto,
+    userId: string,
+  ): Promise<EmployeeDocument & { downloadUrl?: string; uploadedByName: string | null }> {
+    await this.getEmployeeOrFail(employeeId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+    assertKeyInPrefix(dto.s3Key, EmployeeStorageService.documentPrefix(employeeId));
+
+    const actualSize = await this.storageService.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.storageService.deleteDocument(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    const doc = await this.documentsRepository.save(
+      this.documentsRepository.create({
+        employeeId,
+        type: dto.type,
+        name: dto.name,
+        s3Key: dto.s3Key,
+        fileSize: actualSize,
         uploadedBy: userId,
       }),
     );

@@ -84,6 +84,9 @@ module "s3" {
   source      = "../../modules/s3"
   name_prefix = local.name_prefix
   environment = "prod"
+
+  # Requisito del upload directo a S3 vía URL prefirmada.
+  upload_allowed_origins = ["https://${local.app_domain}"]
 }
 
 module "dynamodb" {

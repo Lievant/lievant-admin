@@ -4,6 +4,8 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CatalogItem } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
+import { UploadProgress } from '@/components/upload-progress';
+import { MAX_UPLOAD_LABEL, uploadViaPresignedUrl, validateUploadSize } from '@/lib/presigned-upload';
 
 export function UploadEmployeeDocumentDialog({
   employeeId,
@@ -18,6 +20,7 @@ export function UploadEmployeeDocumentDialog({
   const [name, setName] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -43,33 +46,29 @@ export function UploadEmployeeDocumentDialog({
       return;
     }
 
+    const sizeError = validateUploadSize(file);
+    if (sizeError) {
+      setError(sizeError);
+      return;
+    }
+
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', docType);
-      formData.append('name', name.trim());
-
+      setProgress(0);
       try {
-        const res = await fetch(`/api/employees/${employeeId}/documents`, {
-          method: 'POST',
-          body: formData,
+        await uploadViaPresignedUrl({
+          presignUrl: `/api/employees/${employeeId}/documents/presigned-upload`,
+          registerUrl: `/api/employees/${employeeId}/documents/register`,
+          file,
+          extra: { type: docType, name: name.trim() },
+          onProgress: setProgress,
         });
-
-        if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
-          const message = body?.message
-            ? Array.isArray(body.message)
-              ? body.message.join(', ')
-              : body.message
-            : 'No se pudo cargar el documento.';
-          setError(message);
-          return;
-        }
 
         router.refresh();
         onClose();
-      } catch {
-        setError('No se pudo cargar el documento.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el documento.');
+      } finally {
+        setProgress(null);
       }
     });
   }
@@ -131,13 +130,19 @@ export function UploadEmployeeDocumentDialog({
               id="emp-doc-file"
               type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp,.svg"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              onChange={(e) => {
+                const selected = e.target.files?.[0] ?? null;
+                setFile(selected);
+                setError(selected ? validateUploadSize(selected) : null);
+              }}
               className="text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-600 hover:file:bg-slate-200"
             />
             <p className="text-xs text-slate-400">
-              PDF, Word, Excel, PowerPoint, TXT e imágenes · Máximo 20 MB
+              PDF, Word, Excel, PowerPoint, TXT e imágenes · Máximo {MAX_UPLOAD_LABEL}
             </p>
           </div>
+
+          {progress !== null && <UploadProgress percent={progress} />}
 
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>

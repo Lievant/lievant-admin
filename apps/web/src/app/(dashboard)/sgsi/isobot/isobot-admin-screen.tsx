@@ -12,6 +12,11 @@ import {
   SitemapIcon,
   TrashIcon,
 } from '@/components/icons';
+import {
+  MAX_UPLOAD_LABEL,
+  uploadViaPresignedUrl,
+  validateUploadSize,
+} from '@/lib/presigned-upload';
 
 // ── tipos ────────────────────────────────────────────────────────────────────
 
@@ -67,37 +72,6 @@ function formatDate(iso: string | null): string {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
-  });
-}
-
-/**
- * Sube con XMLHttpRequest en lugar de fetch: la reindexación de un DOCX grande
- * tarda decenas de segundos y sin el evento `progress` de la subida el usuario
- * no tiene señal de que algo esté pasando.
- */
-function subirConProgreso(
-  url: string,
-  method: 'POST' | 'PUT',
-  form: FormData,
-  onProgress: (pct: number) => void,
-): Promise<{ ok: boolean; body: unknown }> {
-  return new Promise((resolve) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open(method, url);
-    xhr.upload.addEventListener('progress', (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    });
-    xhr.addEventListener('load', () => {
-      let body: unknown = null;
-      try {
-        body = JSON.parse(xhr.responseText) as unknown;
-      } catch {
-        body = null;
-      }
-      resolve({ ok: xhr.status >= 200 && xhr.status < 300, body });
-    });
-    xhr.addEventListener('error', () => resolve({ ok: false, body: null }));
-    xhr.send(form);
   });
 }
 
@@ -498,30 +472,36 @@ function UploadModal({
 
   async function submit() {
     if (!file || fase !== 'idle') return;
+
+    const errorTamano = validateUploadSize(file);
+    if (errorTamano) {
+      setError(errorTamano);
+      return;
+    }
+
     setError(null);
     setFase('subiendo');
     setPct(0);
 
-    const form = new FormData();
-    form.append('file', file);
-    if (title.trim()) form.append('title', title.trim());
-    if (macroprocess.trim()) form.append('macroprocess', macroprocess.trim());
-    if (category.trim()) form.append('category', category.trim());
-
-    const { ok, body } = await subirConProgreso(
-      '/api/isobot/admin/documents',
-      'POST',
-      form,
-      (p) => {
-        setPct(p);
-        // Al llegar a 100 la transferencia terminó pero el servidor sigue
-        // extrayendo texto y generando embeddings, que es la parte lenta.
-        if (p >= 100) setFase('indexando');
-      },
-    );
-
-    if (!ok) {
-      setError(mensajeDeError(body, 'No se pudo subir el documento.'));
+    try {
+      // El PUT va directo a S3 (no pasa por Amplify); después el API descarga el
+      // objeto para extraer texto y generar embeddings, que es la parte lenta.
+      await uploadViaPresignedUrl({
+        presignUrl: '/api/isobot/admin/documents/presigned-upload',
+        registerUrl: '/api/isobot/admin/documents/register',
+        file,
+        extra: {
+          ...(title.trim() ? { title: title.trim() } : {}),
+          ...(macroprocess.trim() ? { macroprocess: macroprocess.trim() } : {}),
+          ...(category.trim() ? { category: category.trim() } : {}),
+        },
+        onProgress: (p) => {
+          setPct(p);
+          if (p >= 100) setFase('indexando');
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo subir el documento.');
       setFase('idle');
       return;
     }
@@ -549,7 +529,9 @@ function UploadModal({
             }}
             className="w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-navy"
           />
-          <p className="mt-1 text-xs text-slate-400">PDF, DOCX o XLSX · máximo 20 MB</p>
+          <p className="mt-1 text-xs text-slate-400">
+            PDF, DOCX o XLSX · máximo {MAX_UPLOAD_LABEL}
+          </p>
         </div>
 
         <div>
@@ -640,25 +622,30 @@ function ReplaceModal({
 
   async function submit() {
     if (!file || fase !== 'idle') return;
+
+    const errorTamano = validateUploadSize(file);
+    if (errorTamano) {
+      setError(errorTamano);
+      return;
+    }
+
     setError(null);
     setFase('subiendo');
     setPct(0);
 
-    const form = new FormData();
-    form.append('file', file);
-
-    const { ok, body } = await subirConProgreso(
-      `/api/isobot/admin/documents/${documento.id}`,
-      'PUT',
-      form,
-      (p) => {
-        setPct(p);
-        if (p >= 100) setFase('indexando');
-      },
-    );
-
-    if (!ok) {
-      setError(mensajeDeError(body, 'No se pudo reemplazar el documento.'));
+    try {
+      await uploadViaPresignedUrl({
+        presignUrl: '/api/isobot/admin/documents/presigned-upload',
+        registerUrl: `/api/isobot/admin/documents/${documento.id}/register`,
+        registerMethod: 'PUT',
+        file,
+        onProgress: (p) => {
+          setPct(p);
+          if (p >= 100) setFase('indexando');
+        },
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo reemplazar el documento.');
       setFase('idle');
       return;
     }
