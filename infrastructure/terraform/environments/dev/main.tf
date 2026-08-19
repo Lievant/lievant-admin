@@ -49,6 +49,10 @@ module "s3" {
   source      = "../../modules/s3"
   name_prefix = "lievant-admin-dev"
   environment = "dev"
+
+  # Requisito del upload directo a S3 vía URL prefirmada. Incluye localhost
+  # porque el frontend de desarrollo corre fuera de AWS.
+  upload_allowed_origins = ["https://dev.system.lievant.com", "http://localhost:3000"]
 }
 
 module "cognito" {

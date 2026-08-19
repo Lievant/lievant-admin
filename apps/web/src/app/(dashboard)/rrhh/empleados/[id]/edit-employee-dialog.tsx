@@ -164,7 +164,7 @@ export function EditEmployeeDialog({
 
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
           <div className="grid grid-cols-2 gap-4">
-            <TextField id="employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} uppercase />
+            <TextField id="employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} />
             <SelectField
               id="employee-status"
               label="Estado"
@@ -184,11 +184,11 @@ export function EditEmployeeDialog({
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
               <SelectField id="employee-division" label="División" value={division} onChange={setDivision} options={divisionOptions} />
-              <TextField id="employee-area" label="Área" value={area} onChange={setArea} uppercase />
+              <TextField id="employee-area" label="Área" value={area} onChange={setArea} />
               <TextField id="employee-project" label="Proyecto" value={project} onChange={setProject} />
             </div>
             <div className="mt-4 grid grid-cols-3 gap-4">
-              <TextField id="employee-position" label="Puesto" value={position} onChange={setPosition} uppercase />
+              <TextField id="employee-position" label="Puesto" value={position} onChange={setPosition} />
               <SelectField id="employee-level" label="Nivel" value={level} onChange={setLevel} options={orgLevelOptions} />
               <EmployeePicker
                 id="employee-direct-report"
@@ -225,7 +225,7 @@ export function EditEmployeeDialog({
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos laborales</p>
             <div className="grid grid-cols-3 gap-4">
               <SelectField id="employee-gender" label="Género" value={gender} onChange={setGender} options={GENDERS} />
-              <TextField id="employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} uppercase />
+              <TextField id="employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} />
               <TextField id="employee-seniority-date" label="Fecha de antigüedad" type="date" value={seniorityDate} onChange={setSeniorityDate} />
             </div>
             <div className="mt-4 grid grid-cols-2 gap-4">

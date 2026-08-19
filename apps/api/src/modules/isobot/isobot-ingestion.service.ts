@@ -9,6 +9,8 @@ import { Repository } from 'typeorm';
 import { DocumentChunk } from './entities/document-chunk.entity';
 import { IsobotDocument } from './entities/document.entity';
 import { IsobotStorageService } from './isobot-storage.service';
+import { PresignedUploadDto, RegisterAdminDocumentDto } from './dto/admin-documents.dto';
+import { assertKeyInPrefix, MAX_UPLOAD_BYTES } from '../../common/s3-upload.util';
 // Mismo formato de cursor que clientes y proveedores.
 import { decodeCursor, encodeCursor } from '../clients/utils/cursor.util';
 import { getOpenAI } from './openai-client';
@@ -206,6 +208,10 @@ export class IsobotIngestionService {
    *
    * `documentIdExistente` fuerza el destino en el reemplazo; sin él se hace
    * upsert por file_name, que es la clave única de la tabla.
+   *
+   * `s3KeyExistente` se usa cuando el navegador ya subió el archivo directo a S3
+   * vía URL prefirmada: en ese caso no hay que volver a subirlo, o el objeto que
+   * subió el navegador quedaría huérfano.
    */
   private async indexar(
     buffer: Buffer,
@@ -214,11 +220,14 @@ export class IsobotIngestionService {
     fileSize: number,
     metadata: DocumentMetadata = {},
     documentIdExistente?: string,
+    s3KeyExistente?: string,
   ): Promise<ProcessDocumentResult> {
     const text = await this.extractText(buffer, fileType);
     const title = metadata.title ?? path.basename(fileName, path.extname(fileName));
 
-    const s3Key = await this.storage.uploadDocument(buffer, fileName, MIME_TYPES[fileType]!);
+    const s3Key =
+      s3KeyExistente ??
+      (await this.storage.uploadDocument(buffer, fileName, MIME_TYPES[fileType]!));
 
     let documentId: string;
     if (documentIdExistente) {
@@ -307,6 +316,55 @@ export class IsobotIngestionService {
   }
 
   /**
+   * Paso 1 del upload directo: valida extensión y tamaño y firma la URL. Se
+   * valida por extensión, igual que el flujo multipart, porque el navegador
+   * reporta application/octet-stream para .docx con frecuencia.
+   */
+  async createPresignedUpload(dto: PresignedUploadDto): Promise<{ uploadUrl: string; s3Key: string }> {
+    this.fileTypeFromPath(dto.fileName);
+
+    if (dto.fileSize > MAX_UPLOAD_BYTES) {
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    return this.storage.getPresignedUploadUrl(dto.fileName, dto.fileType);
+  }
+
+  /**
+   * Paso 3: el objeto ya está en S3. A diferencia de los otros módulos, aquí el
+   * API tiene que descargarlo para extraer texto y generar embeddings — el
+   * upload directo evita el límite de Amplify, no el trabajo de ingesta.
+   */
+  async registerDocument(dto: RegisterAdminDocumentDto): Promise<ProcessDocumentResult> {
+    const fileType = this.fileTypeFromPath(dto.fileName);
+    assertKeyInPrefix(dto.s3Key, IsobotStorageService.documentPrefix());
+
+    const actualSize = await this.storage.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.storage.deleteDocument(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    const buffer = await this.storage.getObjectBuffer(dto.s3Key);
+
+    // exactOptionalPropertyTypes: las claves ausentes no pueden ir como undefined.
+    const metadata: DocumentMetadata = {
+      ...(dto.title !== undefined ? { title: dto.title } : {}),
+      ...(dto.macroprocess !== undefined ? { macroprocess: dto.macroprocess } : {}),
+      ...(dto.category !== undefined ? { category: dto.category } : {}),
+    };
+
+    return this.indexar(buffer, dto.fileName, fileType, actualSize, metadata, undefined, dto.s3Key);
+  }
+
+  /**
    * Reemplaza el archivo de un documento y lo reindexa por completo.
    *
    * El archivo anterior se borra de S3 después de subir el nuevo: si el borrado
@@ -329,6 +387,64 @@ export class IsobotIngestionService {
     );
 
     if (claveAnterior) {
+      try {
+        await this.storage.deleteDocument(claveAnterior);
+      } catch {
+        // El documento ya apunta al archivo nuevo; un huérfano en S3 no debe
+        // hacer fallar la operación.
+      }
+    }
+
+    return resultado;
+  }
+
+  /**
+   * Reemplazo con upload directo: el navegador ya subió el archivo nuevo a S3 y
+   * aquí se descarga para reindexar. Mismo orden que `replaceDocument`: el
+   * archivo anterior se borra al final para no dejar el documento sin archivo si
+   * la reindexación falla.
+   */
+  async registerReplacement(
+    id: string,
+    dto: RegisterAdminDocumentDto,
+  ): Promise<ProcessDocumentResult> {
+    const documento = await this.documentsRepo.findOne({ where: { id } });
+    if (!documento) throw new NotFoundException(`Documento ${id} no encontrado`);
+
+    const fileType = this.fileTypeFromPath(dto.fileName);
+    assertKeyInPrefix(dto.s3Key, IsobotStorageService.documentPrefix());
+
+    const actualSize = await this.storage.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.storage.deleteDocument(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    const claveAnterior = documento.s3Key;
+    const buffer = await this.storage.getObjectBuffer(dto.s3Key);
+
+    const metadata: DocumentMetadata = {
+      ...(documento.title !== null ? { title: documento.title } : {}),
+      ...(documento.macroprocess !== null ? { macroprocess: documento.macroprocess } : {}),
+      ...(documento.category !== null ? { category: documento.category } : {}),
+    };
+
+    const resultado = await this.indexar(
+      buffer,
+      documento.fileName, // conserva el nombre: file_name es UNIQUE y la clave del documento
+      fileType,
+      actualSize,
+      metadata,
+      id,
+      dto.s3Key,
+    );
+
+    if (claveAnterior && claveAnterior !== dto.s3Key) {
       try {
         await this.storage.deleteDocument(claveAnterior);
       } catch {

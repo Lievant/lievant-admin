@@ -25,7 +25,7 @@ import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
-import { UploadDocumentDto } from './dto/document.dto';
+import { PresignedUploadDto, RegisterDocumentDto, UploadDocumentDto } from './dto/document.dto';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -134,6 +134,28 @@ export class ClientsController {
       throw new BadRequestException('El archivo es obligatorio');
     }
     return this.clientsService.addDocument(id, file, dto, user.id);
+  }
+
+  /**
+   * Paso 1 del upload directo a S3. Devuelve { uploadUrl, s3Key } para que el
+   * navegador haga PUT contra S3 sin pasar por la compute de Amplify.
+   */
+  @Post(':id/documents/presigned-upload')
+  createPresignedUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PresignedUploadDto,
+  ) {
+    return this.clientsService.createPresignedUpload(id, dto);
+  }
+
+  /** Paso 3: registra en BD el objeto que el navegador ya subió a S3. */
+  @Post(':id/documents/register')
+  registerDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.clientsService.registerDocument(id, dto, user.id);
   }
 
   @Delete('documents/:docId')

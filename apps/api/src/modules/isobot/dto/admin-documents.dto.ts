@@ -1,5 +1,5 @@
-import { Transform } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class QueryAdminDocumentsDto {
   @IsOptional()
@@ -44,4 +44,38 @@ export class UploadAdminDocumentDto {
   @IsString()
   @MaxLength(100)
   category?: string;
+}
+
+/** Paso 1: el frontend pide la URL prefirmada antes de subir a S3. */
+export class PresignedUploadDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  fileName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  fileType!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  fileSize!: number;
+}
+
+/** Paso 3: el objeto ya está en S3; el API lo descarga para indexarlo. */
+export class RegisterAdminDocumentDto extends UploadAdminDocumentDto {
+  @IsString()
+  @IsNotEmpty()
+  s3Key!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(255)
+  fileName!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  fileSize!: number;
 }

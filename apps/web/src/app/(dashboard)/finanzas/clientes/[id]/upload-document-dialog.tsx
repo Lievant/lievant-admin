@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CatalogItem } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
+import { UploadProgress } from '@/components/upload-progress';
+import { MAX_UPLOAD_LABEL, uploadViaPresignedUrl, validateUploadSize } from '@/lib/presigned-upload';
 import { TextField } from '../form-field';
 
 export function UploadDocumentDialog({
@@ -20,10 +22,14 @@ export function UploadDocumentDialog({
   const [file, setFile] = useState<File | null>(null);
   const [version, setVersion] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFile(e.target.files?.[0] ?? null);
+    const selected = e.target.files?.[0] ?? null;
+    setFile(selected);
+    // Se avisa al seleccionar, no al enviar: el usuario no espera la subida.
+    setError(selected ? validateUploadSize(selected) : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -35,33 +41,32 @@ export function UploadDocumentDialog({
       return;
     }
 
+    const sizeError = validateUploadSize(file);
+    if (sizeError) {
+      setError(sizeError);
+      return;
+    }
+
     startTransition(async () => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('documentType', documentType);
-      if (version !== '') formData.append('version', version);
-
+      setProgress(0);
       try {
-        const res = await fetch(`/api/clients/${clientId}/documents`, {
-          method: 'POST',
-          body: formData,
+        await uploadViaPresignedUrl({
+          presignUrl: `/api/clients/${clientId}/documents/presigned-upload`,
+          registerUrl: `/api/clients/${clientId}/documents/register`,
+          file,
+          extra: {
+            documentType,
+            ...(version !== '' ? { version: Number(version) } : {}),
+          },
+          onProgress: setProgress,
         });
-
-        if (!res.ok) {
-          const body = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
-          const message = body?.message
-            ? Array.isArray(body.message)
-              ? body.message.join(', ')
-              : body.message
-            : 'No se pudo cargar el documento.';
-          setError(message);
-          return;
-        }
 
         router.refresh();
         onClose();
-      } catch {
-        setError('No se pudo cargar el documento.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el documento.');
+      } finally {
+        setProgress(null);
       }
     });
   };
@@ -122,10 +127,12 @@ export function UploadDocumentDialog({
               className="text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-600 hover:file:bg-slate-200"
             />
             <p className="text-xs text-slate-400">
-              Formatos permitidos: PDF, Word, Excel, PowerPoint, TXT e imágenes (JPG, PNG, GIF, WEBP, SVG) · Máximo 20
-              MB
+              Formatos permitidos: PDF, Word, Excel, PowerPoint, TXT e imágenes (JPG, PNG, GIF, WEBP, SVG) · Máximo{' '}
+              {MAX_UPLOAD_LABEL}
             </p>
           </div>
+
+          {progress !== null && <UploadProgress percent={progress} />}
 
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>

@@ -24,12 +24,15 @@ import { CreditCardsService } from './credit-cards.service';
 import {
   CreateCardReportDto,
   CreateCreditCardDto,
+  PresignedUploadDto,
   ProcessCardReportDto,
   QueryCardReportsDto,
   QueryCreditCardsDto,
+  RegisterInvoiceDto,
   UpdateCardReportDto,
   UpdateCreditCardDto,
 } from './dto/credit-cards.dto';
+import { MAX_UPLOAD_BYTES } from '../../common/s3-upload.util';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('credit-cards')
@@ -102,7 +105,7 @@ export class CreditCardsController {
 
   @Post('reports/:id/lines/:lineId/invoice')
   @RequirePermission('herramientas', 'gastos-tarjeta', 'write')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   uploadInvoice(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('lineId', ParseUUIDPipe) lineId: string,
@@ -116,6 +119,30 @@ export class CreditCardsController {
       );
     }
     return this.service.uploadInvoice(id, lineId, user, file);
+  }
+
+  /** Paso 1 del upload directo a S3: devuelve { uploadUrl, s3Key }. */
+  @Post('reports/:id/lines/:lineId/invoice/presigned-upload')
+  @RequirePermission('herramientas', 'gastos-tarjeta', 'write')
+  createPresignedInvoiceUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', ParseUUIDPipe) lineId: string,
+    @Body() dto: PresignedUploadDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.createPresignedInvoiceUpload(id, lineId, user, dto);
+  }
+
+  /** Paso 3: registra en BD la factura que el navegador ya subió a S3. */
+  @Post('reports/:id/lines/:lineId/invoice/register')
+  @RequirePermission('herramientas', 'gastos-tarjeta', 'write')
+  registerInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', ParseUUIDPipe) lineId: string,
+    @Body() dto: RegisterInvoiceDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.registerInvoice(id, lineId, user, dto);
   }
 
   // ══════════════════════════════════════════════════════════════════════════

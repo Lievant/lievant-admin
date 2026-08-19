@@ -24,7 +24,11 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ALLOWED_DOCUMENT_MIME_TYPES } from './employee-storage.service';
-import { UploadEmployeeDocumentDto } from './dto/upload-employee-document.dto';
+import {
+  PresignedUploadDto,
+  RegisterEmployeeDocumentDto,
+  UploadEmployeeDocumentDto,
+} from './dto/upload-employee-document.dto';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -251,6 +255,27 @@ export class EmployeesController {
   ) {
     if (!file) throw new BadRequestException('El archivo es obligatorio');
     return this.employeesService.uploadDocument(id, file, dto, user.id);
+  }
+
+  /** Paso 1 del upload directo a S3: devuelve { uploadUrl, s3Key }. */
+  @Post(':id/documents/presigned-upload')
+  @RequirePermission('rrhh', 'empleados.documentos', 'write')
+  createPresignedUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PresignedUploadDto,
+  ) {
+    return this.employeesService.createPresignedUpload(id, dto);
+  }
+
+  /** Paso 3: registra en BD el objeto que el navegador ya subió a S3. */
+  @Post(':id/documents/register')
+  @RequirePermission('rrhh', 'empleados.documentos', 'write')
+  registerDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterEmployeeDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.employeesService.registerDocument(id, dto, user.id);
   }
 
   @Delete('documents/:docId')

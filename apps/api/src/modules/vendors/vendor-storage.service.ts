@@ -1,7 +1,14 @@
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { buildUploadKey, UPLOAD_URL_TTL_SECONDS } from '../../common/s3-upload.util';
 
 export const ALLOWED_DOCUMENT_MIME_TYPES = [
   'application/pdf',
@@ -53,6 +60,46 @@ export class VendorStorageService {
     const key = `vendors/payments/${invoiceId}/${timestamp}_${file.originalname}`;
     await this.upload(file, key);
     return key;
+  }
+
+  /** Prefijo de las keys de un proveedor. Sirve además para validar pertenencia. */
+  static documentPrefix(vendorId: string): string {
+    return `vendors/documents/${vendorId}`;
+  }
+
+  /**
+   * URL prefirmada para subida directa del navegador a S3, sin pasar por la
+   * compute de Amplify. Sin ServerSideEncryption explícito: aplica el default
+   * del bucket y el navegador no tiene que mandar el header.
+   */
+  async getPresignedUploadUrl(
+    fileName: string,
+    fileType: string,
+    vendorId: string,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    const s3Key = buildUploadKey(VendorStorageService.documentPrefix(vendorId), fileName);
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: s3Key,
+      ContentType: fileType,
+    });
+    const uploadUrl = await getSignedUrl(this.client, command, {
+      expiresIn: UPLOAD_URL_TTL_SECONDS,
+    });
+
+    return { uploadUrl, s3Key };
+  }
+
+  /** Tamaño real del objeto ya subido; null si la key no existe en el bucket. */
+  async getObjectSize(key: string): Promise<number | null> {
+    try {
+      const head = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return head.ContentLength ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {

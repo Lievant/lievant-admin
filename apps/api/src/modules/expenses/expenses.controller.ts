@@ -22,11 +22,14 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   AuthorizeExpenseReportDto,
   CreateExpenseReportDto,
+  PresignedUploadDto,
   ProcessExpenseReportDto,
   QueryExpenseReportsDto,
+  RegisterInvoiceDto,
   UpdateExpenseReportDto,
 } from './dto/expense-report.dto';
 import { ALLOWED_INVOICE_MIME_TYPES } from './expenses-storage.service';
+import { MAX_UPLOAD_BYTES } from '../../common/s3-upload.util';
 import { ExpensesService } from './expenses.service';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -119,7 +122,7 @@ export class ExpensesController {
 
   @Post(':id/lines/:lineId/invoice')
   @RequirePermission('herramientas', 'reembolsos', 'write')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   uploadInvoice(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('lineId', ParseUUIDPipe) lineId: string,
@@ -133,6 +136,30 @@ export class ExpensesController {
       );
     }
     return this.service.uploadInvoice(id, lineId, user, file);
+  }
+
+  /** Paso 1 del upload directo a S3: devuelve { uploadUrl, s3Key }. */
+  @Post(':id/lines/:lineId/invoice/presigned-upload')
+  @RequirePermission('herramientas', 'reembolsos', 'write')
+  createPresignedInvoiceUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', ParseUUIDPipe) lineId: string,
+    @Body() dto: PresignedUploadDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.createPresignedInvoiceUpload(id, lineId, user, dto);
+  }
+
+  /** Paso 3: registra en BD la factura que el navegador ya subió a S3. */
+  @Post(':id/lines/:lineId/invoice/register')
+  @RequirePermission('herramientas', 'reembolsos', 'write')
+  registerInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('lineId', ParseUUIDPipe) lineId: string,
+    @Body() dto: RegisterInvoiceDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.registerInvoice(id, lineId, user, dto);
   }
 
   @Get(':id/lines/:lineId/invoice')

@@ -23,7 +23,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ChatDto } from './dto/chat.dto';
-import { QueryAdminDocumentsDto, UploadAdminDocumentDto } from './dto/admin-documents.dto';
+import {
+  PresignedUploadDto,
+  QueryAdminDocumentsDto,
+  RegisterAdminDocumentDto,
+  UploadAdminDocumentDto,
+} from './dto/admin-documents.dto';
 import { IsobotIngestionService } from './isobot-ingestion.service';
 import { IsobotService } from './isobot.service';
 
@@ -114,6 +119,20 @@ export class IsobotController {
     return this.ingestionService.uploadDocument(file, dto);
   }
 
+  /** Paso 1 del upload directo a S3: devuelve { uploadUrl, s3Key }. */
+  @Post('admin/documents/presigned-upload')
+  @RequirePermission('sgsi', 'isobot', 'write')
+  createPresignedUpload(@Body() dto: PresignedUploadDto) {
+    return this.ingestionService.createPresignedUpload(dto);
+  }
+
+  /** Paso 3: el API descarga de S3 el objeto que subió el navegador y lo indexa. */
+  @Post('admin/documents/register')
+  @RequirePermission('sgsi', 'isobot', 'write')
+  registerAdminDocument(@Body() dto: RegisterAdminDocumentDto) {
+    return this.ingestionService.registerDocument(dto);
+  }
+
   @Put('admin/documents/:id')
   @RequirePermission('sgsi', 'isobot', 'write')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_DOCUMENT_BYTES } }))
@@ -123,6 +142,16 @@ export class IsobotController {
   ) {
     assertDocumentoValido(file);
     return this.ingestionService.replaceDocument(id, file);
+  }
+
+  /** Reemplazo con upload directo: el objeto ya está en S3, se reindexa. */
+  @Put('admin/documents/:id/register')
+  @RequirePermission('sgsi', 'isobot', 'write')
+  registerAdminDocumentReplacement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterAdminDocumentDto,
+  ) {
+    return this.ingestionService.registerReplacement(id, dto);
   }
 
   @Delete('admin/documents/:id')

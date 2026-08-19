@@ -18,16 +18,26 @@ import {
   CardExpenseLineDto,
   CreateCardReportDto,
   CreateCreditCardDto,
+  PresignedUploadDto,
   ProcessCardReportDto,
   QueryCardReportsDto,
   QueryCreditCardsDto,
+  RegisterInvoiceDto,
   UpdateCardReportDto,
   UpdateCreditCardDto,
 } from './dto/credit-cards.dto';
+import {
+  assertKeyInPrefix,
+  assertUploadAllowed,
+  MAX_UPLOAD_BYTES,
+} from '../../common/s3-upload.util';
 import { CardExpenseLine } from './entities/card-expense-line.entity';
 import { CardExpenseReport } from './entities/card-expense-report.entity';
 import { CreditCard } from './entities/credit-card.entity';
-import { CreditCardsStorageService } from './credit-cards-storage.service';
+import {
+  ALLOWED_INVOICE_MIME_TYPES,
+  CreditCardsStorageService,
+} from './credit-cards-storage.service';
 
 const DEFAULT_LIMIT = 20;
 const MODULE = 'gastos-tarjeta';
@@ -312,6 +322,72 @@ export class CreditCardsService {
     await this.linesRepo.update(
       { id: lineId },
       { hasInvoice: true, invoiceS3Key: key, invoiceOriginalName: file.originalname },
+    );
+
+    const updated = await this.linesRepo.findOne({ where: { id: lineId } });
+    if (!updated) throw new NotFoundException('Línea de gasto no encontrada.');
+    return updated;
+  }
+
+  /** Paso 1 del upload directo: valida tipo/tamaño declarados y firma la URL. */
+  async createPresignedInvoiceUpload(
+    reportId: string,
+    lineId: string,
+    user: User,
+    dto: PresignedUploadDto,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    const report = await this.getReportOrFail(reportId);
+    this.assertCreator(report, user);
+
+    if (report.status !== 'draft') {
+      throw new BadRequestException('Solo se pueden adjuntar facturas mientras es borrador.');
+    }
+
+    const line = report.lines.find((l) => l.id === lineId);
+    if (!line) throw new NotFoundException('Línea de gasto no encontrada.');
+
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_INVOICE_MIME_TYPES);
+
+    return this.storage.getPresignedUploadUrl(dto.fileName, dto.fileType, reportId, lineId);
+  }
+
+  /**
+   * Paso 3: el objeto ya está en S3. Revalida tipo, pertenencia de la key y el
+   * tamaño REAL del objeto, porque el declarado viene del navegador.
+   */
+  async registerInvoice(
+    reportId: string,
+    lineId: string,
+    user: User,
+    dto: RegisterInvoiceDto,
+  ): Promise<CardExpenseLine> {
+    const report = await this.getReportOrFail(reportId);
+    this.assertCreator(report, user);
+
+    if (report.status !== 'draft') {
+      throw new BadRequestException('Solo se pueden adjuntar facturas mientras es borrador.');
+    }
+
+    const line = report.lines.find((l) => l.id === lineId);
+    if (!line) throw new NotFoundException('Línea de gasto no encontrada.');
+
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_INVOICE_MIME_TYPES);
+    assertKeyInPrefix(dto.s3Key, CreditCardsStorageService.invoicePrefix(reportId, lineId));
+
+    const actualSize = await this.storage.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.storage.deleteObject(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    await this.linesRepo.update(
+      { id: lineId },
+      { hasInvoice: true, invoiceS3Key: dto.s3Key, invoiceOriginalName: dto.fileName },
     );
 
     const updated = await this.linesRepo.findOne({ where: { id: lineId } });
