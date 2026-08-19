@@ -10,6 +10,7 @@ import type {
   CreditCardItem,
   ExpenseCatalogs,
 } from '@/lib/api';
+import { uploadViaPresignedUrl, validateUploadSize } from '@/lib/presigned-upload';
 import {
   createCardReportAction,
   submitCardReportAction,
@@ -565,7 +566,9 @@ function InvoiceCell({
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [failed, setFailed] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   if (!reportId || !line.persistedId) {
     return (
@@ -576,19 +579,28 @@ function InvoiceCell({
   }
 
   async function handleFile(file: File) {
-    setUploading(true);
-    setFailed(false);
-    try {
-      const body = new FormData();
-      body.append('file', file);
-      const res = await fetch(
-        `/api/credit-cards/reports/${reportId}/lines/${line.persistedId}/invoice`,
-        { method: 'POST', body },
-      );
-      if (res.ok) onUploaded(file.name);
-      else setFailed(true);
-    } catch {
+    const sizeError = validateUploadSize(file);
+    if (sizeError) {
       setFailed(true);
+      setErrorMsg(sizeError);
+      return;
+    }
+
+    setUploading(true);
+    setProgress(0);
+    setFailed(false);
+    setErrorMsg(null);
+    try {
+      await uploadViaPresignedUrl({
+        presignUrl: `/api/credit-cards/reports/${reportId}/lines/${line.persistedId}/invoice/presigned-upload`,
+        registerUrl: `/api/credit-cards/reports/${reportId}/lines/${line.persistedId}/invoice/register`,
+        file,
+        onProgress: setProgress,
+      });
+      onUploaded(file.name);
+    } catch (err) {
+      setFailed(true);
+      setErrorMsg(err instanceof Error ? err.message : 'No se pudo subir la factura.');
     } finally {
       setUploading(false);
     }
@@ -610,12 +622,13 @@ function InvoiceCell({
         type="button"
         onClick={() => inputRef.current?.click()}
         disabled={uploading}
-        title={line.invoiceOriginalName ?? 'Subir comprobante'}
+        title={errorMsg ?? line.invoiceOriginalName ?? 'Subir comprobante'}
         className={`text-xs font-medium ${
           failed ? 'text-rose-600' : line.hasInvoice ? 'text-emerald-600' : 'text-slate-500'
         } hover:underline disabled:opacity-50`}
       >
-        {uploading ? '…' : failed ? 'Error' : line.hasInvoice ? '✓ Factura' : '📎 Subir'}
+        {/* En una celda de tabla no cabe una barra: el avance va en la etiqueta. */}
+        {uploading ? `${progress}%` : failed ? 'Error' : line.hasInvoice ? '✓ Factura' : '📎 Subir'}
       </button>
     </>
   );

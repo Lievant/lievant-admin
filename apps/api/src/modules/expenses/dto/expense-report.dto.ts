@@ -140,3 +140,24 @@ export class QueryExpenseReportsDto {
   @Min(1)
   limit?: number;
 }
+
+/** Paso 1: el frontend pide la URL prefirmada antes de subir la factura a S3. */
+export class PresignedUploadDto {
+  @IsString()
+  @MaxLength(255)
+  fileName!: string;
+
+  @IsString()
+  fileType!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  fileSize!: number;
+}
+
+/** Paso 3: el frontend avisa que la factura ya está en S3 y se registra. */
+export class RegisterInvoiceDto extends PresignedUploadDto {
+  @IsString()
+  s3Key!: string;
+}

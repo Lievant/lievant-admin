@@ -3,17 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
+import {
+  assertKeyInPrefix,
+  assertUploadAllowed,
+  MAX_UPLOAD_BYTES,
+} from '../../common/s3-upload.util';
 import { ClientStatus } from './constants/client-status.constant';
 import { DocumentStatus } from './constants/document-status.constant';
 import { CreateBrandDto, UpdateBrandDto } from './dto/brand.dto';
 import { ClientCreationType, CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
-import { UploadDocumentDto } from './dto/document.dto';
+import { PresignedUploadDto, RegisterDocumentDto, UploadDocumentDto } from './dto/document.dto';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
-import { DocumentStorageService } from './document-storage.service';
+import { ALLOWED_DOCUMENT_MIME_TYPES, DocumentStorageService } from './document-storage.service';
 import { Brand } from './entities/brand.entity';
 import { ClientDocument } from './entities/client-document.entity';
 import { ClientRecord } from './entities/client-record.entity';
@@ -371,6 +376,63 @@ export class ClientsService {
     );
 
     const downloadUrl = await this.documentStorageService.getPresignedUrl(key, 3600);
+
+    return { ...document, downloadUrl };
+  }
+
+  /**
+   * Paso 1 del upload directo: valida tipo/tamaño declarados y firma la URL.
+   * La key queda bajo el prefijo del cliente para poder verificar pertenencia
+   * cuando el frontend vuelva a registrar el documento.
+   */
+  async createPresignedUpload(
+    clientId: string,
+    dto: PresignedUploadDto,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    await this.getClientOrFail(clientId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+
+    return this.documentStorageService.getPresignedUploadUrl(dto.fileName, dto.fileType, clientId);
+  }
+
+  /**
+   * Paso 3: el objeto ya está en S3. Se revalida el tipo, que la key pertenezca
+   * a este cliente y el tamaño REAL del objeto (el declarado en el paso 1 viene
+   * del navegador y no es confiable).
+   */
+  async registerDocument(
+    clientId: string,
+    dto: RegisterDocumentDto,
+    uploadedBy: string,
+  ): Promise<ClientDocumentWithUrl> {
+    await this.getClientOrFail(clientId);
+    assertUploadAllowed(dto.fileType, dto.fileSize, ALLOWED_DOCUMENT_MIME_TYPES);
+    assertKeyInPrefix(dto.s3Key, DocumentStorageService.documentPrefix(clientId));
+
+    const actualSize = await this.documentStorageService.getObjectSize(dto.s3Key);
+    if (actualSize === null) {
+      throw new BadRequestException('El archivo no se encontró en el almacenamiento');
+    }
+    if (actualSize > MAX_UPLOAD_BYTES) {
+      await this.documentStorageService.deleteDocument(dto.s3Key);
+      throw new BadRequestException(
+        `El archivo no puede superar ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB`,
+      );
+    }
+
+    const document = await this.documentsRepository.save(
+      this.documentsRepository.create({
+        clientRecordId: clientId,
+        documentType: dto.documentType,
+        fileName: dto.fileName,
+        filePath: dto.s3Key,
+        status: DocumentStatus.UPLOADED,
+        version: dto.version ?? 1,
+        uploadedBy,
+      }),
+    );
+
+    const downloadUrl = await this.documentStorageService.getPresignedUrl(dto.s3Key, 3600);
 
     return { ...document, downloadUrl };
   }

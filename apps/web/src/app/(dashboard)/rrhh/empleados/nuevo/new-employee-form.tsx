@@ -302,7 +302,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
         {currentStep === 'general' && (
           <>
             <div className="grid grid-cols-2 gap-4">
-              <TextField id="new-employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} placeholder="Nombre y apellidos" uppercase />
+              <TextField id="new-employee-full-name" label="Nombre completo" value={fullName} onChange={setFullName} placeholder="Nombre y apellidos" />
               <SelectField
                 id="new-employee-status"
                 label="Estado"
@@ -334,11 +334,11 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
                 <SelectField id="new-employee-division" label="División" value={division} onChange={setDivision} options={divisionOptions} />
-                <TextField id="new-employee-area" label="Área" value={area} onChange={setArea} uppercase />
+                <TextField id="new-employee-area" label="Área" value={area} onChange={setArea} />
                 <TextField id="new-employee-project" label="Proyecto" value={project} onChange={setProject} />
               </div>
               <div className="mt-4 grid grid-cols-3 gap-4">
-                <TextField id="new-employee-position" label="Puesto" value={position} onChange={setPosition} placeholder="DISEÑADOR UX" uppercase />
+                <TextField id="new-employee-position" label="Puesto" value={position} onChange={setPosition} placeholder="Diseñador UX" />
                 <SelectField id="new-employee-level" label="Nivel" value={level} onChange={setLevel} options={orgLevelOptions} />
                 <EmployeePicker
                   id="new-employee-direct-report"
@@ -381,7 +381,7 @@ export function NewEmployeeForm({ canEditPersonal, canEditCompensation, catalogs
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Datos laborales</p>
               <div className="grid grid-cols-3 gap-4">
                 <SelectField id="new-employee-gender" label="Género" value={gender} onChange={setGender} options={GENDERS} />
-                <TextField id="new-employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} placeholder="MEXICANA" uppercase />
+                <TextField id="new-employee-nationality" label="Nacionalidad" value={nationality} onChange={setNationality} placeholder="Mexicana" />
                 <TextField id="new-employee-seniority-date" label="Fecha de antigüedad" type="date" value={seniorityDate} onChange={setSeniorityDate} />
               </div>
               <div className="mt-4 grid grid-cols-2 gap-4">

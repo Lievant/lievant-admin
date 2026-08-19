@@ -23,7 +23,11 @@ import { QueryInvoicesDto } from './dto/query-invoices.dto';
 import { QueryPurchaseOrdersDto } from './dto/query-purchase-orders.dto';
 import { QueryVendorsDto } from './dto/query-vendors.dto';
 import { UpdateVendorDto } from './dto/update-vendor.dto';
-import { UploadVendorDocumentDto } from './dto/upload-vendor-document.dto';
+import {
+  PresignedUploadDto,
+  RegisterVendorDocumentDto,
+  UploadVendorDocumentDto,
+} from './dto/upload-vendor-document.dto';
 import { ALLOWED_DOCUMENT_MIME_TYPES } from './vendor-storage.service';
 import { VendorsService } from './vendors.service';
 
@@ -105,6 +109,25 @@ export class VendorsController {
       throw new BadRequestException('El archivo es obligatorio');
     }
     return this.vendorsService.uploadDocument(id, file, dto, user.id);
+  }
+
+  /** Paso 1 del upload directo a S3: devuelve { uploadUrl, s3Key }. */
+  @Post(':id/documents/presigned-upload')
+  createPresignedUpload(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PresignedUploadDto,
+  ) {
+    return this.vendorsService.createPresignedUpload(id, dto);
+  }
+
+  /** Paso 3: registra en BD el objeto que el navegador ya subió a S3. */
+  @Post(':id/documents/register')
+  registerDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterVendorDocumentDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.vendorsService.registerDocument(id, dto, user.id);
   }
 
   @Delete(':id')
