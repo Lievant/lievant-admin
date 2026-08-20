@@ -29,6 +29,15 @@ interface AzureAdTokenResponse {
 
 interface GraphCalendarEventResponse {
   id: string;
+  // Graph devuelve el link de Teams aquí cuando el evento se creó con
+  // isOnlineMeeting: true. Si no, la propiedad no viene.
+  onlineMeeting?: { joinUrl?: string } | null;
+}
+
+/** Resultado de crear un evento: id de Graph y link de Teams si se generó. */
+export interface CreatedCalendarEvent {
+  id: string;
+  joinUrl: string | null;
 }
 
 /**
@@ -97,7 +106,12 @@ export class GraphTokenService {
     return data.access_token;
   }
 
-  async createCalendarEvent(userEmail: string, event: CalendarEventDto): Promise<string> {
+  /**
+   * Crea el evento y devuelve también el link de Teams. Antes solo se devolvía
+   * el id y el `joinUrl` que Graph ya generaba se descartaba, por lo que la
+   * reserva nunca podía mostrar el botón de "Unirse a Teams".
+   */
+  async createCalendarEvent(userEmail: string, event: CalendarEventDto): Promise<CreatedCalendarEvent> {
     const token = await this.getAppToken();
 
     const response = await fetch(`https://graph.microsoft.com/v1.0/users/${userEmail}/calendar/events`, {
@@ -119,10 +133,20 @@ export class GraphTokenService {
     }
 
     const data = (await response.json()) as GraphCalendarEventResponse;
-    return data.id;
+    return { id: data.id, joinUrl: data.onlineMeeting?.joinUrl ?? null };
   }
 
-  async updateCalendarEvent(userEmail: string, eventId: string, event: Partial<CalendarEventDto>): Promise<void> {
+  /**
+   * Actualiza el evento y devuelve el link de Teams que quede tras el PATCH.
+   * Importa para las reservas creadas antes de que se persistiera el joinUrl: al
+   * editarlas, Graph crea la reunión y esta es la única oportunidad de guardarlo.
+   * Devuelve null si Graph no lo entrega o si el evento ya no existe (404).
+   */
+  async updateCalendarEvent(
+    userEmail: string,
+    eventId: string,
+    event: Partial<CalendarEventDto>,
+  ): Promise<{ joinUrl: string | null }> {
     const token = await this.getAppToken();
 
     const response = await fetch(
@@ -141,6 +165,11 @@ export class GraphTokenService {
         `No se pudo actualizar el evento en el calendario de Microsoft (Graph ${response.status})`,
       );
     }
+
+    if (!response.ok) return { joinUrl: null };
+
+    const data = (await response.json().catch(() => null)) as GraphCalendarEventResponse | null;
+    return { joinUrl: data?.onlineMeeting?.joinUrl ?? null };
   }
 
   async getUserPhoto(userEmail: string): Promise<Buffer | null> {
