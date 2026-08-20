@@ -5,6 +5,7 @@ import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.
 import { ClientsController } from './clients.controller';
 import { ClientsService } from './clients.service';
 import { DocumentStorageService } from './document-storage.service';
+import { ClientContractsService } from './client-contracts.service';
 import { Brand } from './entities/brand.entity';
 import { ClientDocument } from './entities/client-document.entity';
 import { ClientRecord } from './entities/client-record.entity';
@@ -28,7 +29,7 @@ import { Group } from './entities/group.entity';
     ]),
   ],
   controllers: [ClientsController],
-  providers: [ClientsService, DocumentStorageService],
+  providers: [ClientsService, DocumentStorageService, ClientContractsService],
   exports: [ClientsService],
 })
 export class ClientsModule {}
