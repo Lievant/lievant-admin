@@ -1536,6 +1536,8 @@ export interface Booking {
   recurrenceEndDate: string | null;
   recurrenceGroupId: string | null;
   msEventId: string | null;
+  /** Link de la reunión de Teams; null en reservas creadas antes del fix. */
+  teamsMeetingUrl: string | null;
   notes: string | null;
   attendees: BookingAttendee[];
   createdAt: string;

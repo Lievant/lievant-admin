@@ -255,16 +255,26 @@ export class BookingsService {
       const timeZone = targetRoom.office?.city?.timezone ?? 'America/Mexico_City';
       if (saved.msEventId) {
         try {
-          const hasAttendees = (saved.attendees ?? []).length > 0;
-          await this.graphTokenService.updateCalendarEvent(booking.user.email, saved.msEventId, {
-            subject: saved.title,
-            start: { dateTime: this.toGraphDateTime(saved.startTime), timeZone },
-            end: { dateTime: this.toGraphDateTime(saved.endTime), timeZone },
-            location: { displayName: targetRoom.name },
-            attendees: this.toGraphAttendees(saved.attendees),
-            body: this.buildEventBody(targetRoom, saved.notes),
-            ...(hasAttendees ? { isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness' as const } : {}),
-          });
+          const { joinUrl } = await this.graphTokenService.updateCalendarEvent(
+            booking.user.email,
+            saved.msEventId,
+            {
+              subject: saved.title,
+              start: { dateTime: this.toGraphDateTime(saved.startTime), timeZone },
+              end: { dateTime: this.toGraphDateTime(saved.endTime), timeZone },
+              location: { displayName: targetRoom.name },
+              attendees: this.toGraphAttendees(saved.attendees),
+              body: this.buildEventBody(targetRoom, saved.notes),
+              isOnlineMeeting: true,
+              onlineMeetingProvider: 'teamsForBusiness' as const,
+            },
+          );
+
+          // Recupera el link de las reservas creadas antes de este fix.
+          if (joinUrl && joinUrl !== saved.teamsMeetingUrl) {
+            saved.teamsMeetingUrl = joinUrl;
+            await this.bookingsRepository.save(saved);
+          }
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           this.logger.error(`Error actualizando evento M365 para la reserva ${saved.id}: ${message}`);
@@ -583,19 +593,22 @@ export class BookingsService {
   private async syncCalendarEvent(booking: Booking, room: Room, user: User): Promise<void> {
     try {
       const timeZone = room.office?.city?.timezone ?? 'America/Mexico_City';
-      const hasAttendees = (booking.attendees ?? []).length > 0;
-      const eventId = await this.graphTokenService.createCalendarEvent(user.email, {
+      // Siempre se pide reunión de Teams, también sin invitados: quien reserva
+      // suele agregar gente después, y antes una reserva sin invitados nacía sin
+      // link y ya no había forma de obtenerlo.
+      const { id: eventId, joinUrl } = await this.graphTokenService.createCalendarEvent(user.email, {
         subject: booking.title,
         start: { dateTime: this.toGraphDateTime(booking.startTime), timeZone },
         end: { dateTime: this.toGraphDateTime(booking.endTime), timeZone },
         location: { displayName: room.name },
         attendees: this.toGraphAttendees(booking.attendees),
         body: this.buildEventBody(room, booking.notes),
-        // Con invitados → reunión de Teams (link) e invitaciones automáticas de Graph.
-        ...(hasAttendees ? { isOnlineMeeting: true, onlineMeetingProvider: 'teamsForBusiness' as const } : {}),
+        isOnlineMeeting: true,
+        onlineMeetingProvider: 'teamsForBusiness' as const,
       });
 
       booking.msEventId = eventId;
+      booking.teamsMeetingUrl = joinUrl;
       await this.bookingsRepository.save(booking);
     } catch (error) {
       // Logging explícito para diagnóstico (Ajuste 6): mensaje + stack.

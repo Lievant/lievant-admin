@@ -67,6 +67,13 @@ export class Booking {
   @Column({ name: 'ms_event_id', type: 'varchar', length: 500, nullable: true })
   msEventId!: string | null;
 
+  /**
+   * Link de la reunión de Teams que Graph genera al crear el evento. Null si el
+   * evento se creó sin reunión en línea o si Graph no lo devolvió.
+   */
+  @Column({ name: 'teams_meeting_url', type: 'varchar', length: 500, nullable: true })
+  teamsMeetingUrl!: string | null;
+
   @Column({ type: 'jsonb', default: () => "'[]'" })
   attendees!: BookingAttendee[];
 
