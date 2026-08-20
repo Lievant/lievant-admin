@@ -168,6 +168,18 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
                     {BOOKING_STATUS_LABELS[booking.status]}
                   </span>
                   <div className="flex gap-2">
+                    {/* Solo si la reserva sigue vigente: el link de una reunión
+                        que ya pasó no sirve de nada y ensucia la lista. */}
+                    {booking.teamsMeetingUrl && isFuture && (
+                      <a
+                        href={booking.teamsMeetingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-md bg-[#4B53BC] px-3 py-1 text-xs font-semibold text-white hover:bg-[#3d44a0]"
+                      >
+                        Unirse a Teams
+                      </a>
+                    )}
                     {canEdit && (
                       <button
                         type="button"
