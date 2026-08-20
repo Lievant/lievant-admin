@@ -159,7 +159,7 @@ export class ClientsController {
    */
   @Post(':id/contracts/generate')
   @UseGuards(PermissionsGuard)
-  @RequirePermission('finanzas', 'clientes', 'read')
+  @RequirePermission('finanzas', 'clientes', 'write')
   async generateContract(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: GenerateContractDto,
