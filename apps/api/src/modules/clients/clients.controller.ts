@@ -9,10 +9,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
@@ -26,6 +29,8 @@ import { CreateClientDto } from './dto/create-client.dto';
 import { CreateCompanyDto, UpdateCompanyDto } from './dto/company.dto';
 import { CreateContactDto, UpdateContactDto } from './dto/contact.dto';
 import { PresignedUploadDto, RegisterDocumentDto, UploadDocumentDto } from './dto/document.dto';
+import { GenerateContractDto } from './dto/contract.dto';
+import { ClientContractsService } from './client-contracts.service';
 import { UpdateFinancialDto } from './dto/financial.dto';
 import { QueryClientsDto } from './dto/query-clients.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -33,7 +38,10 @@ import { UpdateClientDto } from './dto/update-client.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('clients')
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly clientContractsService: ClientContractsService,
+  ) {}
 
   @Get()
   findAll(@Query() query: QueryClientsDto) {
@@ -134,6 +142,41 @@ export class ClientsController {
       throw new BadRequestException('El archivo es obligatorio');
     }
     return this.clientsService.addDocument(id, file, dto, user.id);
+  }
+
+  /** Datos del cliente para pre-llenar el formulario de contrato. */
+  @Get(':id/contracts/prefill')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes', 'read')
+  getContractPrefill(@Param('id', ParseUUIDPipe) id: string) {
+    return this.clientContractsService.getPrefill(id);
+  }
+
+  /**
+   * Genera el .docx del contrato y lo devuelve como descarga. No se persiste en
+   * S3 ni en BD: es un borrador para imprimir y firmar, no un documento del
+   * expediente. Si más adelante debe archivarse, va por el flujo de documentos.
+   */
+  @Post(':id/contracts/generate')
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes', 'read')
+  async generateContract(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: GenerateContractDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const contrato = await this.clientContractsService.generateContract(id, dto);
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'Content-Disposition': `attachment; filename="${contrato.fileName}"`,
+      'Content-Length': String(contrato.buffer.length),
+      // Diagnóstico visible en la respuesta sin ensuciar el .docx.
+      'X-Contract-Markers': `${contrato.marcadoresRellenados}/${contrato.marcadoresTotales}`,
+    });
+
+    return new StreamableFile(contrato.buffer);
   }
 
   /**
