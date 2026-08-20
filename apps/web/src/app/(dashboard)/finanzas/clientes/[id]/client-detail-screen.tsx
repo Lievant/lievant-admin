@@ -17,6 +17,7 @@ import { CompaniesTab } from './companies-tab';
 import { FinancialTab } from './financial-tab';
 import { DocumentsTab } from './documents-tab';
 import { EditClientDialog } from './edit-client-dialog';
+import { GenerateContractModal } from './generate-contract-modal';
 
 const TABS = [
   { id: 'general', label: 'General' },
@@ -47,6 +48,7 @@ export function ClientDetailScreen({
 }: ClientDetailScreenProps) {
   const [activeTab, setActiveTab] = useState<TabId>('general');
   const [isEditOpen, setEditOpen] = useState(false);
+  const [isContractOpen, setContractOpen] = useState(false);
 
   const name = clientDisplayName(client);
   const missingDocuments = documents.filter((doc) => doc.status === 'missing').length;
@@ -94,13 +96,22 @@ export function ClientDetailScreen({
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
-        >
-          Editar
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setContractOpen(true)}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+          >
+            Generar contrato
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+          >
+            Editar
+          </button>
+        </div>
       </header>
 
       {/* Tabs */}
@@ -147,6 +158,10 @@ export function ClientDetailScreen({
 
       {isEditOpen && (
         <EditClientDialog client={client} accountManagers={accountManagers} onClose={() => setEditOpen(false)} />
+      )}
+
+      {isContractOpen && (
+        <GenerateContractModal clientId={client.id} onClose={() => setContractOpen(false)} />
       )}
     </div>
   );
