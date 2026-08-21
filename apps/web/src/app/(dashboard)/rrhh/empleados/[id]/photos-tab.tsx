@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { DownloadIcon, EyeIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 
 interface EmployeePhoto {
@@ -17,15 +18,32 @@ interface EmployeePhoto {
 
 interface PhotosTabProps {
   employeeId: string;
+  employeeName: string;
   canWrite: boolean;
 }
 
 const MAX_PHOTOS = 10;
 
-export function PhotosTab({ employeeId, canWrite }: PhotosTabProps) {
+// "Samantha Aviña" + 2026-08-21 -> "samantha-avina-foto-2026-08-21.jpg"
+function downloadFileName(employeeName: string, uploadedAt: string): string {
+  const slug = employeeName
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const date = new Date(uploadedAt);
+  const stamp = Number.isNaN(date.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : date.toISOString().slice(0, 10);
+  return `${slug || 'empleado'}-foto-${stamp}.jpg`;
+}
+
+export function PhotosTab({ employeeId, employeeName, canWrite }: PhotosTabProps) {
   const [photos, setPhotos] = useState<EmployeePhoto[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +80,36 @@ export function PhotosTab({ employeeId, canWrite }: PhotosTabProps) {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  function handleView(photo: EmployeePhoto) {
+    window.open(photo.url, '_blank', 'noopener,noreferrer');
+  }
+
+  async function handleDownload(photo: EmployeePhoto) {
+    setDownloadingId(photo.id);
+    setError(null);
+    try {
+      const res = await fetch(photo.url);
+      if (!res.ok) throw new Error(`S3 respondió ${res.status}`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = downloadFileName(employeeName, photo.uploadedAt);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // El bucket solo permite CORS desde los dominios de producción: si el
+      // fetch no pasa (local, staging o URL vencida), abrimos la foto para que
+      // el usuario pueda guardarla desde el navegador.
+      window.open(photo.url, '_blank', 'noopener,noreferrer');
+      setError('No se pudo descargar directamente; la foto se abrió en una pestaña nueva.');
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -144,26 +192,50 @@ export function PhotosTab({ employeeId, canWrite }: PhotosTabProps) {
                 </div>
               )}
 
-              {canWrite && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                  {!photo.isProfile && (
-                    <button
-                      type="button"
-                      onClick={() => void handleSetProfile(photo.id)}
-                      className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-navy hover:bg-slate-100"
-                    >
-                      Usar como perfil
-                    </button>
-                  )}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => void handleDelete(photo.id)}
-                    className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                    title="Ver foto"
+                    aria-label="Ver foto"
+                    onClick={() => handleView(photo)}
+                    className="rounded-md bg-white p-2 text-navy hover:bg-slate-100"
                   >
-                    Eliminar
+                    <EyeIcon className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Descargar foto"
+                    aria-label="Descargar foto"
+                    disabled={downloadingId === photo.id}
+                    onClick={() => void handleDownload(photo)}
+                    className="rounded-md bg-white p-2 text-navy hover:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400"
+                  >
+                    <DownloadIcon className="h-4 w-4" />
                   </button>
                 </div>
-              )}
+
+                {canWrite && (
+                  <>
+                    {!photo.isProfile && (
+                      <button
+                        type="button"
+                        onClick={() => void handleSetProfile(photo.id)}
+                        className="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-navy hover:bg-slate-100"
+                      >
+                        Usar como perfil
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(photo.id)}
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+                    >
+                      Eliminar
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -176,8 +248,16 @@ function PhotoImage({ url, name }: { url: string; name: string }) {
   const [failed, setFailed] = useState(false);
   if (failed) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-xs text-slate-400 px-2 text-center">
-        {name}
+      <div
+        title={name}
+        className="flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-100 px-2 text-center text-slate-400"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-8 w-8">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+          <path d="M21 15l-5-5L5 21" />
+        </svg>
+        <span className="line-clamp-2 text-[10px]">{name}</span>
       </div>
     );
   }
