@@ -103,7 +103,7 @@ export class VacationsController {
   }
 
   @Get('report/master')
-  @RequirePermission('rrhh', 'reportes', 'read')
+  @RequirePermission('rrhh', 'reportes.vacaciones', 'read')
   getMasterReport(@Query() query: VacationMasterQueryDto) {
     return this.service.getVacationMasterReport({
       search: query.search,
