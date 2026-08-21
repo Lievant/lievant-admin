@@ -258,7 +258,11 @@ export function EmployeeDetailScreen({
           <DocumentsTab employee={employee} documents={documents} />
         )}
         {effectiveTab === 'photos' && (
-          <PhotosTab employeeId={employee.id} canWrite={canWriteEmployees} />
+          <PhotosTab
+            employeeId={employee.id}
+            employeeName={employee.fullName}
+            canWrite={canWriteEmployees}
+          />
         )}
         {effectiveTab === 'equipos-licencias' && (
           <EquipmentLicensesTab
