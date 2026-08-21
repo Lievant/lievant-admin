@@ -6,8 +6,9 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { Readable } from 'stream';
 import { buildUploadKey, UPLOAD_URL_TTL_SECONDS } from '../../common/s3-upload.util';
 
 export const ALLOWED_DOCUMENT_MIME_TYPES = [
@@ -96,6 +97,24 @@ export class EmployeeStorageService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Descarga server-side del objeto. Se usa para servir archivos vía el API en
+   * vez de exponer una URL prefirmada al navegador, que el bucket rechaza por
+   * CORS cuando el origen no es uno de los dominios registrados.
+   */
+  async getObjectStream(key: string): Promise<{ stream: Readable; contentType: string }> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!result.Body) {
+      throw new NotFoundException('El archivo no existe en el almacenamiento');
+    }
+    return {
+      stream: result.Body as Readable,
+      contentType: result.ContentType ?? 'application/octet-stream',
+    };
   }
 
   async getPresignedUrl(key: string, expiresIn = 3600): Promise<string> {

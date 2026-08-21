@@ -7,11 +7,27 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { EmployeeStorageService } from './employee-storage.service';
 import { EmployeePhoto } from './entities/employee-photo.entity';
+import type { Readable } from 'stream';
 
 const MAX_PHOTOS = 10;
 const MAX_DIMENSION = 1200;
 const JPEG_QUALITY = 88;
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** "Samantha Avina" + 2026-08-21 -> "samantha-avina-foto-2026-08-21.jpg" */
+function buildPhotoFileName(fullName: string | null, uploadedAt: Date): string {
+  const slug = (fullName ?? 'empleado')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const date = uploadedAt instanceof Date ? uploadedAt : new Date(uploadedAt);
+  const stamp = Number.isNaN(date.getTime())
+    ? new Date().toISOString().slice(0, 10)
+    : date.toISOString().slice(0, 10);
+  return `${slug || 'empleado'}-foto-${stamp}.jpg`;
+}
 
 @Injectable()
 export class EmployeePhotosService {
@@ -82,6 +98,28 @@ export class EmployeePhotosService {
     });
 
     return this.photosRepository.save(photo);
+  }
+
+  /**
+   * Descarga la foto desde S3 en el servidor. El nombre sugerido usa el nombre
+   * completo del empleado para que el archivo llegue identificable al usuario.
+   */
+  async downloadPhoto(
+    employeeId: string,
+    photoId: string,
+  ): Promise<{ stream: Readable; contentType: string; fileName: string }> {
+    const photo = await this.photosRepository.findOne({
+      where: { id: photoId, employeeId, deletedAt: IsNull() },
+      relations: { employee: true },
+    });
+    if (!photo) throw new NotFoundException('Foto no encontrada');
+
+    const { stream, contentType } = await this.storageService.getObjectStream(photo.s3Key);
+    return {
+      stream,
+      contentType,
+      fileName: buildPhotoFileName(photo.employee?.fullName ?? null, photo.uploadedAt),
+    };
   }
 
   async setProfilePhoto(employeeId: string, photoId: string): Promise<EmployeePhoto> {
