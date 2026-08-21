@@ -31,6 +31,16 @@ export function EditCompensationDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // El sueldo diario se pre-llena con mensual/30 (base de 30 dias de la LFT),
+  // pero el campo queda editable por si RRHH necesita ajustarlo.
+  const handleMonthlyChange = (value: string) => {
+    setMonthlyGrossSalary(value);
+    const parsed = parseFloat(value);
+    if (value !== '' && !Number.isNaN(parsed)) {
+      setDailyGrossSalary((parsed / 30).toFixed(2));
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -77,8 +87,8 @@ export function EditCompensationDialog({
 
         <form onSubmit={handleSubmit} className="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5">
           <div className="grid grid-cols-3 gap-4">
+            <TextField id="comp-monthly" label="Sueldo mensual bruto" type="number" value={monthlyGrossSalary} onChange={handleMonthlyChange} />
             <TextField id="comp-daily" label="Sueldo diario bruto" type="number" value={dailyGrossSalary} onChange={setDailyGrossSalary} />
-            <TextField id="comp-monthly" label="Sueldo mensual bruto" type="number" value={monthlyGrossSalary} onChange={setMonthlyGrossSalary} />
             <TextField id="comp-service" label="Pago por servicios" type="number" value={servicePayment} onChange={setServicePayment} />
           </div>
           <TextField id="comp-last-change" label="Último cambio de sueldo" type="date" value={lastSalaryChange} onChange={setLastSalaryChange} />

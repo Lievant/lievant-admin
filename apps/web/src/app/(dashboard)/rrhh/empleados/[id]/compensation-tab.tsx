@@ -58,8 +58,8 @@ export function CompensationTab({
 
       <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
         <Section title="Sueldo">
-          <Field label="Sueldo diario bruto" value={formatCurrency(compensation?.dailyGrossSalary ?? null)} />
           <Field label="Sueldo mensual bruto" value={formatCurrency(compensation?.monthlyGrossSalary ?? null)} />
+          <Field label="Sueldo diario bruto" value={formatCurrency(compensation?.dailyGrossSalary ?? null)} />
           <Field label="Pago por servicios" value={formatCurrency(compensation?.servicePayment ?? null)} />
           <Field
             label="Último cambio de sueldo"
