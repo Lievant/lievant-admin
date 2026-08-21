@@ -91,8 +91,10 @@ export function PhotosTab({ employeeId, employeeName, canWrite }: PhotosTabProps
     setDownloadingId(photo.id);
     setError(null);
     try {
-      const res = await fetch(photo.url);
-      if (!res.ok) throw new Error(`S3 respondió ${res.status}`);
+      // Vía el proxy del API: el archivo baja de S3 en el servidor, así que no
+      // dependemos del CORS del bucket ni de que la URL prefirmada siga viva.
+      const res = await fetch(`/api/employees/${employeeId}/photos/${photo.id}/download`);
+      if (!res.ok) throw new Error('Error al descargar');
       const blob = await res.blob();
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
@@ -103,11 +105,7 @@ export function PhotosTab({ employeeId, employeeName, canWrite }: PhotosTabProps
       anchor.remove();
       URL.revokeObjectURL(objectUrl);
     } catch {
-      // El bucket solo permite CORS desde los dominios de producción: si el
-      // fetch no pasa (local, staging o URL vencida), abrimos la foto para que
-      // el usuario pueda guardarla desde el navegador.
-      window.open(photo.url, '_blank', 'noopener,noreferrer');
-      setError('No se pudo descargar directamente; la foto se abrió en una pestaña nueva.');
+      setError('No se pudo descargar la foto. Intenta de nuevo.');
     } finally {
       setDownloadingId(null);
     }

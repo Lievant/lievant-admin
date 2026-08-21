@@ -208,6 +208,23 @@ export class EmployeesController {
     return this.photosService.uploadPhoto(id, file, user.id);
   }
 
+  /**
+   * Proxy de descarga: el archivo se baja de S3 en el servidor y se entrega al
+   * navegador desde nuestro dominio, evitando el CORS del bucket.
+   */
+  @Get(':id/photos/:photoId/download')
+  async downloadPhoto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('photoId', ParseUUIDPipe) photoId: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { stream, contentType, fileName } = await this.photosService.downloadPhoto(id, photoId);
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    stream.pipe(res);
+  }
+
   @Patch(':id/photos/:photoId/profile')
   @RequirePermission('rrhh', 'empleados', 'write')
   setProfilePhoto(
