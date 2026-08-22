@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { LaptopIcon } from '@/components/icons';
+import { FolderIcon, LaptopIcon } from '@/components/icons';
 
 export default function ReportesTdPage() {
   return (
@@ -22,6 +22,21 @@ export default function ReportesTdPage() {
             <h2 className="font-semibold text-navy">Inventario por área</h2>
             <p className="mt-0.5 text-sm text-slate-500">
               Equipos asignados agrupados por área y empleado, con exportación PDF
+            </p>
+          </div>
+        </Link>
+
+        <Link
+          href="/transformacion/reportes/documentos"
+          className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-black/40 hover:shadow-md"
+        >
+          <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 transition group-hover:bg-emerald-100">
+            <FolderIcon className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="font-semibold text-navy">Control de Documentos</h2>
+            <p className="mt-0.5 text-sm text-slate-500">
+              Estado de expedientes de empleados, clientes y proveedores, con log de actividad
             </p>
           </div>
         </Link>
