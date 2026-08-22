@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
-import { EyeIcon } from '@/components/icons';
+import { DownloadIcon, EyeIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CardExpenseLineItem, CardExpenseReportItem } from '@/lib/api';
 import { processCardReportAction, submitCardReportAction } from './actions';
@@ -20,6 +20,55 @@ interface Props {
   report: CardExpenseReportItem;
   viewer: { isCreator: boolean; canProcess: boolean };
   backHref: string;
+}
+
+/**
+ * Descarga del Excel del reporte. Va contra el proxy del API, que a su vez
+ * genera el archivo con el formato del SGSI; solo aparece cuando el reporte ya
+ * salió de borrador, igual que la regla del backend.
+ */
+function DownloadExcelButton({ href }: { href: string }) {
+  const [descargando, setDescargando] = useState(false);
+  const [fallo, setFallo] = useState(false);
+
+  async function descargar() {
+    setDescargando(true);
+    setFallo(false);
+    try {
+      const res = await fetch(href);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') ?? '';
+      const match = /filename="?([^"]+)"?/.exec(disposition);
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = match?.[1] ?? 'reporte-de-gastos.xlsx';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setFallo(true);
+    } finally {
+      setDescargando(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {fallo && <span className="text-xs text-rose-600">No se pudo descargar</span>}
+      <button
+        type="button"
+        onClick={() => void descargar()}
+        disabled={descargando}
+        className="inline-flex items-center gap-2 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:border-slate-300 disabled:opacity-50"
+      >
+        <DownloadIcon className="h-4 w-4" />
+        {descargando ? 'Generando…' : 'Descargar Excel'}
+      </button>
+    </div>
+  );
 }
 
 export function CardReportDetail({ report, viewer, backHref }: Props) {
@@ -55,6 +104,9 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
         <div className="flex items-center gap-3">
           <span className="font-mono text-sm text-slate-500">{report.reportNumber}</span>
           <CardStatusBadge status={report.status} />
+          {report.status !== 'draft' && (
+            <DownloadExcelButton href={`/api/credit-cards/reports/${report.id}/download`} />
+          )}
         </div>
       </div>
 

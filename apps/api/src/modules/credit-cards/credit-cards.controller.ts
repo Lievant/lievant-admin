@@ -9,11 +9,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -66,6 +68,27 @@ export class CreditCardsController {
 
   // Sin @RequirePermission: lo consultan el creador, el titular de la tarjeta y
   // Finanzas; el guard solo evalúa un permiso y el servicio cubre los tres casos.
+  /**
+   * Descarga del reporte en Excel (FIN-RE-06). Sin @RequirePermission por la
+   * misma razón que reports/:id: el acceso lo resuelve el servicio para el
+   * creador, el titular de la tarjeta y Finanzas.
+   */
+  @Get('reports/:id/download')
+  async downloadReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, fileName } = await this.service.generateExcel(id, user);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  }
+
   @Get('reports/:id')
   getReportDetail(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
     return this.service.getReportDetail(id, user);

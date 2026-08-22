@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import {
+  aNumero,
+  buildExpenseReportWorkbook,
+  formatoFecha,
+  nombreArchivo,
+} from '../../common/expense-report-excel';
 import { User } from '../auth/entities/user.entity';
 import { userHasPermission } from '../auth/permissions.util';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
@@ -467,6 +473,87 @@ export class CreditCardsService {
   // ==========================================================================
   // Helpers
   // ==========================================================================
+
+  /**
+   * Excel del reporte con el formato controlado FIN-RE-06. Igual que en
+   * reembolsos, el acceso se resuelve con assertCanRead —creador, titular de la
+   * tarjeta y Finanzas— y no con un permiso único en el controlador.
+   */
+  async generateExcel(id: string, user: User): Promise<{ buffer: Buffer; fileName: string }> {
+    const report = await this.getReportOrFail(id);
+    this.assertCanRead(report, user);
+
+    if (report.status === 'draft') {
+      throw new BadRequestException('El reporte aún es borrador; envíalo antes de descargarlo.');
+    }
+
+    const card = report.creditCard;
+    const titular = card?.holderEmployee?.fullName ?? '';
+    const creador = report.creatorEmployee?.fullName ?? report.creator?.name ?? '';
+    const tarjeta = card
+      ? `•••• •••• •••• ${card.lastFour}${card.alias ? ` — ${card.alias}` : ''}`
+      : '';
+
+    const lines = [...(report.lines ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const wb = buildExpenseReportWorkbook({
+      title: 'Reporte de Gastos',
+      documentCode: report.documentCode,
+      documentVersion: report.documentVersion,
+      documentClassification: report.documentClassification,
+      leftFields: [
+        { label: 'Tarjeta', value: tarjeta },
+        { label: 'Nombre del Titular de la Tarjeta de crédito', value: titular },
+        { label: 'Creado por', value: creador },
+        { label: 'Departamento', value: report.department ?? '' },
+      ],
+      rightFields: [
+        { label: 'Fecha de inicio', value: formatoFecha(report.periodStart) },
+        { label: 'Fecha de término', value: formatoFecha(report.periodEnd) },
+        { label: 'Número de reporte', value: report.reportNumber ?? 'Sin número' },
+      ],
+      columns: [
+        { header: 'FECHA', width: 14 },
+        { header: 'COLABORADOR', width: 24 },
+        { header: 'MOTIVO / EVENTO', width: 30 },
+        { header: 'PROVEEDOR', width: 30 },
+        { header: 'CONCEPTO', width: 26 },
+        { header: 'SUBTOTAL', width: 14, kind: 'money', totalKey: 'subtotal' },
+        { header: 'PROPINA', width: 12, kind: 'money', totalKey: 'tip' },
+        { header: 'EXTRAS', width: 12, kind: 'money', totalKey: 'extras' },
+        { header: 'TOTAL', width: 14, kind: 'money', totalKey: 'total' },
+        { header: 'TIPO DE GASTO', width: 24 },
+        { header: 'FACTURA', width: 10 },
+      ],
+      rows: lines.map((l) => [
+        formatoFecha(l.lineDate),
+        l.collaborator ?? '',
+        l.motive ?? '',
+        l.vendor ?? '',
+        l.conceptName ?? '',
+        aNumero(l.subtotal),
+        aNumero(l.tip),
+        aNumero(l.extras),
+        aNumero(l.total),
+        l.expenseTypeName ?? '',
+        l.hasInvoice ? 'Sí' : 'No',
+      ]),
+      totals: {
+        subtotal: aNumero(report.totalSubtotal),
+        tip: aNumero(report.totalTip),
+        extras: aNumero(report.totalExtras),
+        total: aNumero(report.totalAmount),
+      },
+      signatureLeft: { caption: 'Nombre y firma del solicitante', name: creador },
+      signatureRight: { caption: 'Nombre y firma del autorizador', name: titular || 'Pendiente de autorización' },
+    });
+
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    return {
+      buffer,
+      fileName: nombreArchivo(report.documentCode, report.reportNumber, titular || creador),
+    };
+  }
 
   private async getReportOrFail(id: string): Promise<CardExpenseReport> {
     const report = await this.reportsRepo.findOne({

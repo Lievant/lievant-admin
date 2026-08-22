@@ -29,6 +29,12 @@ import {
 import { CatalogExpenseConcept } from './entities/catalog-expense-concept.entity';
 import { CatalogExpenseType } from './entities/catalog-expense-type.entity';
 import { ExpenseLine } from './entities/expense-line.entity';
+import {
+  aNumero,
+  buildExpenseReportWorkbook,
+  formatoFecha,
+  nombreArchivo,
+} from '../../common/expense-report-excel';
 import { ExpenseReport } from './entities/expense-report.entity';
 import { ALLOWED_INVOICE_MIME_TYPES, ExpensesStorageService } from './expenses-storage.service';
 
@@ -473,6 +479,81 @@ export class ExpensesService {
         limit,
         totalPages: Math.max(1, Math.ceil(total / limit)),
       }));
+  }
+
+  /**
+   * Excel del reporte con el formato controlado FIN-RE-07. Se apoya en el mismo
+   * control de acceso del detalle (solicitante, autorizador y Finanzas) en vez
+   * de un @RequirePermission en el controlador, porque Finanzas ve reportes
+   * ajenos sin tener el permiso de la herramienta de autoservicio.
+   */
+  async generateExcel(id: string, user: User): Promise<{ buffer: Buffer; fileName: string }> {
+    const report = await this.getReportOrFail(id);
+    this.assertCanRead(report, user);
+
+    if (report.status === 'draft') {
+      throw new BadRequestException('El reporte aún es borrador; envíalo antes de descargarlo.');
+    }
+
+    const solicitante = report.requesterEmployee?.fullName ?? report.requester?.name ?? '';
+    const autorizador =
+      report.authorizerEmployee?.fullName ?? report.authorizer?.name ?? 'Pendiente de autorización';
+
+    const lines = [...(report.lines ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
+
+    const wb = buildExpenseReportWorkbook({
+      title: 'Reporte de Gastos por reembolso',
+      documentCode: report.documentCode,
+      documentVersion: report.documentVersion,
+      documentClassification: report.documentClassification,
+      leftFields: [
+        { label: 'Nombre del Solicitante', value: solicitante },
+        { label: 'Departamento', value: report.department ?? '' },
+        { label: 'Motivo / Evento', value: report.motive ?? '' },
+        { label: 'Número de reporte', value: report.reportNumber ?? 'Sin número' },
+      ],
+      rightFields: [
+        { label: 'Autorizado por:', value: autorizador },
+        { label: 'Fecha de inicio', value: formatoFecha(report.periodStart) },
+        { label: 'Fecha de término', value: formatoFecha(report.periodEnd) },
+      ],
+      columns: [
+        { header: 'FECHA', width: 14 },
+        { header: 'PROVEEDOR', width: 30 },
+        { header: 'CONCEPTO', width: 30 },
+        { header: 'SUBTOTAL', width: 14, kind: 'money', totalKey: 'subtotal' },
+        { header: 'PROPINA', width: 12, kind: 'money', totalKey: 'tip' },
+        { header: 'EXTRAS', width: 12, kind: 'money', totalKey: 'extras' },
+        { header: 'TOTAL', width: 14, kind: 'money', totalKey: 'total' },
+        { header: 'TIPO DE GASTO', width: 24 },
+        { header: 'FACTURA', width: 10 },
+      ],
+      rows: lines.map((l) => [
+        formatoFecha(l.lineDate),
+        l.vendor ?? '',
+        l.conceptName ?? '',
+        aNumero(l.subtotal),
+        aNumero(l.tip),
+        aNumero(l.extras),
+        aNumero(l.total),
+        l.expenseTypeName ?? '',
+        l.hasInvoice ? 'Sí' : 'No',
+      ]),
+      totals: {
+        subtotal: aNumero(report.totalSubtotal),
+        tip: aNumero(report.totalTip),
+        extras: aNumero(report.totalExtras),
+        total: aNumero(report.totalAmount),
+      },
+      signatureLeft: { caption: 'Nombre y firma del solicitante', name: solicitante },
+      signatureRight: { caption: 'Nombre y firma del autorizador', name: autorizador },
+    });
+
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    return {
+      buffer,
+      fileName: nombreArchivo(report.documentCode, report.reportNumber, solicitante),
+    };
   }
 
   private async getReportOrFail(id: string): Promise<ExpenseReport> {
