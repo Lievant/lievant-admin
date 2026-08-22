@@ -3871,3 +3871,102 @@ export function processCardReport(
     body: JSON.stringify(payload),
   });
 }
+
+// ── Reporte: Control de Documentos por Entidad ────────────────────────────────
+
+export type DocumentEntityKey = 'employees' | 'clients' | 'vendors';
+export type DocumentDocStatus = 'complete' | 'incomplete' | 'no_required';
+export type DocumentEntityFilter =
+  | 'all'
+  | 'complete'
+  | 'incomplete'
+  | 'sin_docs'
+  | 'en_proceso'
+  | 'no_required';
+export type DocumentStatusFilter = 'all' | 'active' | 'inactive';
+
+export interface DocumentSummaryBlock {
+  total: number;
+  activos: number;
+  inactivos: number;
+  completos: number;
+  incompletos: number;
+  sinDocumentos: number;
+  enProceso: number;
+  sinRequeridos: number;
+}
+
+export interface DocumentSummary {
+  empleados: DocumentSummaryBlock;
+  clientes: DocumentSummaryBlock;
+  proveedores: DocumentSummaryBlock;
+}
+
+export interface DocumentEntityRow {
+  id: string;
+  name: string;
+  status: string;
+  docStatus: DocumentDocStatus;
+  totalDocs: number;
+  requiredDocs: number;
+  missingDocs: number;
+  lastDocUploadedAt: string | null;
+}
+
+export interface DocumentEntityPage {
+  items: DocumentEntityRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface DocumentActivityRow {
+  date: string;
+  entityName: string;
+  documentType: string;
+  uploadedBy: string;
+  uploadedAt: string;
+}
+
+export interface DocumentActivityPage {
+  items: DocumentActivityRow[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export function getDocumentReportSummary(): Promise<DocumentSummary> {
+  return apiFetchWithRetry<DocumentSummary>('/reports/documents/summary');
+}
+
+export function getDocumentReportEntities(params: {
+  entity: DocumentEntityKey;
+  page?: number;
+  limit?: number;
+  filter?: DocumentEntityFilter;
+  status?: DocumentStatusFilter;
+  search?: string;
+}): Promise<DocumentEntityPage> {
+  const q = new URLSearchParams({ entity: params.entity });
+  if (params.page) q.set('page', String(params.page));
+  if (params.limit) q.set('limit', String(params.limit));
+  if (params.filter && params.filter !== 'all') q.set('filter', params.filter);
+  if (params.status && params.status !== 'all') q.set('status', params.status);
+  if (params.search) q.set('search', params.search);
+  return apiFetchWithRetry<DocumentEntityPage>(`/reports/documents/entities?${q.toString()}`);
+}
+
+export function getDocumentReportActivity(params: {
+  entity: DocumentEntityKey;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}): Promise<DocumentActivityPage> {
+  const q = new URLSearchParams({ entity: params.entity });
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom);
+  if (params.dateTo) q.set('dateTo', params.dateTo);
+  if (params.page) q.set('page', String(params.page));
+  if (params.limit) q.set('limit', String(params.limit));
+  return apiFetchWithRetry<DocumentActivityPage>(`/reports/documents/activity?${q.toString()}`);
+}
