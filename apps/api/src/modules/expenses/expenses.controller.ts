@@ -9,11 +9,13 @@ import {
   Patch,
   Post,
   Query,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
@@ -160,6 +162,27 @@ export class ExpensesController {
     @CurrentUser() user: User,
   ) {
     return this.service.registerInvoice(id, lineId, user, dto);
+  }
+
+  /**
+   * Descarga del reporte en Excel con el formato del SGSI. Sin
+   * @RequirePermission a propósito: igual que GET :id, lo consultan el
+   * solicitante, su autorizador y Finanzas, y el servicio resuelve los tres.
+   */
+  @Get(':id/download')
+  async downloadReport(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { buffer, fileName } = await this.service.generateExcel(id, user);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
   }
 
   @Get(':id/lines/:lineId/invoice')
