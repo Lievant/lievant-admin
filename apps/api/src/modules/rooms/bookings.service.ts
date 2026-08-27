@@ -165,12 +165,23 @@ export class BookingsService {
 
       if (current.msEventId) {
         try {
-          const hasAttendees = (current.attendees ?? []).length > 0;
-          if (hasAttendees) {
-            // Notifica la cancelación por correo a los invitados.
-            await this.graphTokenService.cancelCalendarEvent(current.user.email, current.msEventId);
+          // Si quien reservó está dado de baja, el join lo deja en null y no
+          // hay buzón contra el que operar. Antes el TypeError caía en el catch
+          // de abajo y se reportaba como un fallo genérico de Graph; así queda
+          // claro en el log que la reserva sí se canceló y lo único que se
+          // omitió fue el evento de calendario.
+          if (!current.user) {
+            this.logger.warn(
+              `Reserva ${current.id} cancelada sin limpiar el evento de calendario: el usuario ${current.userId} ya no existe`,
+            );
           } else {
-            await this.graphTokenService.deleteCalendarEvent(current.user.email, current.msEventId);
+            const hasAttendees = (current.attendees ?? []).length > 0;
+            if (hasAttendees) {
+              // Notifica la cancelación por correo a los invitados.
+              await this.graphTokenService.cancelCalendarEvent(current.user.email, current.msEventId);
+            } else {
+              await this.graphTokenService.deleteCalendarEvent(current.user.email, current.msEventId);
+            }
           }
         } catch (error) {
           this.logger.warn(`No se pudo cancelar el evento de calendario para la reserva ${current.id}: ${error}`);
@@ -264,10 +275,19 @@ export class BookingsService {
     // cambio de ubicación y no la sala anterior.
     if (saved.status === BookingStatus.CONFIRMADA) {
       const timeZone = targetRoom.office?.city?.timezone ?? 'America/Mexico_City';
-      if (saved.msEventId) {
+      // Mismo caso que en cancel(): sin usuario no hay buzón que sincronizar.
+      // Se resuelve el correo antes de ramificar para que el tipo quede
+      // estrechado dentro del try.
+      const authorEmail = booking.user?.email ?? null;
+
+      if (saved.msEventId && authorEmail === null) {
+        this.logger.warn(
+          `Reserva ${saved.id} actualizada sin sincronizar el calendario: el usuario ${saved.userId} ya no existe`,
+        );
+      } else if (saved.msEventId && authorEmail !== null) {
         try {
           const { joinUrl } = await this.graphTokenService.updateCalendarEvent(
-            booking.user.email,
+            authorEmail,
             saved.msEventId,
             {
               subject: saved.title,
@@ -662,7 +682,18 @@ export class BookingsService {
       .getMany();
   }
 
-  private async syncCalendarEvent(booking: Booking, room: Room, user: User): Promise<void> {
+  private async syncCalendarEvent(booking: Booking, room: Room, user: User | null): Promise<void> {
+    // Sin usuario no hay buzón contra el que crear el evento. Se acepta null en
+    // la firma (y no en cada llamador) porque las tres rutas que sincronizan
+    // calendario cargan el usuario por join, y ese join lo deja en null cuando
+    // quien reservó está dado de baja.
+    if (!user) {
+      this.logger.warn(
+        `Reserva ${booking.id} sin evento de calendario: el usuario ${booking.userId} ya no existe`,
+      );
+      return;
+    }
+
     try {
       const timeZone = room.office?.city?.timezone ?? 'America/Mexico_City';
       // Siempre se pide reunión de Teams, también sin invitados: quien reserva

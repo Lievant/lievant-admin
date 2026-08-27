@@ -38,7 +38,7 @@ export class Booking {
 
   @ManyToOne(() => User, { eager: false })
   @JoinColumn({ name: 'user_id' })
-  user!: User;
+  user!: User | null;
 
   @Column({ type: 'varchar', length: 255 })
   title!: string;
