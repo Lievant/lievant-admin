@@ -54,6 +54,13 @@ export class RoomsService {
     const overlapping = await this.bookingsRepository
       .createQueryBuilder('booking')
       .leftJoinAndSelect('booking.user', 'user')
+      // User usa @DeleteDateColumn, así que TypeORM añade `user.deleted_at IS
+      // NULL` al ON del join y deja booking.user en null cuando quien reservó
+      // está dado de baja. Eso tumbaba la respuesta entera con un 500 al leer
+      // user.name. Booking y Room no tienen soft-delete, así que withDeleted()
+      // solo afecta a este join: la sala sigue mostrándose como ocupada y con
+      // el nombre de quien la reservó, aunque ya no esté en la organización.
+      .withDeleted()
       .where('booking.roomId IN (:...roomIds)', { roomIds })
       .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
       .andWhere('booking.startTime < :endTime AND booking.endTime > :startTime', { startTime, endTime })
@@ -81,7 +88,10 @@ export class RoomsService {
         return {
           ...room,
           is_available: false,
-          occupied_by: { userName: booking.user.name, title: booking.title },
+          // Cinturón y tirantes: withDeleted() cubre al usuario dado de baja,
+          // pero user_id podría apuntar a una fila inexistente. La sala está
+          // ocupada igual, así que nunca debe caerse por no saber el nombre.
+          occupied_by: { userName: booking.user?.name ?? 'Usuario dado de baja', title: booking.title },
         };
       }
 
