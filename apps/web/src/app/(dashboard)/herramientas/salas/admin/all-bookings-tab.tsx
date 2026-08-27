@@ -20,6 +20,7 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
   const [date, setDate] = useState('');
   const [rooms, setRooms] = useState<Room[]>([]);
   const [bookings, setBookings] = useState<Booking[] | null>(null);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -46,9 +47,32 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
         params.date_to = date;
       }
       const result = await listAdminBookingsAction(params);
-      setBookings(result);
+      setBookings(result?.items ?? null);
+      setCursor(result?.nextCursor ?? null);
     });
   }, [officeId, roomId, date]);
+
+  // Página siguiente con los mismos filtros. El cursor ya codifica dónde quedó
+  // la anterior, así que los filtros se reenvían tal cual.
+  function handleLoadMore() {
+    if (!cursor) return;
+    startTransition(async () => {
+      const params: ListAdminBookingsParams = { cursor };
+      if (officeId) params.office_id = officeId;
+      if (roomId) params.room_id = roomId;
+      if (date) {
+        params.date_from = date;
+        params.date_to = date;
+      }
+      const result = await listAdminBookingsAction(params);
+      if (!result) {
+        setError('No se pudieron cargar más reservas.');
+        return;
+      }
+      setBookings((prev) => [...(prev ?? []), ...result.items]);
+      setCursor(result.nextCursor);
+    });
+  }
 
   function handleCancel(id: string) {
     startTransition(async () => {
@@ -141,6 +165,19 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
             </tbody>
           </table>
           </ScrollableTable>
+        </div>
+      )}
+
+      {cursor && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={isPending}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300 disabled:opacity-60"
+          >
+            {isPending ? 'Cargando…' : 'Cargar más'}
+          </button>
         </div>
       )}
     </div>

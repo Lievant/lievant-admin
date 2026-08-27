@@ -25,6 +25,7 @@ import {
   type CreateRoomOfficePayload,
   type CreateRoomPayload,
   type ListAdminBookingsParams,
+  type PaginatedBookings,
   type Room,
   type UpdateBookingPayload,
   type UpdateRoomOfficePayload,
@@ -35,6 +36,9 @@ export interface ActionResult {
   success: boolean;
   error?: string;
 }
+
+/** Tope por página del endpoint /bookings/admin. */
+const MAX_ADMIN_BOOKINGS_LIMIT = 200;
 
 function toResult(err: unknown): ActionResult {
   if (err instanceof ApiError) {
@@ -172,13 +176,21 @@ export async function updateRoomOfficeAction(id: string, payload: UpdateRoomOffi
 
 export async function getRoomBookingsAction(roomId: string, dateFrom: string, dateTo: string): Promise<Booking[] | null> {
   try {
-    return await listAdminBookings({ room_id: roomId, date_from: dateFrom, date_to: dateTo });
+    // Ya viene acotado a una sala y un rango de fechas, así que cabe entero en
+    // una página. Se pide el máximo del API para no truncar el calendario.
+    const page = await listAdminBookings({
+      room_id: roomId,
+      date_from: dateFrom,
+      date_to: dateTo,
+      limit: MAX_ADMIN_BOOKINGS_LIMIT,
+    });
+    return page.items;
   } catch {
     return null;
   }
 }
 
-export async function listAdminBookingsAction(params: ListAdminBookingsParams): Promise<Booking[] | null> {
+export async function listAdminBookingsAction(params: ListAdminBookingsParams): Promise<PaginatedBookings | null> {
   try {
     return await listAdminBookings(params);
   } catch {

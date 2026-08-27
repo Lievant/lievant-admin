@@ -40,6 +40,18 @@ import { VendorsModule } from './modules/vendors/vendors.module';
         synchronize: false,
         logging: config.get<string>('NODE_ENV') === 'development',
         ssl: config.get<string>('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
+        // Pool explícito. Sin esto, node-postgres abre hasta 10 conexiones por
+        // task; el db.t3.micro de prod solo admite 81 en total, así que escalar
+        // tasks agotaba el servidor antes que la CPU. Con 5 por task, 2 tasks
+        // usan 10 y queda margen de sobra para migraciones y sesiones manuales.
+        extra: {
+          max: 5,
+          min: 1,
+          // Nombres de node-postgres: 'acquire'/'idle' son de Sequelize y este
+          // driver los ignoraría en silencio.
+          connectionTimeoutMillis: 30_000,
+          idleTimeoutMillis: 10_000,
+        },
       }),
     }),
     AuthModule,

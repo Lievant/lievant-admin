@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
 import type { Booking } from '@/lib/api';
+import { listAdminBookingsAction } from './actions';
 import { BookRoomDialog } from './book-room-dialog';
 import { CancelBookingDialog } from './mis-reservas/cancel-booking-dialog';
 import {
@@ -12,8 +13,14 @@ import {
   formatDurationLabel,
 } from './constants';
 
+/** Reservas por página al pulsar "Cargar más". Coincide con el default del API. */
+const PAGE_SIZE = 50;
+
 interface AllBookingsPanelProps {
+  /** Primera página, renderizada en el servidor. */
   bookings: Booking[];
+  /** Cursor de la página siguiente. null = no hay más. */
+  initialCursor?: string | null;
   currentUserId: string | null;
 }
 
@@ -25,29 +32,59 @@ function normalize(value: string): string {
     .toLowerCase();
 }
 
-export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelProps) {
+export function AllBookingsPanel({ bookings, initialCursor = null, currentUserId }: AllBookingsPanelProps) {
   const [roomId, setRoomId] = useState('');
   const [date, setDate] = useState('');
   const [search, setSearch] = useState('');
   const [cancelTarget, setCancelTarget] = useState<Booking | null>(null);
   const [editTarget, setEditTarget] = useState<Booking | null>(null);
 
+  // Páginas traídas con "Cargar más", encima de la que vino del servidor.
+  const [extraPages, setExtraPages] = useState<Booking[]>([]);
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isLoading, startLoading] = useTransition();
+
+  // Un router.refresh() (p. ej. tras cancelar) reemplaza la primera página: hay
+  // que descartar lo acumulado o quedarían reservas duplicadas y desactualizadas.
+  useEffect(() => {
+    setExtraPages([]);
+    setCursor(initialCursor);
+    setLoadError(null);
+  }, [bookings, initialCursor]);
+
+  const loaded = useMemo(() => [...bookings, ...extraPages], [bookings, extraPages]);
+
+  function handleLoadMore() {
+    if (!cursor) return;
+    setLoadError(null);
+    startLoading(async () => {
+      const page = await listAdminBookingsAction({ cursor, limit: PAGE_SIZE });
+      if (!page) {
+        setLoadError('No se pudieron cargar más reservas.');
+        return;
+      }
+      setExtraPages((prev) => [...prev, ...page.items]);
+      setCursor(page.nextCursor);
+    });
+  }
+
   // Las salas se derivan de las propias reservas: evita una petición extra y
   // solo ofrece salas que realmente tienen reservas que filtrar.
   const roomOptions = useMemo(() => {
     const byId = new Map<string, string>();
-    for (const booking of bookings) {
+    for (const booking of loaded) {
       if (booking.room) {
         const officeName = booking.room.office?.name;
         byId.set(booking.room.id, officeName ? `${booking.room.name} · ${officeName}` : booking.room.name);
       }
     }
     return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es'));
-  }, [bookings]);
+  }, [loaded]);
 
   const filtered = useMemo(() => {
     const needle = normalize(search.trim());
-    return bookings
+    return loaded
       .filter((booking) => {
         if (roomId && booking.roomId !== roomId) return false;
         if (date && booking.startTime.slice(0, 10) !== date) return false;
@@ -60,7 +97,7 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
         return true;
       })
       .sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
-  }, [bookings, roomId, date, search]);
+  }, [loaded, roomId, date, search]);
 
   const now = Date.now();
   const hasFilters = Boolean(roomId || date || search.trim());
@@ -117,12 +154,15 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
 
       <p className="mt-3 text-xs text-slate-400">
         {filtered.length} {filtered.length === 1 ? 'reserva' : 'reservas'}
-        {hasFilters && ` de ${bookings.length}`}
+        {hasFilters && ` de ${loaded.length} cargadas`}
+        {/* Los filtros son en cliente: solo alcanzan a lo ya cargado. Decirlo
+            evita leer "0 reservas" como "no existe" cuando sí hay más páginas. */}
+        {cursor && hasFilters && ' · quedan reservas sin cargar'}
       </p>
 
       {filtered.length === 0 ? (
         <div className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400 shadow-sm">
-          {bookings.length === 0
+          {loaded.length === 0
             ? 'No hay reservas registradas.'
             : 'Ninguna reserva coincide con los filtros.'}
         </div>
@@ -203,6 +243,21 @@ export function AllBookingsPanel({ bookings, currentUserId }: AllBookingsPanelPr
               </div>
             );
           })}
+        </div>
+      )}
+
+      {loadError && <p className="mt-3 text-sm text-red-600">{loadError}</p>}
+
+      {cursor && (
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            disabled={isLoading}
+            className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300 disabled:opacity-60"
+          >
+            {isLoading ? 'Cargando…' : 'Cargar más'}
+          </button>
         </div>
       )}
 
