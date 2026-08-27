@@ -26,13 +26,19 @@ export class BookingsController {
     @Query('status') status?: BookingStatus,
     @Query('date_from') dateFrom?: string,
     @Query('date_to') dateTo?: string,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
   ) {
+    const parsedLimit = limit === undefined ? undefined : Number(limit);
+
     return this.bookingsService.findAdmin(user, {
       office_id: officeId,
       room_id: roomId,
       status,
       date_from: dateFrom,
       date_to: dateTo,
+      limit: parsedLimit !== undefined && Number.isFinite(parsedLimit) ? parsedLimit : undefined,
+      cursor,
     });
   }
 

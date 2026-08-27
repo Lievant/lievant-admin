@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { Booking, City, Country, ErrorKind, Office, RoomAvailability } from '@/lib/api';
+import type { Booking, ErrorKind, RoomAvailability, RoomsCatalog } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { PeopleIcon } from '@/components/icons';
 import { AllBookingsPanel } from './all-bookings-panel';
@@ -29,9 +29,8 @@ interface RoomsFilters {
 }
 
 interface RoomsScreenProps {
-  countries: Country[];
-  cities: City[];
-  offices: Office[];
+  /** Árbol completo país → ciudad → oficina → salas. Llega en una sola petición. */
+  catalog: RoomsCatalog;
   rooms: RoomAvailability[] | null;
   errorKind: ErrorKind | null;
   isAdmin: boolean;
@@ -39,6 +38,7 @@ interface RoomsScreenProps {
   /** herramientas.salas.manage: habilita la pestaña "Todas las reservas". */
   canManageAll?: boolean;
   allBookings?: Booking[];
+  allBookingsCursor?: string | null;
   currentUserId?: string | null;
 }
 
@@ -46,15 +46,14 @@ const TIME_SLOTS = generateTimeSlots();
 const MAX_VISIBLE_AMENITIES = 4;
 
 export function RoomsScreen({
-  countries,
-  cities,
-  offices,
+  catalog,
   rooms,
   errorKind,
   isAdmin,
   filters,
   canManageAll = false,
   allBookings = [],
+  allBookingsCursor = null,
   currentUserId = null,
 }: RoomsScreenProps) {
   const router = useRouter();
@@ -68,9 +67,9 @@ export function RoomsScreen({
   const [roomType, setRoomType] = useState(filters.room_type);
   const [bookingRoom, setBookingRoom] = useState<RoomAvailability | null>(null);
 
-  // Mantener los selects sincronizados con la URL (filters). Necesario para que las
-  // opciones pre-seleccionadas por el cascade de auto-selección se reflejen en los
-  // dropdowns (el estado local se inicializa una sola vez y no sigue a las props solo).
+  // Mantener los selects sincronizados con la URL (filters): al volver de una
+  // búsqueda el servidor manda la selección ya resuelta y el estado local, que
+  // se inicializa una sola vez, no seguiría a las props por sí solo.
   useEffect(() => {
     setCountryId(filters.country_id);
   }, [filters.country_id]);
@@ -81,96 +80,57 @@ export function RoomsScreen({
     setOfficeId(filters.office_id);
   }, [filters.office_id]);
 
-  // Auto-selección México / León / León al entrar (solo si no hay filtros previos
-  // y el usuario no ha interactuado). Se desactiva si algún catálogo no tiene el destino.
-  const autoRef = useRef(true);
+  // Los tres niveles se derivan del catálogo que ya está en memoria. Cambiar de
+  // país/ciudad/oficina no dispara ninguna petición: antes cada cambio hacía un
+  // router.push que re-renderizaba la página entera en el servidor.
+  const countries = catalog.countries;
 
-  // Paso 1: País → México (una sola vez, al montar).
-  useEffect(() => {
-    if (filters.country_id || filters.city_id || filters.office_id) {
-      autoRef.current = false; // ya venía con filtros (p. ej. link compartido)
-      return;
-    }
-    const mx = countries.find((c) => c.code === 'MX' || /m[eé]xico/i.test(c.name));
-    if (mx) {
-      navigate({ country_id: mx.id, city_id: '', office_id: '' });
-    } else {
-      autoRef.current = false;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const cities = useMemo(
+    () => countries.find((country) => country.id === countryId)?.cities ?? [],
+    [countries, countryId],
+  );
 
-  // Paso 2: Ciudad → León (cuando cargan las ciudades de México).
-  useEffect(() => {
-    if (!autoRef.current || filters.city_id) return;
-    const mxSelected = countries.some(
-      (c) => c.id === filters.country_id && (c.code === 'MX' || /m[eé]xico/i.test(c.name)),
-    );
-    if (!mxSelected || cities.length === 0) return;
-    const leon = cities.find((c) => /le[oó]n/i.test(c.name));
-    if (leon) navigate({ city_id: leon.id, office_id: '' });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cities]);
+  const offices = useMemo(() => cities.find((city) => city.id === cityId)?.offices ?? [], [cities, cityId]);
 
-  // Paso 3: Oficina → León (cuando cargan las oficinas de la ciudad de León).
-  useEffect(() => {
-    if (!autoRef.current || filters.office_id || !filters.city_id) return;
-    if (offices.length === 0) return;
-    const leonOffice = offices.find((o) => /le[oó]n/i.test(o.name));
-    if (leonOffice) navigate({ office_id: leonOffice.id });
-    autoRef.current = false; // fin del cascade
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [offices]);
-
-  function navigate(overrides: Partial<RoomsFilters>) {
-    // País/ciudad/oficina se toman de `filters` (la verdad de la URL) y no del
-    // estado local, que queda desincronizado durante el cascade de auto-selección
-    // (el estado no se actualiza en el mismo render en que llegan las props nuevas).
-    // Fecha/hora/duración/tipo sí vienen del estado local: son campos de formulario
-    // pendientes que aún no están en la URL hasta pulsar "Buscar".
-    const next: RoomsFilters = {
-      country_id: filters.country_id,
-      city_id: filters.city_id,
-      office_id: filters.office_id,
+  // Única navegación de la pantalla: pulsar "Buscar disponibilidad". Todo lo
+  // demás (los tres selects de ubicación) se resuelve contra el catálogo local.
+  function handleSearch() {
+    const sp = new URLSearchParams();
+    Object.entries({
+      country_id: countryId,
+      city_id: cityId,
+      office_id: officeId,
       date,
       start_time: startTime,
       duration_hours: durationHours,
       room_type: roomType,
-      ...overrides,
-    };
-    const sp = new URLSearchParams();
-    Object.entries(next).forEach(([key, value]) => {
+    }).forEach(([key, value]) => {
       if (value) sp.set(key, value);
     });
     router.push(`/herramientas/salas?${sp.toString()}`);
   }
 
   function handleCountryChange(value: string) {
-    autoRef.current = false;
     setCountryId(value);
     setCityId('');
     setOfficeId('');
-    navigate({ country_id: value, city_id: '', office_id: '' });
   }
 
   function handleCityChange(value: string) {
-    autoRef.current = false;
     setCityId(value);
     setOfficeId('');
-    navigate({ city_id: value, office_id: '' });
   }
 
   function handleOfficeChange(value: string) {
-    autoRef.current = false;
     setOfficeId(value);
-    navigate({ office_id: value });
-  }
-
-  function handleSearch() {
-    navigate({});
   }
 
   const selectedOffice = offices.find((office) => office.id === officeId);
+
+  // Los resultados corresponden a la oficina de la URL, no a la del select. Si
+  // el usuario cambió de oficina y aún no buscó, hay que decirlo en vez de
+  // mostrarle disponibilidad de otra oficina como si fuera la elegida.
+  const resultsAreStale = Boolean(officeId) && officeId !== filters.office_id;
 
   if (errorKind === 'forbidden') {
     return <NoPermissions />;
@@ -237,7 +197,11 @@ export function RoomsScreen({
       )}
 
       {canManageAll && view === 'todas' && (
-        <AllBookingsPanel bookings={allBookings} currentUserId={currentUserId} />
+        <AllBookingsPanel
+          bookings={allBookings}
+          initialCursor={allBookingsCursor}
+          currentUserId={currentUserId}
+        />
       )}
 
       {view === 'buscar' && (
@@ -386,6 +350,10 @@ export function RoomsScreen({
       {!officeId ? (
         <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400 shadow-sm">
           Selecciona una oficina y horario para ver disponibilidad.
+        </div>
+      ) : resultsAreStale ? (
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400 shadow-sm">
+          Pulsa «Buscar disponibilidad» para ver las salas de {selectedOffice?.name ?? 'esta oficina'}.
         </div>
       ) : rooms === null ? (
         <div className="mt-6 rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-400 shadow-sm">

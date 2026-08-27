@@ -20,7 +20,18 @@ export interface AdminBookingsQuery {
   status?: BookingStatus | undefined;
   date_from?: string | undefined;
   date_to?: string | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
 }
+
+export interface PaginatedBookings {
+  items: Booking[];
+  /** Opaco: se reenvía tal cual para pedir la página siguiente. null = fin. */
+  nextCursor: string | null;
+}
+
+const DEFAULT_ADMIN_PAGE_SIZE = 50;
+const MAX_ADMIN_PAGE_SIZE = 200;
 
 @Injectable()
 export class BookingsService {
@@ -360,7 +371,7 @@ export class BookingsService {
     return qb.getMany();
   }
 
-  async findAdmin(currentUser: User, query: AdminBookingsQuery): Promise<Booking[]> {
+  async findAdmin(currentUser: User, query: AdminBookingsQuery): Promise<PaginatedBookings> {
     const isSuperAdmin = currentUser.roles.some((role) => role.name === 'SUPER_ADMIN');
     const canManageAll = this.canManageAllBookings(currentUser);
     const adminEntries = await this.officeAdminsRepository.find({ where: { userId: currentUser.id } });
@@ -382,7 +393,10 @@ export class BookingsService {
       .leftJoinAndSelect('room.office', 'office')
       .leftJoinAndSelect('office.city', 'city')
       .leftJoinAndSelect('booking.user', 'user')
-      .orderBy('booking.startTime', 'DESC');
+      .orderBy('booking.startTime', 'DESC')
+      // Desempate estable: sin él, dos reservas con el mismo start_time pueden
+      // alternar de orden entre páginas y el cursor saltarse o repetir filas.
+      .addOrderBy('booking.id', 'DESC');
 
     if (query.office_id) {
       if (!isGlobalAdmin && !officeIds.includes(query.office_id)) {
@@ -409,11 +423,69 @@ export class BookingsService {
       qb.andWhere('booking.startTime <= :dateTo', { dateTo: query.date_to });
     }
 
-    return qb.getMany();
+    const cursor = this.decodeBookingCursor(query.cursor);
+    if (cursor) {
+      // Keyset sobre la misma tupla del ORDER BY. Más barato y estable que
+      // OFFSET: no reescanea las páginas anteriores ni se descuadra si entran
+      // reservas nuevas mientras el admin pagina.
+      qb.andWhere('(booking.startTime, booking.id) < (:cursorTime, :cursorId)', {
+        cursorTime: cursor.startTime,
+        cursorId: cursor.id,
+      });
+    }
+
+    const limit = Math.min(Math.max(query.limit ?? DEFAULT_ADMIN_PAGE_SIZE, 1), MAX_ADMIN_PAGE_SIZE);
+
+    // limit() y no take(): todos los joins son ManyToOne, así que cada reserva
+    // produce exactamente una fila y el LIMIT crudo es exacto. take() obligaría
+    // a TypeORM a la estrategia de subconsulta de ids (dos queries) sin ganar nada.
+    const rows = await qb.limit(limit + 1).getMany();
+
+    const items = rows.slice(0, limit);
+    const last = items.length === limit ? items[items.length - 1] : undefined;
+
+    return {
+      items,
+      nextCursor: rows.length > limit && last ? this.encodeBookingCursor(last) : null,
+    };
   }
 
   async findPendingApproval(currentUser: User): Promise<Booking[]> {
-    return this.findAdmin(currentUser, { status: BookingStatus.PENDIENTE_APROBACION });
+    // Cola de aprobación: se consume entera, no se pagina. El tope alto evita
+    // que una acumulación puntual la trunque en silencio.
+    const page = await this.findAdmin(currentUser, {
+      status: BookingStatus.PENDIENTE_APROBACION,
+      limit: MAX_ADMIN_PAGE_SIZE,
+    });
+    return page.items;
+  }
+
+  private encodeBookingCursor(booking: Booking): string {
+    // new Date(...) defensivo: si el driver devolviera la fecha como string,
+    // un .toISOString() directo reventaría el endpoint entero.
+    const iso = new Date(booking.startTime).toISOString();
+    return Buffer.from(`${iso}|${booking.id}`, 'utf8').toString('base64url');
+  }
+
+  private decodeBookingCursor(cursor?: string): { startTime: Date; id: string } | null {
+    if (!cursor) {
+      return null;
+    }
+
+    try {
+      const [iso, id] = Buffer.from(cursor, 'base64url').toString('utf8').split('|');
+      if (!iso || !id) {
+        return null;
+      }
+      const startTime = new Date(iso);
+      if (Number.isNaN(startTime.getTime())) {
+        return null;
+      }
+      return { startTime, id };
+    } catch {
+      // Un cursor corrupto degrada a "primera página", no a un 500.
+      return null;
+    }
   }
 
   /** herramientas.salas.manage → puede editar/cancelar reservas de cualquiera. */

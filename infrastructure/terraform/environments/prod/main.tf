@@ -154,9 +154,15 @@ module "ecs" {
 
   ecr_repository_url = module.ecr.repository_url
 
-  # Recursos mínimos (decisión). Coinciden con los defaults del módulo.
-  cpu    = 256
-  memory = 512
+  # Subido desde 256/512 tras el diagnóstico de Reserva de Salas: con ~118
+  # usuarios activos el proceso Node se serializaba en picos (85% de CPU sobre
+  # 0.25 vCPU) aunque las queries corrían en menos de 1 ms.
+  cpu    = 512
+  memory = 1024
+
+  # Dos tasks detrás del ALB. El pool va fijado a 5 conexiones por task
+  # (app.module.ts), así que el techo son 10 de las 81 del db.t3.micro.
+  desired_count = 2
 
   # HTTPS en dos fases: false en el primer apply (cert PENDING_VALIDATION),
   # true tras validar DNS y que ACM quede ISSUED.
