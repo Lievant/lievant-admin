@@ -60,6 +60,30 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   return parseResponse<T>(res);
 }
 
+/**
+ * Igual que apiFetch pero deja que la respuesta se cachee en el Data Cache de
+ * Next durante `revalidateSeconds`, en lugar de forzar `no-store`.
+ *
+ * Solo para catálogos: datos compartidos que cambian rarísimo. Ojo con el
+ * alcance real — la clave de caché incluye el header Authorization, así que la
+ * entrada es por usuario, no global.
+ */
+export async function apiFetchCached<T>(path: string, revalidateSeconds: number): Promise<T> {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get('access_token')?.value;
+
+  const res = await fetch(`${API_URL}${path}`, {
+    credentials: 'include',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    next: { revalidate: revalidateSeconds },
+  });
+
+  return parseResponse<T>(res);
+}
+
 export async function apiFetchWithRetry<T>(
   path: string,
   options?: RequestInit,
@@ -1562,6 +1586,42 @@ export function getLocationsTree(): Promise<CountryWithCities[]> {
   return apiFetchWithRetry<CountryWithCities[]>('/rooms/locations');
 }
 
+export interface CatalogRoom {
+  id: string;
+  name: string;
+  capacity: number;
+  amenities: string[];
+  isActive: boolean;
+}
+
+export interface CatalogOffice {
+  id: string;
+  name: string;
+  rooms: CatalogRoom[];
+}
+
+export interface CatalogCity {
+  id: string;
+  name: string;
+  offices: CatalogOffice[];
+}
+
+export interface CatalogCountry {
+  id: string;
+  name: string;
+  code: string;
+  cities: CatalogCity[];
+}
+
+export interface RoomsCatalog {
+  countries: CatalogCountry[];
+}
+
+/** Árbol país → ciudad → oficina → salas en una llamada. Cacheado 5 min. */
+export function getRoomsCatalog(): Promise<RoomsCatalog> {
+  return apiFetchCached<RoomsCatalog>('/rooms/catalog', 300);
+}
+
 export function listRoomCountries(): Promise<Country[]> {
   return apiFetchWithRetry<Country[]>('/rooms/locations/countries');
 }
@@ -1729,18 +1789,29 @@ export interface ListAdminBookingsParams {
   status?: BookingStatus;
   date_from?: string;
   date_to?: string;
+  /** Tope por página. Default del API: 50. Máximo: 200. */
+  limit?: number;
+  /** Cursor opaco devuelto como `nextCursor` en la página anterior. */
+  cursor?: string;
 }
 
-export function listAdminBookings(params: ListAdminBookingsParams = {}): Promise<Booking[]> {
+export interface PaginatedBookings {
+  items: Booking[];
+  nextCursor: string | null;
+}
+
+export function listAdminBookings(params: ListAdminBookingsParams = {}): Promise<PaginatedBookings> {
   const query = new URLSearchParams();
   if (params.office_id) query.set('office_id', params.office_id);
   if (params.room_id) query.set('room_id', params.room_id);
   if (params.status) query.set('status', params.status);
   if (params.date_from) query.set('date_from', params.date_from);
   if (params.date_to) query.set('date_to', params.date_to);
+  if (params.limit !== undefined) query.set('limit', String(params.limit));
+  if (params.cursor) query.set('cursor', params.cursor);
 
   const qs = query.toString();
-  return apiFetchWithRetry<Booking[]>(`/bookings/admin${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<PaginatedBookings>(`/bookings/admin${qs ? `?${qs}` : ''}`);
 }
 
 export function listPendingApprovals(): Promise<Booking[]> {

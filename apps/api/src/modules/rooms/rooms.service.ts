@@ -39,37 +39,54 @@ export class RoomsService {
 
     const rooms = await qb.getMany();
 
+    if (rooms.length === 0) {
+      return [];
+    }
+
     const startTime = new Date(`${dto.date}T${dto.start_time}:00Z`);
     const endTime = new Date(startTime.getTime() + dto.duration_hours * 60 * 60 * 1000);
     const endTimeOfDay = `${String(endTime.getUTCHours()).padStart(2, '0')}:${String(endTime.getUTCMinutes()).padStart(2, '0')}`;
 
-    return Promise.all(
-      rooms.map(async (room) => {
-        const withinHours = dto.start_time >= room.openTime.slice(0, 5) && endTimeOfDay <= room.closeTime.slice(0, 5);
+    // Una sola query para el solapamiento de TODAS las salas de la oficina, en
+    // lugar de una por sala. Antes esto era un N+1 dentro de un Promise.all, que
+    // además abría N conexiones del pool a la vez por cada búsqueda.
+    const roomIds = rooms.map((room) => room.id);
+    const overlapping = await this.bookingsRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.user', 'user')
+      .where('booking.roomId IN (:...roomIds)', { roomIds })
+      .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
+      .andWhere('booking.startTime < :endTime AND booking.endTime > :startTime', { startTime, endTime })
+      .orderBy('booking.startTime', 'ASC')
+      .getMany();
 
-        if (!withinHours) {
-          return { ...room, is_available: false };
-        }
+    // Basta la primera reserva que solape por sala: es la que se muestra como
+    // "ocupada por". El orderBy deja la más temprana al frente.
+    const occupiedByRoom = new Map<string, Booking>();
+    for (const booking of overlapping) {
+      if (!occupiedByRoom.has(booking.roomId)) {
+        occupiedByRoom.set(booking.roomId, booking);
+      }
+    }
 
-        const overlapping = await this.bookingsRepository
-          .createQueryBuilder('booking')
-          .leftJoinAndSelect('booking.user', 'user')
-          .where('booking.roomId = :roomId', { roomId: room.id })
-          .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
-          .andWhere('booking.startTime < :endTime AND booking.endTime > :startTime', { startTime, endTime })
-          .getOne();
+    return rooms.map((room) => {
+      const withinHours = dto.start_time >= room.openTime.slice(0, 5) && endTimeOfDay <= room.closeTime.slice(0, 5);
 
-        if (overlapping) {
-          return {
-            ...room,
-            is_available: false,
-            occupied_by: { userName: overlapping.user.name, title: overlapping.title },
-          };
-        }
+      if (!withinHours) {
+        return { ...room, is_available: false };
+      }
 
-        return { ...room, is_available: true };
-      }),
-    );
+      const booking = occupiedByRoom.get(room.id);
+      if (booking) {
+        return {
+          ...room,
+          is_available: false,
+          occupied_by: { userName: booking.user.name, title: booking.title },
+        };
+      }
+
+      return { ...room, is_available: true };
+    });
   }
 
   async findOne(id: string): Promise<Room> {

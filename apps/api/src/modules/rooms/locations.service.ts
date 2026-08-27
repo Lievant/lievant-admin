@@ -9,6 +9,38 @@ import { Country } from './entities/country.entity';
 import { AdminScope, OfficeAdmin } from './entities/office-admin.entity';
 import { Office } from './entities/office.entity';
 
+export interface CatalogRoom {
+  id: string;
+  name: string;
+  capacity: number;
+  amenities: string[];
+  isActive: boolean;
+}
+
+export interface CatalogOffice {
+  id: string;
+  name: string;
+  rooms: CatalogRoom[];
+}
+
+export interface CatalogCity {
+  id: string;
+  name: string;
+  offices: CatalogOffice[];
+}
+
+export interface CatalogCountry {
+  id: string;
+  name: string;
+  /** Necesario en el cliente para resolver el país por defecto (MX) sin heurística por nombre. */
+  code: string;
+  cities: CatalogCity[];
+}
+
+export interface RoomsCatalog {
+  countries: CatalogCountry[];
+}
+
 @Injectable()
 export class LocationsService {
   constructor(
@@ -17,6 +49,51 @@ export class LocationsService {
     @InjectRepository(Office) private readonly officesRepository: Repository<Office>,
     @InjectRepository(OfficeAdmin) private readonly officeAdminsRepository: Repository<OfficeAdmin>,
   ) {}
+
+  /**
+   * Árbol completo país → ciudad → oficina → salas activas en UNA sola query.
+   *
+   * Sustituye al encadenado countries → cities → offices que obligaba a la
+   * pantalla de salas a hacer tres renders de servidor consecutivos (uno por
+   * nivel del cascade). Los joins van con condición en el ON, no en el WHERE:
+   * un país sin ciudades activas debe seguir apareciendo en el selector.
+   */
+  async getCatalog(): Promise<RoomsCatalog> {
+    const countries = await this.countriesRepository
+      .createQueryBuilder('country')
+      .leftJoinAndSelect('country.cities', 'city', 'city.isActive = true')
+      .leftJoinAndSelect('city.offices', 'office', 'office.isActive = true')
+      .leftJoinAndSelect('office.rooms', 'room', 'room.isActive = true')
+      .where('country.isActive = true')
+      .orderBy('country.sortOrder', 'ASC')
+      .addOrderBy('city.sortOrder', 'ASC')
+      .addOrderBy('office.sortOrder', 'ASC')
+      .addOrderBy('room.name', 'ASC')
+      .getMany();
+
+    return {
+      countries: countries.map((country) => ({
+        id: country.id,
+        name: country.name,
+        code: country.code,
+        cities: (country.cities ?? []).map((city) => ({
+          id: city.id,
+          name: city.name,
+          offices: (city.offices ?? []).map((office) => ({
+            id: office.id,
+            name: office.name,
+            rooms: (office.rooms ?? []).map((room) => ({
+              id: room.id,
+              name: room.name,
+              capacity: room.capacity,
+              amenities: room.amenities ?? [],
+              isActive: room.isActive,
+            })),
+          })),
+        })),
+      })),
+    };
+  }
 
   async getFullTree(): Promise<Array<Country & { cities: Array<City & { offices: Office[] }> }>> {
     const countries = await this.countriesRepository.find({

@@ -1,20 +1,31 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Header, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { QueryAvailabilityDto } from './dto/query-availability.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { LocationsService } from './locations.service';
 import { RoomsService } from './rooms.service';
 
 @UseGuards(JwtAuthGuard)
 @Controller('rooms')
 export class RoomsController {
-  constructor(private readonly roomsService: RoomsService) {}
+  constructor(
+    private readonly roomsService: RoomsService,
+    private readonly locationsService: LocationsService,
+  ) {}
 
   @Get()
   findWithAvailability(@Query() query: QueryAvailabilityDto) {
     return this.roomsService.findWithAvailability(query);
+  }
+
+  // Debe declararse antes de @Get(':id'), igual que 'by-office'.
+  @Get('catalog')
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60')
+  getCatalog() {
+    return this.locationsService.getCatalog();
   }
 
   @Get('admin')
