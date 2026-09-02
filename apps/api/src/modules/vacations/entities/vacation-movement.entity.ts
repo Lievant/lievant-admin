@@ -10,7 +10,9 @@ export type VacationMovementType =
   // porque en el historial del empleado no es lo mismo que él se arrepienta a
   // que se las cancelen después de autorizadas.
   | 'ADMIN_CANCELLED'
-  | 'MANUAL_ADJUSTMENT';
+  | 'MANUAL_ADJUSTMENT'
+  // Realineación del balance tras corregir la fecha de antigüedad del empleado.
+  | 'SENIORITY_RECALC';
 
 @Entity({ name: 'vacation_movements', schema: 'hr' })
 export class VacationMovement {

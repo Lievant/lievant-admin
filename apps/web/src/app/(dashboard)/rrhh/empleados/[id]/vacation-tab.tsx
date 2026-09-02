@@ -36,6 +36,7 @@ const MOVEMENT_META: Record<VacationMovementItem['movementType'], { label: strin
   REQUEST_CANCELLED: { label: 'Devolución / rechazo', color: 'bg-amber-500' },
   ADMIN_CANCELLED: { label: 'Cancelación por RRHH', color: 'bg-orange-500' },
   MANUAL_ADJUSTMENT: { label: 'Ajuste manual', color: 'bg-slate-500' },
+  SENIORITY_RECALC: { label: 'Ajuste por antigüedad', color: 'bg-indigo-500' },
 };
 
 const STATUS_META: Record<VacationRequestStatus, { label: string; className: string }> = {

@@ -276,6 +276,114 @@ export class VacationsService {
     return saved;
   }
 
+  /**
+   * Realinea el balance vigente cuando se corrige la fecha de antigüedad.
+   *
+   * El balance guarda período, antigüedad y días con derecho como columnas
+   * materializadas al momento de crearlo, así que sin esto seguiría reflejando
+   * la fecha anterior para siempre. Nunca toca los días ya consumidos ni
+   * expirados: solo reescribe lo que se deriva de la antigüedad.
+   */
+  async recalculateBalance(employeeId: string): Promise<void> {
+    const employee = await this.employeesRepo.findOne({ where: { id: employeeId } });
+    if (!employee?.seniorityDate) return;
+
+    const existing = await this.balancesRepo.findOne({
+      where: { employeeId, isCurrent: true },
+      order: { periodStart: 'DESC' },
+    });
+    // Sin balance vigente no hay nada que realinear: se creará ya con la fecha
+    // nueva la próxima vez que se consulte el saldo.
+    if (!existing) return;
+
+    const { periodStart, periodEnd, yearsOfService } = this.computeCurrentPeriod(employee.seniorityDate);
+
+    // La antigüedad corregida deja al empleado por debajo del año.
+    if (yearsOfService < 1) {
+      // Si ya consumió o expiró días, el balance respalda solicitudes reales
+      // (vacation_requests.balance_id): se deja intacto para revisión manual.
+      if (Number(existing.usedDays) > 0 || Number(existing.expiredDays) > 0) {
+        this.logger.warn(
+          `Empleado ${employeeId}: la nueva antigüedad ${employee.seniorityDate} no llega al año, ` +
+            `pero el balance ${existing.id} tiene días consumidos. Se deja intacto para revisión manual.`,
+        );
+        return;
+      }
+      await this.dataSource.transaction(async (mgr) => {
+        existing.isCurrent = false;
+        await mgr.getRepository(VacationBalance).save(existing);
+        await mgr.getRepository(VacationMovement).save(
+          mgr.getRepository(VacationMovement).create({
+            employeeId,
+            balanceId: existing.id,
+            movementType: 'SENIORITY_RECALC',
+            daysDelta: String(-Number(existing.entitledDays)),
+            description:
+              `Antigüedad corregida a ${employee.seniorityDate}: el empleado aún no cumple 1 año, ` +
+              `se retira el período ${existing.periodStart} — ${existing.periodEnd}.`,
+          }),
+        );
+      });
+      return;
+    }
+
+    const entitledDays = await this.getVacationDaysEntitled(yearsOfService);
+
+    if (
+      existing.periodStart === periodStart &&
+      existing.periodEnd === periodEnd &&
+      existing.yearsOfService === yearsOfService &&
+      Number(existing.entitledDays) === entitledDays
+    ) {
+      return; // la corrección no movió el período ni los días
+    }
+
+    // hr.vacation_balances tiene UNIQUE(employee_id, period_start): si ya hay
+    // otro balance en el período recalculado, mover este encima reventaría la
+    // restricción. Es un caso raro que necesita criterio humano.
+    if (periodStart !== existing.periodStart) {
+      const collision = await this.balancesRepo.findOne({ where: { employeeId, periodStart } });
+      if (collision && collision.id !== existing.id) {
+        this.logger.warn(
+          `Empleado ${employeeId}: el período recalculado ${periodStart} ya existe en el balance ` +
+            `${collision.id}. No se realinea el balance ${existing.id}; requiere revisión manual.`,
+        );
+        return;
+      }
+    }
+
+    const previousEntitled = Number(existing.entitledDays);
+    const previousPeriod = `${existing.periodStart} — ${existing.periodEnd}`;
+
+    await this.dataSource.transaction(async (mgr) => {
+      existing.periodStart = periodStart;
+      existing.periodEnd = periodEnd;
+      existing.yearsOfService = yearsOfService;
+      existing.entitledDays = entitledDays;
+      await mgr.getRepository(VacationBalance).save(existing);
+
+      await mgr.getRepository(VacationMovement).save(
+        mgr.getRepository(VacationMovement).create({
+          employeeId,
+          balanceId: existing.id,
+          movementType: 'SENIORITY_RECALC',
+          daysDelta: String(entitledDays - previousEntitled),
+          description:
+            `Antigüedad corregida a ${employee.seniorityDate}: período ${previousPeriod} → ` +
+            `${periodStart} — ${periodEnd}, ${previousEntitled} → ${entitledDays} días ` +
+            `(antigüedad ${yearsOfService} años).`,
+        }),
+      );
+    });
+
+    if (entitledDays < Number(existing.usedDays)) {
+      this.logger.warn(
+        `Empleado ${employeeId}: el balance ${existing.id} quedó con ${entitledDays} días con derecho ` +
+          `y ${Number(existing.usedDays)} ya consumidos tras recalcular la antigüedad.`,
+      );
+    }
+  }
+
   // ==========================================================================
   // Aniversarios (cron)
   // ==========================================================================
