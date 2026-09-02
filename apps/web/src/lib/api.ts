@@ -3010,7 +3010,8 @@ export interface VacationMovementItem {
     | 'REQUEST_APPROVED'
     | 'REQUEST_CANCELLED'
     | 'ADMIN_CANCELLED'
-    | 'MANUAL_ADJUSTMENT';
+    | 'MANUAL_ADJUSTMENT'
+    | 'SENIORITY_RECALC';
   daysDelta: number;
   description: string | null;
   createdAt: string;
