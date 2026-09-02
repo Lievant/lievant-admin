@@ -11,6 +11,7 @@ import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { HelpdeskService } from '../helpdesk/helpdesk.service';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
+import { VacationsService } from '../vacations/vacations.service';
 import { EmployeeStatus } from './constants/employee-status.constant';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -103,6 +104,7 @@ export class EmployeesService {
     private readonly storageService: EmployeeStorageService,
     private readonly helpdeskService: HelpdeskService,
     private readonly notificationFlows: NotificationFlowsService,
+    private readonly vacationsService: VacationsService,
   ) {}
 
   /**
@@ -262,6 +264,10 @@ export class EmployeesService {
   async update(id: string, dto: UpdateEmployeeDto): Promise<EmployeeRecord> {
     const record = await this.getEmployeeOrFail(id);
 
+    // Se guarda antes de que los asignadores de abajo la pisen: el balance de
+    // vacaciones se recalcula solo si la antigüedad realmente cambió.
+    const previousSeniorityDate = record.seniorityDate;
+
     if (dto.corporateEmail !== undefined && dto.corporateEmail !== record.corporateEmail) {
       if (dto.corporateEmail) {
         await this.assertCorporateEmailAvailable(dto.corporateEmail);
@@ -303,6 +309,20 @@ export class EmployeesService {
     if (dto.status !== undefined) record.status = dto.status;
 
     await this.employeesRepository.save(record);
+
+    if (record.seniorityDate !== previousSeniorityDate) {
+      // El empleado ya quedó guardado: un fallo aquí no debe tumbar la
+      // actualización, pero sí tiene que quedar registrado.
+      try {
+        await this.vacationsService.recalculateBalance(record.id);
+      } catch (error) {
+        this.logger.error(
+          `No se pudo recalcular el balance de vacaciones del empleado ${record.id} ` +
+            `tras cambiar la antigüedad a ${record.seniorityDate}.`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
 
     return this.findOne(id);
   }

@@ -4,6 +4,7 @@ import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { HelpdeskModule } from '../helpdesk/helpdesk.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { VacationsModule } from '../vacations/vacations.module';
 import { DocumentsService } from './documents.service';
 import { EmployeeAssignmentSearchController } from './employee-assignment-search.controller';
 import { EmployeePhotosService } from './employee-photos.service';
@@ -36,6 +37,9 @@ import { TerminationData } from './entities/termination-data.entity';
     // vacaciones y gastos.
     HelpdeskModule,
     forwardRef(() => NotificationsModule),
+    // Corregir la fecha de antigüedad obliga a realinear el balance de
+    // vacaciones. No necesita forwardRef: nadie importa EmployeesModule.
+    VacationsModule,
   ],
   // EmployeeAssignmentSearchController debe registrarse antes que
   // EmployeesController: sus rutas estáticas (GET /employees/search-for-assignment,
