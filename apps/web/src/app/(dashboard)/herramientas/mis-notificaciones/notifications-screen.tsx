@@ -11,6 +11,7 @@ import {
   PlaneIcon,
   TicketIcon,
 } from '@/components/icons';
+import { VacationRequestDetailModal } from '@/components/vacation-request-detail-modal';
 import { useNotifications, type NotificationItem } from '@/hooks/use-notifications';
 import { cn } from '@/lib/utils';
 
@@ -48,6 +49,11 @@ function moduleIcon(module: string | null) {
     default:
       return BellIcon;
   }
+}
+
+/** Id de la solicitud si la notificación cuelga de una de vacaciones. */
+function vacationRequestId(item: NotificationItem): string | null {
+  return item.entityType === 'vacation_request' ? item.entityId : null;
 }
 
 const MINUTE = 60;
@@ -117,6 +123,8 @@ export function NotificationsScreen() {
   // Marcar una baja como atendida es irreversible y afecta a otra área: se
   // confirma antes.
   const [confirmingAtencion, setConfirmingAtencion] = useState<NotificationItem | null>(null);
+  // Id de la solicitud de vacaciones cuyo detalle se está viendo.
+  const [detalleVacaciones, setDetalleVacaciones] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -330,9 +338,9 @@ export function NotificationsScreen() {
                 </div>
 
                 {/* Acciones — fuera del área clicable para no navegar al responder */}
-                {needsResponse && (
+                {(needsResponse || vacationRequestId(item)) && (
                   <div className="mt-3 border-t border-slate-100 pt-3">
-                    {(item.type === 'accion_con_nota' || item.type === 'atencion') && (
+                    {needsResponse && (item.type === 'accion_con_nota' || item.type === 'atencion') && (
                       <textarea
                         value={notes[item.id] ?? ''}
                         onChange={(e) =>
@@ -346,38 +354,53 @@ export function NotificationsScreen() {
 
                     {/* 'atencion' es de una sola vía: no hay nada que rechazar,
                         solo confirmar que ya se ejecutó. */}
-                    {item.type === 'atencion' ? (
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingAtencion(item)}
-                        disabled={busyId === item.id}
-                        className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
-                      >
-                        <CheckIcon className="h-3.5 w-3.5" />
-                        Atendido
-                      </button>
-                    ) : (
-                      <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {needsResponse && (item.type === 'atencion' ? (
                         <button
                           type="button"
-                          onClick={() => void respond(item, 'aceptada')}
+                          onClick={() => setConfirmingAtencion(item)}
                           disabled={busyId === item.id}
                           className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
                         >
                           <CheckIcon className="h-3.5 w-3.5" />
-                          Aceptar
+                          Atendido
                         </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void respond(item, 'aceptada')}
+                            disabled={busyId === item.id}
+                            className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-50"
+                          >
+                            <CheckIcon className="h-3.5 w-3.5" />
+                            Aceptar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void respond(item, 'rechazada')}
+                            disabled={busyId === item.id}
+                            className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                          >
+                            <CloseIcon className="h-3.5 w-3.5" />
+                            Rechazar
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* El detalle completo de la solicitud vinculada: notas,
+                          sustituto y quién debe autorizar, que el texto de la
+                          notificación no alcanza a resumir. */}
+                      {vacationRequestId(item) && (
                         <button
                           type="button"
-                          onClick={() => void respond(item, 'rechazada')}
-                          disabled={busyId === item.id}
-                          className="inline-flex items-center gap-1 rounded-md border border-rose-300 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                          onClick={() => setDetalleVacaciones(vacationRequestId(item))}
+                          className="inline-flex items-center gap-1 rounded-md border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                         >
-                          <CloseIcon className="h-3.5 w-3.5" />
-                          Rechazar
+                          Ver detalle
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 )}
               </li>
@@ -409,6 +432,14 @@ export function NotificationsScreen() {
             Siguiente
           </button>
         </div>
+      )}
+
+      {detalleVacaciones && (
+        <VacationRequestDetailModal
+          requestId={detalleVacaciones}
+          showEmployee
+          onClose={() => setDetalleVacaciones(null)}
+        />
       )}
 
       {confirmingAtencion && (

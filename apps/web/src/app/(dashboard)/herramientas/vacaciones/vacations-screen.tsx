@@ -6,6 +6,7 @@ import { useEffect, useState, useTransition } from 'react';
 import type { ErrorKind, MyVacationBalance, VacationRequestItem, VacationRequestStatus } from '@/lib/api';
 import { PlaneIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
+import { VacationRequestDetailModal } from '@/components/vacation-request-detail-modal';
 import { usePermission } from '@/hooks/use-permission';
 import { deleteVacationRequestAction } from './actions';
 
@@ -119,6 +120,7 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
   const router = useRouter();
   const canManage = usePermission('rrhh', 'vacaciones', 'manage');
   const [confirming, setConfirming] = useState<VacationRequestItem | null>(null);
+  const [detalle, setDetalle] = useState<VacationRequestItem | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -267,7 +269,11 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {requests.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/60">
+                  <tr
+                    key={r.id}
+                    onClick={() => setDetalle(r)}
+                    className="cursor-pointer hover:bg-slate-50/60"
+                  >
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.displayId}</td>
                     <td className="px-4 py-3 text-slate-700">
                       {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -284,7 +290,8 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
                       {puedeCancelar(r) ? (
                         <button
                           type="button"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             setActionError(null);
                             setConfirming(r);
                           }}
@@ -305,6 +312,26 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
           </div>
         )}
       </section>
+
+      {detalle && (
+        <VacationRequestDetailModal
+          requestId={detalle.id}
+          onClose={() => setDetalle(null)}
+          deleteLabel="Cancelar solicitud"
+          // Cancelar desde el detalle reutiliza el diálogo de confirmación de la
+          // pantalla: es el único sitio que explica las tres consecuencias.
+          onDelete={
+            puedeCancelar(detalle)
+              ? () => {
+                  const r = detalle;
+                  setDetalle(null);
+                  setActionError(null);
+                  setConfirming(r);
+                }
+              : undefined
+          }
+        />
+      )}
 
       {confirming && (
         <CancelDialog

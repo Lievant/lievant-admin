@@ -138,6 +138,14 @@ export class VacationsController {
     return this.service.adminApproveRequest(id, user);
   }
 
+  // Sin @RequirePermission por la misma razón que el DELETE de abajo: la
+  // solicitud la puede ver su dueño, su jefe directo o RRHH, y el guard solo
+  // evalúa un permiso. La autorización completa vive en getRequestDetail().
+  @Get('requests/:id')
+  getRequestDetail(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.getRequestDetail(id, user);
+  }
+
   // Sin @RequirePermission a propósito: la regla es un OR (el dueño la borra
   // con herramientas.vacaciones.read, RRHH con rrhh.vacaciones.manage) y el
   // guard solo evalúa un permiso. Exigir herramientas.vacaciones.read aquí

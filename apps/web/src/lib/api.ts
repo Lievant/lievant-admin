@@ -2976,6 +2976,30 @@ export interface VacationRequestItem {
   period: { periodStart: string; periodEnd: string } | null;
 }
 
+/**
+ * Detalle de una solicitud para el modal. Extiende el item del listado con el
+ * jefe que debe autorizar, quién respondió y el cargo/área del sustituto.
+ * 'viewerIsOwner' / 'viewerCanManage' los resuelve la API porque el modal se
+ * abre también desde notificaciones, donde el cliente no sabe de quién es la
+ * solicitud que está mirando.
+ */
+export interface VacationRequestDetail extends Omit<VacationRequestItem, 'substitute'> {
+  employee: { id: string; fullName: string; position: string; area: string | null };
+  substitute: {
+    id: string;
+    fullName: string;
+    corporateEmail: string | null;
+    position: string;
+    area: string | null;
+  } | null;
+  approver: { id: string | null; fullName: string; position: string | null } | null;
+  respondedBy: { id: string; fullName: string; position: string } | null;
+  respondedAt: string | null;
+  authorizationNote: string | null;
+  viewerIsOwner: boolean;
+  viewerCanManage: boolean;
+}
+
 export interface VacationHoliday {
   id: string;
   name: string;
