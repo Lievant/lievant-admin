@@ -129,8 +129,20 @@ const DAYS_ES = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * "Hoy" en la zona del navegador, no en UTC.
+ *
+ * toISOString() siempre devuelve UTC, así que a partir de las 18:00 en México
+ * el calendario resaltaba como hoy la casilla del día siguiente. Las celdas se
+ * arman con `${year}-${mm}-${dd}` locales, de modo que esto es lo que las hace
+ * comparables.
+ */
 function isoToday(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function mondayFirst(jsDay: number): number {
