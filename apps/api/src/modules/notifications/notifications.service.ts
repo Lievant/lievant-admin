@@ -304,7 +304,9 @@ export class NotificationsService {
     const requestId = notification.entityId as string;
 
     if (action === 'aceptada') {
-      await this.vacationsService.approveRequest(requestId, user);
+      // La nota del textarea es justo la del jefe al autorizar: se guarda como
+      // approval_note en lugar de perderse.
+      await this.vacationsService.approveRequest(requestId, user, note);
     } else {
       await this.vacationsService.rejectRequest(
         requestId,

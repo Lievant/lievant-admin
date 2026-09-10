@@ -673,7 +673,7 @@ export class VacationsService {
       const rango = `del ${formatLongDate(request.startDate)} al ${formatLongDate(request.endDate)}`;
       const title = approved ? '¡Vacaciones aprobadas!' : 'Solicitud de vacaciones rechazada';
       const message = approved
-        ? `Tu solicitud de vacaciones ${rango} ha sido aprobada.`
+        ? `Tu solicitud de vacaciones ${rango} ha sido aprobada.${note ? ` ${note}` : ''}`
         : `Tu solicitud de vacaciones ${rango} ha sido rechazada.${note ? ` ${note}` : ''}`;
 
       if (employee.authUserId) {
@@ -705,7 +705,7 @@ export class VacationsService {
             : `Vacaciones rechazadas — ${employee.fullName}`,
           message: approved
             ? `Se aprobaron las vacaciones de ${employee.fullName} ${rango} ` +
-              `(${request.workingDaysTaken} días hábiles).`
+              `(${request.workingDaysTaken} días hábiles).${note ? ` ${note}` : ''}`
             : `Se rechazaron las vacaciones de ${employee.fullName} ${rango}.` +
               `${note ? ` ${note}` : ''}`,
           actionUrl: `/rrhh/empleados/${employee.id}?tab=vacaciones`,
@@ -741,7 +741,11 @@ export class VacationsService {
     throw new ForbiddenException('Solo el jefe directo puede gestionar esta solicitud.');
   }
 
-  async approveRequest(requestId: string, user: User): Promise<VacationRequest> {
+  async approveRequest(
+    requestId: string,
+    user: User,
+    note?: string | null,
+  ): Promise<VacationRequest> {
     const request = await this.requestsRepo.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada.');
     if (request.status !== 'pending') {
@@ -754,6 +758,7 @@ export class VacationsService {
     request.status = 'approved';
     request.approvedBy = approverEmployeeId;
     request.approvedAt = new Date();
+    request.approvalNote = note?.trim() || null;
     await this.requestsRepo.save(request);
 
     await this.movementsRepo.save(
@@ -768,7 +773,12 @@ export class VacationsService {
       }),
     );
 
-    await this.notifyVacationOutcome(request, user.id, true, null);
+    await this.notifyVacationOutcome(
+      request,
+      user.id,
+      true,
+      request.approvalNote ? `Nota: ${request.approvalNote}` : null,
+    );
 
     return request;
   }
@@ -968,9 +978,10 @@ export class VacationsService {
         ? { id: respondedBy.id, fullName: respondedBy.fullName, position: respondedBy.position }
         : null,
       respondedAt: request.approvedAt,
-      // No hay columna propia para la nota de autorización: al aprobar no se
-      // captura ninguna y al rechazar se guarda en rejection_reason.
-      authorizationNote: request.rejectionReason,
+      // Cada desenlace guarda su nota en su propia columna; el modal muestra
+      // una sola casilla, así que se elige aquí según el estado.
+      authorizationNote:
+        request.status === 'approved' ? request.approvalNote : request.rejectionReason,
       viewerIsOwner: isOwner,
       viewerCanManage: canManage,
     };
@@ -1288,7 +1299,11 @@ export class VacationsService {
   // ==========================================================================
 
   /** Aprueba sin exigir jefatura directa: la autoriza el permiso manage. */
-  async adminApproveRequest(requestId: string, user: User): Promise<VacationRequest> {
+  async adminApproveRequest(
+    requestId: string,
+    user: User,
+    note?: string | null,
+  ): Promise<VacationRequest> {
     const request = await this.requestsRepo.findOne({ where: { id: requestId } });
     if (!request) throw new NotFoundException('Solicitud no encontrada.');
     if (request.status !== 'pending') {
@@ -1300,6 +1315,7 @@ export class VacationsService {
     request.status = 'approved';
     request.approvedBy = approverEmployeeId;
     request.approvedAt = new Date();
+    request.approvalNote = note?.trim() || null;
     await this.requestsRepo.save(request);
 
     // Solo movimiento de auditoría: los días ya se retuvieron en used_days al
@@ -1314,6 +1330,78 @@ export class VacationsService {
         description: `Solicitud ${request.displayId} aprobada por RRHH (${request.workingDaysTaken} días).`,
         createdBy: user.id,
       }),
+    );
+
+    return request;
+  }
+
+  /**
+   * Rechaza sin exigir jefatura directa: la autoriza el permiso manage, igual
+   * que adminApproveRequest.
+   *
+   * Duplica el cuerpo de rejectRequest en vez de reutilizarlo porque lo único
+   * que comparten es el efecto sobre el saldo: aquel exige ser el jefe directo
+   * y un motivo obligatorio, y aquí la nota es opcional. Factorizar las dos
+   * variantes en un helper con banderas dejaría la regla de autorización
+   * repartida entre dos sitios, que es justo lo que conviene evitar.
+   */
+  async rejectRequestAsAdmin(
+    requestId: string,
+    user: User,
+    note?: string | null,
+  ): Promise<VacationRequest> {
+    // Redundante con el @RequirePermission del controller, pero el servicio no
+    // debe fiarse de que su único llamador siga siendo ese endpoint.
+    if (!userHasPermission(user, 'rrhh', 'vacaciones', 'manage')) {
+      throw new ForbiddenException('No puedes rechazar esta solicitud.');
+    }
+
+    const request = await this.requestsRepo.findOne({ where: { id: requestId } });
+    if (!request) throw new NotFoundException('Solicitud no encontrada.');
+    if (request.status !== 'pending') {
+      throw new BadRequestException(`La solicitud ya está ${request.status}.`);
+    }
+
+    const approverEmployeeId = await this.resolveApproverEmployeeId(user);
+    const motivo = note?.trim() || null;
+    const days = Number(request.workingDaysTaken);
+
+    await this.dataSource.transaction(async (mgr) => {
+      request.status = 'rejected';
+      request.approvedBy = approverEmployeeId;
+      request.approvedAt = new Date();
+      request.rejectionReason = motivo;
+      await mgr.getRepository(VacationRequest).save(request);
+
+      // Devuelve al saldo los días que la solicitud tenía retenidos.
+      const balance = await mgr
+        .getRepository(VacationBalance)
+        .findOne({ where: { id: request.balanceId } });
+      if (balance) {
+        balance.usedDays = String(Math.max(0, Number(balance.usedDays) - days));
+        await mgr.getRepository(VacationBalance).save(balance);
+      }
+
+      await mgr.getRepository(VacationMovement).save(
+        mgr.getRepository(VacationMovement).create({
+          employeeId: request.employeeId,
+          balanceId: request.balanceId,
+          requestId: request.id,
+          movementType: 'REQUEST_CANCELLED',
+          daysDelta: String(days),
+          description: motivo
+            ? `Solicitud ${request.displayId} rechazada por RRHH: ${motivo}`
+            : `Solicitud ${request.displayId} rechazada por RRHH.`,
+          createdBy: user.id,
+        }),
+      );
+    });
+
+    await this.notifyVacationOutcome(
+      request,
+      user.id,
+      false,
+      motivo ? `Nota: ${motivo}` : null,
     );
 
     return request;
