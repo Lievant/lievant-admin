@@ -85,13 +85,18 @@ export function calculateSeniority(seniorityDate: string | null): string {
 export function calculateAge(birthDate: string | null): number | null {
   if (!birthDate) return null;
 
-  const birth = new Date(birthDate);
-  const now = new Date();
-  if (Number.isNaN(birth.getTime())) return null;
+  // Se parte el string en vez de construir un Date: 'YYYY-MM-DD' se interpreta
+  // como medianoche UTC, pero getMonth()/getDate() leen en hora local, así que
+  // en México la fecha retrocedía un día y la edad salía mal el día del
+  // cumpleaños y el anterior.
+  const [year, month, day] = birthDate.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
 
-  let age = now.getFullYear() - birth.getFullYear();
-  const monthDiff = now.getMonth() - birth.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birth.getDate())) {
+  const today = new Date();
+  const todayMonth = today.getMonth() + 1;
+
+  let age = today.getFullYear() - year;
+  if (todayMonth < month || (todayMonth === month && today.getDate() < day)) {
     age -= 1;
   }
   return age;

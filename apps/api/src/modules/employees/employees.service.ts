@@ -720,6 +720,17 @@ export class EmployeesService {
     await this.documentsRepository.softDelete(docId);
   }
 
+  /**
+   * "Hoy" según la oficina, no según el servidor.
+   *
+   * CURRENT_DATE se resuelve en la zona de la sesión de Postgres, que en RDS es
+   * UTC. Como México va seis horas por detrás, entre las 18:00 y las 23:59 hora
+   * local la fecha UTC ya había avanzado al día siguiente: la tarjeta mostraba
+   * los cumpleaños de mañana como los de hoy y el cumpleañero real desaparecía
+   * seis horas antes de que terminara su día.
+   */
+  private static readonly HOY_MX = "(NOW() AT TIME ZONE 'America/Mexico_City')::date";
+
   async getDashboard(userId: string): Promise<{
     todayBookings: { id: string; title: string; roomName: string; startTime: string; endTime: string }[];
     todayBirthdays: { id: string; fullName: string; area: string | null; division: string | null }[];
@@ -741,7 +752,7 @@ export class EmployeesService {
            INNER JOIN rooms.rooms r ON r.id = b.room_id
            WHERE b.user_id = $1
              AND b.status = 'confirmada'
-             AND b.start_time::date = CURRENT_DATE
+             AND b.start_time::date = ${EmployeesService.HOY_MX}
            ORDER BY b.start_time`,
           [userId],
         )
@@ -753,14 +764,14 @@ export class EmployeesService {
          INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
          WHERE e.deleted_at IS NULL
            AND pd.birth_date IS NOT NULL
-           AND EXTRACT(MONTH FROM pd.birth_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-           AND EXTRACT(DAY   FROM pd.birth_date) = EXTRACT(DAY   FROM CURRENT_DATE)
+           AND EXTRACT(MONTH FROM pd.birth_date) = EXTRACT(MONTH FROM ${EmployeesService.HOY_MX})
+           AND EXTRACT(DAY   FROM pd.birth_date) = EXTRACT(DAY   FROM ${EmployeesService.HOY_MX})
          ORDER BY e.full_name`,
       ),
 
       this.employeesRepository.manager.query(
         `WITH days AS (
-           SELECT (CURRENT_DATE + (n || ' days')::INTERVAL)::date AS d
+           SELECT (${EmployeesService.HOY_MX} + (n || ' days')::INTERVAL)::date AS d
            FROM generate_series(1, 7) AS n
          )
          SELECT DISTINCT
@@ -769,7 +780,7 @@ export class EmployeesService {
            e.area,
            e.division,
            TO_CHAR(pd.birth_date, 'MM-DD') AS "birthDate",
-           (d.d - CURRENT_DATE)::int AS "daysUntil"
+           (d.d - ${EmployeesService.HOY_MX})::int AS "daysUntil"
          FROM employees.employee_records e
          INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
          CROSS JOIN days d

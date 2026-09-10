@@ -7,6 +7,27 @@ import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
 import { Compensation } from './entities/compensation.entity';
 import createReport from 'docx-templates';
+
+/**
+ * Edad a partir de 'YYYY-MM-DD' sin construir un Date.
+ *
+ * `new Date('1990-05-15')` se interpreta como medianoche UTC, pero getMonth() y
+ * getDate() leen en hora local, así que en México la fecha retrocedía un día.
+ * Partir el string evita el rodeo. Además la versión anterior solo restaba
+ * años, sin descontar el año cuando el cumpleaños todavía no había llegado.
+ */
+function calcularEdad(birthDate: string): number | null {
+  const [year, month, day] = birthDate.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return null;
+
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - year;
+  const mesActual = hoy.getMonth() + 1;
+  if (mesActual < month || (mesActual === month && hoy.getDate() < day)) {
+    edad -= 1;
+  }
+  return edad;
+}
 import { Readable } from 'stream';
 
 export type DocumentType =
@@ -155,9 +176,7 @@ export class DocumentsService {
     const compensation = await this.compensationRepo.findOne({ where: { employeeId } });
 
     // 2. Calcular edad
-    const age = personal?.birthDate
-      ? String(new Date().getFullYear() - new Date(personal.birthDate).getFullYear())
-      : '';
+    const age = personal?.birthDate ? String(calcularEdad(personal.birthDate) ?? '') : '';
 
     // 3. Formatear salario (numérico y en letras)
     const monthlyAmount = compensation?.monthlyGrossSalary ? parseFloat(compensation.monthlyGrossSalary) : null;
