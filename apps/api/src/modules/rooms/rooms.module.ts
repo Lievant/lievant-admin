@@ -18,5 +18,8 @@ import { RoomsService } from './rooms.service';
   imports: [TypeOrmModule.forFeature([Country, City, Office, Room, Booking, OfficeAdmin]), AuthModule],
   controllers: [LocationsController, RoomsController, BookingsController],
   providers: [LocationsService, RoomsService, BookingsService],
+  // La baja de un empleado cancela sus reservas futuras (ver
+  // cancelFutureBookingsForUser), así que EmployeesModule necesita el servicio.
+  exports: [BookingsService],
 })
 export class RoomsModule {}

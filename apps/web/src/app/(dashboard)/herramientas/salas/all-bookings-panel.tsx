@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import type { Booking } from '@/lib/api';
+import { isBookingUserInactive, type Booking } from '@/lib/api';
 import { listAdminBookingsAction } from './actions';
 import { BookRoomDialog } from './book-room-dialog';
 import { CancelBookingDialog } from './mis-reservas/cancel-booking-dialog';
@@ -185,8 +185,13 @@ export function AllBookingsPanel({ bookings, initialCursor = null, currentUserId
                 <div>
                   <p className="font-semibold text-navy">{booking.title}</p>
                   <p className="mt-0.5 text-sm text-slate-600">
-                    {booking.user?.name ?? booking.user?.email ?? 'Usuario desconocido'}
+                    {booking.user?.name ?? booking.user?.email ?? 'Usuario dado de baja'}
                     {isOwn && <span className="ml-1 text-xs text-slate-400">(tú)</span>}
+                    {isBookingUserInactive(booking.user) && (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        Dado de baja
+                      </span>
+                    )}
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
                     {room?.name ?? 'Sala'}

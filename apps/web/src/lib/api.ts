@@ -1545,6 +1545,20 @@ export interface BookingUserSummary {
   id: string;
   name: string;
   email: string;
+  /**
+   * Estado de la cuenta de quien reservó. La API los envía porque las consultas
+   * de reservas usan withDeleted(): una reserva de alguien dado de baja sigue
+   * ocupando la sala, así que se muestra con su nombre y una marca, en lugar de
+   * desaparecer o llegar sin usuario.
+   */
+  isActive?: boolean;
+  deletedAt?: string | null;
+}
+
+/** true si la cuenta de quien reservó ya no está vigente. */
+export function isBookingUserInactive(user?: BookingUserSummary | null): boolean {
+  if (!user) return false;
+  return user.isActive === false || !!user.deletedAt;
 }
 
 export interface Booking {
