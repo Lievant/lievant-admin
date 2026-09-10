@@ -10,6 +10,7 @@ import type {
 } from '@/lib/api';
 import { usePermission } from '@/hooks/use-permission';
 import { PlusIcon } from '@/components/icons';
+import { VacationRequestDetailModal } from '@/components/vacation-request-detail-modal';
 import { AdminVacationRequestDialog } from './admin-vacation-request-dialog';
 import {
   adminApproveVacationRequestAction,
@@ -107,6 +108,7 @@ export function VacationTab({
   const canManage = usePermission('rrhh', 'vacaciones', 'manage');
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [confirming, setConfirming] = useState<{ id: string; kind: 'approve' | 'delete' } | null>(null);
+  const [detalleId, setDetalleId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -117,6 +119,7 @@ export function VacationTab({
       const res = await adminApproveVacationRequestAction(summary.employeeId, requestId);
       if (res.success) {
         setConfirming(null);
+        setDetalleId(null);
         router.refresh();
       } else {
         setActionError(res.error ?? 'No se pudo aprobar la solicitud.');
@@ -131,6 +134,7 @@ export function VacationTab({
       const res = await adminDeleteVacationRequestAction(summary.employeeId, requestId);
       if (res.success) {
         setConfirming(null);
+        setDetalleId(null);
         router.refresh();
       } else {
         setActionError(res.error ?? 'No se pudo eliminar la solicitud.');
@@ -261,7 +265,11 @@ export function VacationTab({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {summary.requests.map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50/60">
+                  <tr
+                    key={r.id}
+                    onClick={() => setDetalleId(r.id)}
+                    className="cursor-pointer hover:bg-slate-50/60"
+                  >
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.displayId}</td>
                     <td className="px-4 py-3 text-slate-700">
                       {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -283,7 +291,10 @@ export function VacationTab({
                       </span>
                     </td>
                     {canManage && (
-                      <td className="px-4 py-3 text-right align-top">
+                      <td
+                        className="px-4 py-3 text-right align-top"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <RequestActions
                           request={r}
                           confirming={confirming}
@@ -301,6 +312,28 @@ export function VacationTab({
           </div>
         )}
       </section>
+
+      {detalleId && (
+        <VacationRequestDetailModal
+          requestId={detalleId}
+          showEmployee
+          onClose={() => setDetalleId(null)}
+          actionPending={isPending}
+          actionError={actionError}
+          // Aprobar y eliminar son las dos acciones que RRHH ya tiene aquí; el
+          // rechazo con motivo es del jefe directo y vive en su notificación.
+          onApprove={canManage ? (id) => runApprove(id) : undefined}
+          onDelete={
+            canManage
+              ? (id) => {
+                  setDetalleId(null);
+                  setActionError(null);
+                  setConfirming({ id, kind: 'delete' });
+                }
+              : undefined
+          }
+        />
+      )}
 
       {showNewDialog && (
         <AdminVacationRequestDialog

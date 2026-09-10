@@ -898,6 +898,84 @@ export class VacationsService {
     };
   }
 
+  /**
+   * Detalle completo de una solicitud para el modal: además de lo que ya trae
+   * el listado, resuelve el jefe que debe autorizarla y quién la respondió.
+   *
+   * La autorización es un OR (dueño, jefe directo, RRHH con manage) y por eso
+   * el controller no la declara con @RequirePermission —igual que
+   * deleteRequest()—: el guard solo sabe evaluar un permiso.
+   */
+  async getRequestDetail(requestId: string, user: User) {
+    const request = await this.requestsRepo
+      .createQueryBuilder('r')
+      .innerJoinAndSelect('r.employee', 'emp')
+      .leftJoinAndSelect('r.substitute', 'sub')
+      .leftJoinAndSelect('r.balance', 'bal')
+      .where('r.id = :requestId', { requestId })
+      .andWhere('r.deleted_at IS NULL')
+      .getOne();
+    if (!request) throw new NotFoundException('Solicitud no encontrada.');
+
+    const employee = request.employee;
+    const isSuperAdmin = (user.roles ?? []).some((r) => r.name === 'SUPER_ADMIN');
+    const canManage = userHasPermission(user, 'rrhh', 'vacaciones', 'manage');
+    const isOwner = !!employee.authUserId && employee.authUserId === user.id;
+
+    const viewerEmployeeId = await this.resolveApproverEmployeeId(user);
+    const isDirectManager =
+      !!employee.directReportToId && employee.directReportToId === viewerEmployeeId;
+
+    if (!isSuperAdmin && !canManage && !isOwner && !isDirectManager) {
+      throw new ForbiddenException('No puedes ver esta solicitud.');
+    }
+
+    // El jefe que debe autorizar y quien terminó respondiendo pueden ser
+    // personas distintas (RRHH resuelve con 'admin-approve'), así que se
+    // resuelven por separado.
+    const approver = employee.directReportToId
+      ? await this.employeesRepo.findOne({ where: { id: employee.directReportToId } })
+      : null;
+    const respondedBy = request.approvedBy
+      ? await this.employeesRepo.findOne({ where: { id: request.approvedBy } })
+      : null;
+
+    return {
+      ...this.serializeRequest(request),
+      employee: {
+        id: employee.id,
+        fullName: employee.fullName,
+        position: employee.position,
+        area: employee.area,
+      },
+      // El sustituto del listado no trae cargo ni área; el modal sí los muestra.
+      substitute: request.substitute
+        ? {
+            id: request.substitute.id,
+            fullName: request.substitute.fullName,
+            corporateEmail: request.substitute.corporateEmail,
+            position: request.substitute.position,
+            area: request.substitute.area,
+          }
+        : null,
+      approver: approver
+        ? { id: approver.id, fullName: approver.fullName, position: approver.position }
+        : // Jefe sin expediente vinculado: solo queda su nombre en texto.
+          employee.directReportTo
+          ? { id: null, fullName: employee.directReportTo, position: null }
+          : null,
+      respondedBy: respondedBy
+        ? { id: respondedBy.id, fullName: respondedBy.fullName, position: respondedBy.position }
+        : null,
+      respondedAt: request.approvedAt,
+      // No hay columna propia para la nota de autorización: al aprobar no se
+      // captura ninguna y al rechazar se guarda en rejection_reason.
+      authorizationNote: request.rejectionReason,
+      viewerIsOwner: isOwner,
+      viewerCanManage: canManage,
+    };
+  }
+
   async getPendingApprovals(userId: string) {
     const manager = await this.employeesRepo.findOne({ where: { authUserId: userId } });
     if (!manager) return [];
