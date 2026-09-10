@@ -1,6 +1,6 @@
 'use client';
 
-import type { Booking } from '@/lib/api';
+import { isBookingUserInactive, type Booking } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
 import {
   BOOKING_STATUS_BADGE_STYLES,
@@ -42,7 +42,10 @@ export function BookingDetailModal({
   const isCancelled = booking.status === 'cancelada';
   const showActions = canAct && !isCancelled;
 
-  const reservante = booking.user?.name ?? booking.user?.email ?? 'Sin asignar';
+  const reservante = booking.user?.name ?? booking.user?.email ?? 'Usuario dado de baja';
+  // La reserva sigue ocupando la sala aunque su dueño ya no esté: se marca para
+  // que quien administra sepa que puede cancelarla sin consultar a nadie.
+  const reservanteDeBaja = isBookingUserInactive(booking.user);
 
   return (
     <div
@@ -92,7 +95,10 @@ export function BookingDetailModal({
                 booking.endTime,
               )})`}
             />
-            <Field label="Reservante" value={reservante} />
+            <Field
+              label="Reservante"
+              value={reservanteDeBaja ? `${reservante} (dado de baja)` : reservante}
+            />
             {booking.notes && <Field label="Notas" value={booking.notes} />}
             {(booking.attendees ?? []).length > 0 && (
               <Field
