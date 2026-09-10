@@ -9,7 +9,7 @@ import type {
   VacationRequestStatus,
 } from '@/lib/api';
 import { usePermission } from '@/hooks/use-permission';
-import { PlusIcon } from '@/components/icons';
+import { EyeIcon, PlusIcon } from '@/components/icons';
 import { VacationRequestDetailModal } from '@/components/vacation-request-detail-modal';
 import { AdminVacationRequestDialog } from './admin-vacation-request-dialog';
 import {
@@ -281,16 +281,12 @@ export function VacationTab({
                   <th className="px-4 py-3 text-left">Sustituto</th>
                   <th className="px-4 py-3 text-left">Origen</th>
                   <th className="px-4 py-3 text-left">Estado</th>
-                  {canManage && <th className="px-4 py-3 text-right">Acciones</th>}
+                  <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {summary.requests.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setDetalleId(r.id)}
-                    className="cursor-pointer hover:bg-slate-50/60"
-                  >
+                  <tr key={r.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.displayId}</td>
                     <td className="px-4 py-3 text-slate-700">
                       {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -311,21 +307,28 @@ export function VacationTab({
                         {STATUS_META[r.status].label}
                       </span>
                     </td>
-                    {canManage && (
-                      <td
-                        className="px-4 py-3 text-right align-top"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <RequestActions
-                          request={r}
-                          confirming={confirming}
-                          pending={isPending}
-                          onAsk={setConfirming}
-                          onApprove={runApprove}
-                          onDelete={runDelete}
-                        />
-                      </td>
-                    )}
+                    <td className="px-4 py-3 text-right align-top">
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setDetalleId(r.id)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                        >
+                          <EyeIcon className="h-3.5 w-3.5" />
+                          Ver detalle
+                        </button>
+                        {canManage && (
+                          <RequestActions
+                            request={r}
+                            confirming={confirming}
+                            pending={isPending}
+                            onAsk={setConfirming}
+                            onApprove={runApprove}
+                            onDelete={runDelete}
+                          />
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -420,9 +423,7 @@ function RequestActions({
     );
   }
 
-  if (request.status !== 'pending' && request.status !== 'approved') {
-    return <span className="text-xs text-slate-400">—</span>;
-  }
+  if (request.status !== 'pending' && request.status !== 'approved') return null;
 
   return (
     <div className="flex justify-end gap-2">
