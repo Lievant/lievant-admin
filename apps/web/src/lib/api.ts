@@ -3087,6 +3087,54 @@ export function getEmployeeVacationSummary(employeeId: string): Promise<Employee
   return apiFetchWithRetry<EmployeeVacationSummary>(`/vacations/employees/${employeeId}/summary`);
 }
 
+/** Una fila por colaborador a cargo en la pantalla de gestión del jefe. */
+export interface TeamVacationRow {
+  employee: {
+    id: string;
+    fullName: string;
+    area: string | null;
+    position: string;
+    corporateEmail: string | null;
+    photoUrl: string | null;
+    seniorityDate: string | null;
+    /** null mientras el colaborador no tenga balance (menos de un año). */
+    yearsOfService: number | null;
+  };
+  balance: VacationBalanceSummary | null;
+  pendingRequests: VacationRequestItem[];
+  allRequests: VacationRequestItem[];
+}
+
+export function getMyTeamVacations(): Promise<TeamVacationRow[]> {
+  return apiFetchWithRetry<TeamVacationRow[]>('/vacations/team');
+}
+
+export function isTeamManager(): Promise<{ isManager: boolean }> {
+  return apiFetchWithRetry<{ isManager: boolean }>('/vacations/team/is-manager');
+}
+
+/** Aprobación del jefe directo. La nota es opcional. */
+export function approveVacationRequest(
+  requestId: string,
+  note?: string,
+): Promise<VacationRequestItem> {
+  return apiFetch<VacationRequestItem>(`/vacations/requests/${requestId}/approve`, {
+    method: 'PATCH',
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+/** Rechazo del jefe directo. El motivo es obligatorio (mínimo 3 caracteres). */
+export function rejectVacationRequest(
+  requestId: string,
+  reason: string,
+): Promise<VacationRequestItem> {
+  return apiFetch<VacationRequestItem>(`/vacations/requests/${requestId}/reject`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export function getVacationReport(startDate: string, endDate: string): Promise<VacationReportRow[]> {
   const qs = new URLSearchParams({ startDate, endDate }).toString();
   return apiFetchWithRetry<VacationReportRow[]>(`/vacations/report?${qs}`);

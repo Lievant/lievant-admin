@@ -1026,6 +1026,97 @@ export class VacationsService {
     }));
   }
 
+  // ==========================================================================
+  // Equipo a cargo (jefatura directa)
+  // ==========================================================================
+
+  /**
+   * ¿El usuario tiene al menos un colaborador que le reporte?
+   *
+   * Lo consume el sidebar para decidir si muestra Gestión de Vacaciones, así
+   * que corre en cada carga: es un count, no una lista.
+   */
+  async isTeamManager(userId: string): Promise<{ isManager: boolean }> {
+    const manager = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+    if (!manager) return { isManager: false };
+
+    // Solo activos, igual que el resto del módulo: un jefe cuyo equipo entero
+    // causó baja no tiene nada que gestionar.
+    const count = await this.employeesRepo.count({
+      where: { directReportToId: manager.id, status: EmployeeStatus.ACTIVE },
+    });
+    return { isManager: count > 0 };
+  }
+
+  /**
+   * Saldos y solicitudes de los colaboradores que reportan al usuario.
+   *
+   * Las solicitudes salen en una sola consulta para los N colaboradores en vez
+   * de una por cabeza: es la parte cara (dos joins) y un jefe con equipo grande
+   * multiplicaría el coste. Los balances sí van uno por uno, porque
+   * getOrCreateCurrentBalance materializa el período del año en curso si aún no
+   * existe y saltárselo mostraría "sin balance" a colaboradores que sí tienen
+   * derecho pero nunca abrieron su pantalla de vacaciones.
+   */
+  async getMyTeamVacations(userId: string) {
+    const manager = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+    if (!manager) return [];
+
+    const reports = await this.employeesRepo.find({
+      where: { directReportToId: manager.id, status: EmployeeStatus.ACTIVE },
+      order: { fullName: 'ASC' },
+    });
+    if (reports.length === 0) return [];
+
+    const requests = await this.requestsRepo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.substitute', 'sub')
+      .leftJoinAndSelect('r.balance', 'bal')
+      .where('r.employee_id IN (:...ids)', { ids: reports.map((e) => e.id) })
+      .andWhere('r.deleted_at IS NULL')
+      .orderBy('r.created_at', 'DESC')
+      .getMany();
+
+    const porEmpleado = new Map<string, VacationRequest[]>();
+    for (const r of requests) {
+      const lista = porEmpleado.get(r.employeeId);
+      if (lista) lista.push(r);
+      else porEmpleado.set(r.employeeId, [r]);
+    }
+
+    const filas = [];
+    for (const emp of reports) {
+      // Sin fecha de antigüedad no hay período que calcular y
+      // getOrCreateCurrentBalance lanzaría en vez de devolver null.
+      const balance = emp.seniorityDate ? await this.getOrCreateCurrentBalance(emp.id) : null;
+      const suyas = porEmpleado.get(emp.id) ?? [];
+
+      filas.push({
+        employee: {
+          id: emp.id,
+          fullName: emp.fullName,
+          area: emp.area,
+          position: emp.position,
+          corporateEmail: emp.corporateEmail,
+          photoUrl: photoUrl(emp.corporateEmail),
+          seniorityDate: emp.seniorityDate,
+          yearsOfService: balance ? balance.yearsOfService : null,
+        },
+        balance: balance ? this.serializeBalance(balance) : null,
+        pendingRequests: suyas
+          .filter((r) => r.status === 'pending')
+          .map((r) => this.serializeRequest(r)),
+        // "Del período actual": las que cuelgan del balance vigente. Las de
+        // períodos cerrados quedan fuera para que el histórico no crezca sin fin.
+        allRequests: balance
+          ? suyas.filter((r) => r.balanceId === balance.id).map((r) => this.serializeRequest(r))
+          : [],
+      });
+    }
+
+    return filas;
+  }
+
   /** Resumen para el tab de RRHH (solo lectura). */
   async getEmployeeVacationSummary(employeeId: string) {
     const employee = await this.employeesRepo.findOne({ where: { id: employeeId } });

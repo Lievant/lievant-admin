@@ -70,6 +70,7 @@ function hasModule(
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const isManager = useIsTeamManager();
   const showFinanzas = hasSection(user, 'finanzas');
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
@@ -92,6 +93,10 @@ export function Sidebar({ user }: SidebarProps) {
   const showSoporte = hasModule(user, 'herramientas', 'tickets');
   const showIsobot = hasModule(user, 'herramientas', 'isobot');
   const showVacaciones = hasModule(user, 'herramientas', 'vacaciones', 'read');
+  // Gestión de Vacaciones no cuelga de un permiso: lo habilita tener gente a
+  // cargo. Por eso entra también en showHerramientas —un jefe sin ningún otro
+  // módulo de herramientas se quedaría sin la sección y sin el link.
+  const showGestionVacaciones = isManager;
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||
@@ -99,7 +104,8 @@ export function Sidebar({ user }: SidebarProps) {
     showSalas ||
     showSoporte ||
     showIsobot ||
-    showVacaciones;
+    showVacaciones ||
+    showGestionVacaciones;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -354,10 +360,19 @@ export function Sidebar({ user }: SidebarProps) {
             {showVacaciones && (
               <NavLink
                 href="/herramientas/vacaciones"
-                active={pathname.startsWith('/herramientas/vacaciones')}
+                active={pathname === '/herramientas/vacaciones' || pathname.startsWith('/herramientas/vacaciones/')}
               >
                 <PlaneIcon className="h-5 w-5" />
                 Vacaciones
+              </NavLink>
+            )}
+            {showGestionVacaciones && (
+              <NavLink
+                href="/herramientas/gestion-vacaciones"
+                active={pathname.startsWith('/herramientas/gestion-vacaciones')}
+              >
+                <UsersGroupIcon className="h-5 w-5" />
+                Gestión de Vacaciones
               </NavLink>
             )}
           </>
@@ -444,6 +459,32 @@ function SidebarAvatar({ name, email }: { name: string; email: string | null }) 
       </div>
     </div>
   );
+}
+
+/**
+ * ¿El usuario tiene colaboradores a cargo? No se deduce de los permisos, así
+ * que la responde la API. Falla en silencio a false: el sidebar debe pintarse
+ * igual aunque el backend no conteste.
+ */
+function useIsTeamManager(): boolean {
+  const [isManager, setIsManager] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/vacations/team/is-manager')
+      .then((res) => (res.ok ? res.json() : { isManager: false }))
+      .then((data: { isManager?: boolean }) => {
+        if (active) setIsManager(data.isManager ?? false);
+      })
+      .catch(() => {
+        /* silencioso: sin sesión válida o backend no disponible */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return isManager;
 }
 
 function MediaAlertsBadge() {
