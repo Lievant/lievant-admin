@@ -22,8 +22,16 @@ export class CreateCatalogItemDto {
   @IsString()
   divisionName?: string;
 
+  /**
+   * A qué entidad aplica el tipo de documento.
+   *
+   * La columna es varchar libre y no hay CHECK en la base, así que esta lista
+   * es la única validación real. Se quedó en client/employee y nunca se amplió
+   * al añadir proveedores ni proyectos, de modo que editar cualquiera de esos
+   * tipos desde el catálogo devolvía un 400 pese a existir ya en la tabla.
+   */
   @IsOptional()
-  @IsIn(['client', 'employee'])
+  @IsIn(['client', 'employee', 'vendor', 'project'])
   appliesTo?: string;
 
   @IsOptional()
