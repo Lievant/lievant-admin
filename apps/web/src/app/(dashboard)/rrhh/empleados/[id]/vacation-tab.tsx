@@ -127,6 +127,27 @@ export function VacationTab({
     });
   }
 
+  function runReject(requestId: string, note: string) {
+    setActionError(null);
+    startTransition(async () => {
+      try {
+        const res = await fetch(`/api/vacations/requests/${requestId}/admin-reject`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(note ? { note } : {}),
+        });
+        if (!res.ok) {
+          const payload = (await res.json().catch(() => null)) as { message?: string } | null;
+          throw new Error(payload?.message ?? 'No se pudo rechazar la solicitud.');
+        }
+        setDetalleId(null);
+        router.refresh();
+      } catch (err) {
+        setActionError(err instanceof Error ? err.message : 'No se pudo rechazar la solicitud.');
+      }
+    });
+  }
+
   function runDelete(requestId: string) {
     if (!summary) return;
     setActionError(null);
@@ -320,9 +341,10 @@ export function VacationTab({
           onClose={() => setDetalleId(null)}
           actionPending={isPending}
           actionError={actionError}
-          // Aprobar y eliminar son las dos acciones que RRHH ya tiene aquí; el
-          // rechazo con motivo es del jefe directo y vive en su notificación.
           onApprove={canManage ? (id) => runApprove(id) : undefined}
+          // Rechazar devuelve los días al saldo y avisa al colaborador;
+          // eliminar borra la solicitud. Son cosas distintas y conviven.
+          onReject={canManage ? (id, note) => runReject(id, note) : undefined}
           onDelete={
             canManage
               ? (id) => {

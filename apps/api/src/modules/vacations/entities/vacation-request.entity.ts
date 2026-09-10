@@ -63,6 +63,10 @@ export class VacationRequest {
   @Column({ name: 'rejection_reason', type: 'text', nullable: true })
   rejectionReason!: string | null;
 
+  /** Nota opcional del jefe (o de RRHH) al aprobar. */
+  @Column({ name: 'approval_note', type: 'text', nullable: true })
+  approvalNote!: string | null;
+
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 
