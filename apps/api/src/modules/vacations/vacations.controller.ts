@@ -94,6 +94,22 @@ export class VacationsController {
     return this.service.rejectRequest(id, user, dto.reason);
   }
 
+  // ── Equipo a cargo ─────────────────────────────────────────────────────────
+  // Sin @RequirePermission a propósito: no hay un permiso que conceda "ser
+  // jefe". El alcance lo fija el propio dato —solo se devuelven los empleados
+  // cuyo direct_report_to_id apunta al expediente de quien llama—, así que un
+  // usuario sin equipo recibe una lista vacía, no un 403.
+
+  @Get('team')
+  getMyTeam(@CurrentUser() user: User) {
+    return this.service.getMyTeamVacations(user.id);
+  }
+
+  @Get('team/is-manager')
+  isTeamManager(@CurrentUser() user: User) {
+    return this.service.isTeamManager(user.id);
+  }
+
   // ── RRHH ───────────────────────────────────────────────────────────────────
 
   @Get('employees/:id/summary')
