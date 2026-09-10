@@ -736,7 +736,17 @@ export class VacationsService {
     if (!approverEmployeeId) return; // usuario sin expediente vinculado (cuenta administrativa)
 
     const employee = await this.employeesRepo.findOne({ where: { id: request.employeeId } });
-    if (employee?.directReportToId && employee.directReportToId === approverEmployeeId) return;
+    // Ser el propio jefe no concede jefatura: con la auto-referencia, la
+    // comparación de abajo se cumpliría sola y el empleado podría aprobarse
+    // sus propias vacaciones.
+    const esSuPropioJefe = !!employee && employee.id === approverEmployeeId;
+    if (
+      !esSuPropioJefe &&
+      employee?.directReportToId &&
+      employee.directReportToId === approverEmployeeId
+    ) {
+      return;
+    }
 
     throw new ForbiddenException('Solo el jefe directo puede gestionar esta solicitud.');
   }
@@ -998,6 +1008,8 @@ export class VacationsService {
       .where('r.status = :status', { status: 'pending' })
       .andWhere('r.deleted_at IS NULL')
       .andWhere('emp.direct_report_to_id = :managerId', { managerId: manager.id })
+      // Las propias solicitudes no son aprobaciones pendientes de uno mismo.
+      .andWhere('emp.id != :managerId', { managerId: manager.id })
       .orderBy('r.created_at', 'ASC')
       .getMany();
 
@@ -1041,10 +1053,16 @@ export class VacationsService {
     if (!manager) return { isManager: false };
 
     // Solo activos, igual que el resto del módulo: un jefe cuyo equipo entero
-    // causó baja no tiene nada que gestionar.
-    const count = await this.employeesRepo.count({
-      where: { directReportToId: manager.id, status: EmployeeStatus.ACTIVE },
-    });
+    // causó baja no tiene nada que gestionar. Y nunca uno mismo: un expediente
+    // que se apunta a sí mismo como jefe habilitaría el módulo a alguien sin
+    // equipo real (ver excludeSelf).
+    const count = await this.employeesRepo
+      .createQueryBuilder('emp')
+      .where('emp.direct_report_to_id = :managerId', { managerId: manager.id })
+      .andWhere('emp.id != :managerId', { managerId: manager.id })
+      .andWhere('emp.status = :status', { status: EmployeeStatus.ACTIVE })
+      .andWhere('emp.deleted_at IS NULL')
+      .getCount();
     return { isManager: count > 0 };
   }
 
@@ -1062,10 +1080,16 @@ export class VacationsService {
     const manager = await this.employeesRepo.findOne({ where: { authUserId: userId } });
     if (!manager) return [];
 
-    const reports = await this.employeesRepo.find({
-      where: { directReportToId: manager.id, status: EmployeeStatus.ACTIVE },
-      order: { fullName: 'ASC' },
-    });
+    const reports = await this.employeesRepo
+      .createQueryBuilder('emp')
+      .where('emp.direct_report_to_id = :managerId', { managerId: manager.id })
+      // Nadie se reporta a sí mismo: sin esto, un expediente con la
+      // auto-referencia se listaría como su propio colaborador.
+      .andWhere('emp.id != :managerId', { managerId: manager.id })
+      .andWhere('emp.status = :status', { status: EmployeeStatus.ACTIVE })
+      .andWhere('emp.deleted_at IS NULL')
+      .orderBy('emp.full_name', 'ASC')
+      .getMany();
     if (reports.length === 0) return [];
 
     const requests = await this.requestsRepo
