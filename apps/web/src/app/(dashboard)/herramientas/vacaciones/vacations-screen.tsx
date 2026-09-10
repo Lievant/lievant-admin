@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useTransition } from 'react';
 import type { ErrorKind, MyVacationBalance, VacationRequestItem, VacationRequestStatus } from '@/lib/api';
-import { PlaneIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { EyeIcon, PlaneIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { VacationRequestDetailModal } from '@/components/vacation-request-detail-modal';
 import { usePermission } from '@/hooks/use-permission';
@@ -269,11 +269,7 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {requests.map((r) => (
-                  <tr
-                    key={r.id}
-                    onClick={() => setDetalle(r)}
-                    className="cursor-pointer hover:bg-slate-50/60"
-                  >
+                  <tr key={r.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.displayId}</td>
                     <td className="px-4 py-3 text-slate-700">
                       {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -286,23 +282,30 @@ export function VacationsScreen({ balance, requests, errorKind }: Props) {
                         <p className="mt-1 text-xs text-rose-500">{r.rejectionReason}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      {puedeCancelar(r) ? (
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setActionError(null);
-                            setConfirming(r);
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50"
+                          onClick={() => setDetalle(r)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
                         >
-                          <TrashIcon className="h-3.5 w-3.5" />
-                          Cancelar solicitud
+                          <EyeIcon className="h-3.5 w-3.5" />
+                          Ver detalle
                         </button>
-                      ) : (
-                        <span className="text-xs text-slate-400">—</span>
-                      )}
+                        {puedeCancelar(r) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActionError(null);
+                              setConfirming(r);
+                            }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-red-200 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-50"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                            Cancelar solicitud
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
