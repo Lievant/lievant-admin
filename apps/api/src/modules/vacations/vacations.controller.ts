@@ -16,6 +16,8 @@ import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AdminCreateVacationRequestDto } from './dto/admin-create-vacation-request.dto';
+import { AdminRejectVacationRequestDto } from './dto/admin-reject-vacation-request.dto';
+import { ApproveVacationRequestDto } from './dto/approve-vacation-request.dto';
 import { CreateVacationRequestDto } from './dto/create-vacation-request.dto';
 import {
   CalculateDaysDto,
@@ -74,8 +76,12 @@ export class VacationsController {
 
   @Patch('requests/:id/approve')
   @RequirePermission('herramientas', 'vacaciones', 'write')
-  approveRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    return this.service.approveRequest(id, user);
+  approveRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveVacationRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.approveRequest(id, user, dto.note);
   }
 
   @Patch('requests/:id/reject')
@@ -134,8 +140,24 @@ export class VacationsController {
 
   @Patch('requests/:id/admin-approve')
   @RequirePermission('rrhh', 'vacaciones', 'manage')
-  adminApproveRequest(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
-    return this.service.adminApproveRequest(id, user);
+  adminApproveRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ApproveVacationRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.adminApproveRequest(id, user, dto.note);
+  }
+
+  // Igual que 'admin-approve': ruta aparte de 'reject' porque esa ya la ocupa
+  // el flujo de jefatura directa y Nest resolvería siempre el primer handler.
+  @Patch('requests/:id/admin-reject')
+  @RequirePermission('rrhh', 'vacaciones', 'manage')
+  adminRejectRequest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminRejectVacationRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.rejectRequestAsAdmin(id, user, dto.note);
   }
 
   // Sin @RequirePermission por la misma razón que el DELETE de abajo: la

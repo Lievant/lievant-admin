@@ -73,8 +73,10 @@ export function VacationRequestDetailModal({
   const [detail, setDetail] = useState<VacationRequestDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // El rechazo exige motivo, así que el textarea aparece al pulsar el botón en
-  // lugar de ocupar sitio en un modal que casi siempre es de solo lectura.
+  // El textarea de rechazo aparece al pulsar el botón en lugar de ocupar sitio
+  // en un modal que casi siempre es de solo lectura. La nota es opcional: el
+  // rechazo de RRHH suele responder a una razón administrativa que ya consta
+  // en otro lado.
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -246,7 +248,7 @@ export function VacationRequestDetailModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={2}
-              placeholder="Motivo del rechazo…"
+              placeholder="Motivo del rechazo (opcional)…"
               className="mb-3 w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
             />
           )}
@@ -273,7 +275,7 @@ export function VacationRequestDetailModal({
                   }
                   onReject?.(requestId, reason.trim());
                 }}
-                disabled={actionPending || (rejecting && reason.trim().length === 0)}
+                disabled={actionPending}
                 className="rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
               >
                 {rejecting ? 'Confirmar rechazo' : 'Rechazar'}
