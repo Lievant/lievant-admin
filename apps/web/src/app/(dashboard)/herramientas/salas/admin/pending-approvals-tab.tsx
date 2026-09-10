@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Booking } from '@/lib/api';
+import { isBookingUserInactive, type Booking } from '@/lib/api';
 import { approveBookingAction, rejectBookingAction } from '../actions';
 import { formatDateTimeRange } from '../constants';
 
@@ -66,7 +66,14 @@ export function PendingApprovalsTab({ bookings }: PendingApprovalsTabProps) {
               {booking.room?.office?.city?.name ? ` · ${booking.room.office.city.name}` : ''}
             </p>
             <p className="mt-1 text-sm text-slate-500">{formatDateTimeRange(booking.startTime, booking.endTime)}</p>
-            <p className="mt-1 text-sm text-slate-500">Solicitado por: {booking.user?.name ?? '—'}</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Solicitado por: {booking.user?.name ?? booking.user?.email ?? 'Usuario dado de baja'}
+              {isBookingUserInactive(booking.user) && (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        Dado de baja
+                      </span>
+                    )}
+            </p>
           </div>
           <div className="flex gap-2">
             <button

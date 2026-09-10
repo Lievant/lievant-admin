@@ -132,7 +132,15 @@ export class BookingsService {
   }
 
   async cancel(id: string, currentUser: User, dto: CancelBookingDto): Promise<Booking[]> {
-    const booking = await this.bookingsRepository.findOne({ where: { id }, relations: { room: true, user: true } });
+    // withDeleted: User usa @DeleteDateColumn, así que sin esto TypeORM añade
+    // `user.deleted_at IS NULL` al ON del join y deja booking.user en null
+    // cuando quien reservó está dado de baja. Booking no tiene soft-delete, de
+    // modo que solo afecta a este join (ver la nota equivalente en RoomsService).
+    const booking = await this.bookingsRepository.findOne({
+      where: { id },
+      relations: { room: true, user: true },
+      withDeleted: true,
+    });
     if (!booking) {
       throw new NotFoundException(`Reserva ${id} no encontrada`);
     }
@@ -151,6 +159,7 @@ export class BookingsService {
       bookingsToCancel = await this.bookingsRepository
         .createQueryBuilder('booking')
         .leftJoinAndSelect('booking.user', 'user')
+        .withDeleted()
         .where('booking.recurrenceGroupId = :groupId', { groupId: booking.recurrenceGroupId })
         .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
         .andWhere('booking.startTime >= :now', { now: new Date() })
@@ -193,9 +202,14 @@ export class BookingsService {
   }
 
   async update(id: string, currentUser: User, dto: UpdateBookingDto): Promise<Booking> {
+    // withDeleted: User usa @DeleteDateColumn, así que sin esto TypeORM añade
+    // `user.deleted_at IS NULL` al ON del join y deja booking.user en null
+    // cuando quien reservó está dado de baja. Booking no tiene soft-delete, de
+    // modo que solo afecta a este join (ver la nota equivalente en RoomsService).
     const booking = await this.bookingsRepository.findOne({
       where: { id },
       relations: { room: { office: { city: true } }, user: true },
+      withDeleted: true,
     });
     if (!booking) {
       throw new NotFoundException(`Reserva ${id} no encontrada`);
@@ -320,9 +334,14 @@ export class BookingsService {
   }
 
   async approve(id: string, currentUser: User): Promise<Booking> {
+    // withDeleted: User usa @DeleteDateColumn, así que sin esto TypeORM añade
+    // `user.deleted_at IS NULL` al ON del join y deja booking.user en null
+    // cuando quien reservó está dado de baja. Booking no tiene soft-delete, de
+    // modo que solo afecta a este join (ver la nota equivalente en RoomsService).
     const booking = await this.bookingsRepository.findOne({
       where: { id },
       relations: { room: { office: { city: true } }, user: true },
+      withDeleted: true,
     });
 
     if (!booking) {
@@ -365,6 +384,67 @@ export class BookingsService {
     booking.cancelledBy = currentUser.id;
 
     return this.bookingsRepository.save(booking);
+  }
+
+  /**
+   * Cancela las reservas futuras de un usuario. La usa la baja de empleados.
+   *
+   * Vive aquí y no en EmployeesService porque cancelar una reserva es algo más
+   * que un UPDATE: hay que retirar el evento del calendario de Microsoft, y esa
+   * lógica ya está resuelta en este módulo.
+   *
+   * Nunca lanza: la baja del empleado ya está guardada y es el dato de verdad,
+   * así que un fallo aquí deja rastro en el log y devuelve lo que sí pudo
+   * cancelar, igual que el resto de pasos de la automatización de baja.
+   */
+  async cancelFutureBookingsForUser(
+    userId: string,
+    cancelledByUserId: string | null,
+  ): Promise<{ cancelled: number; calendarFailures: number }> {
+    // Reservas futuras del usuario. Booking no tiene soft-delete, así que no
+    // hay deleted_at que filtrar; el estado 'cancelada' es lo que las excluye.
+    const bookings = await this.bookingsRepository
+      .createQueryBuilder('booking')
+      .leftJoinAndSelect('booking.user', 'user')
+      .withDeleted()
+      .where('booking.userId = :userId', { userId })
+      .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
+      // wallClockNow por la misma razón que findMy: start_time guarda hora de
+      // pared en componentes UTC y new Date() descartaría reservas de hoy.
+      .andWhere('booking.startTime >= :now', { now: this.wallClockNow() })
+      .getMany();
+
+    let calendarFailures = 0;
+
+    for (const booking of bookings) {
+      booking.status = BookingStatus.CANCELADA;
+      booking.cancelledAt = new Date();
+      booking.cancelledBy = cancelledByUserId;
+      await this.bookingsRepository.save(booking);
+
+      if (!booking.msEventId) continue;
+
+      try {
+        // El buzón es el de quien reservó; withDeleted lo trae aunque ya esté
+        // dado de baja, que es justo el caso de esta llamada. Si su cuenta de
+        // Microsoft ya no existe, Graph falla y se registra sin frenar el resto.
+        if (booking.user) {
+          const hasAttendees = (booking.attendees ?? []).length > 0;
+          if (hasAttendees) {
+            await this.graphTokenService.cancelCalendarEvent(booking.user.email, booking.msEventId);
+          } else {
+            await this.graphTokenService.deleteCalendarEvent(booking.user.email, booking.msEventId);
+          }
+        }
+      } catch (error) {
+        calendarFailures += 1;
+        this.logger.warn(
+          `No se pudo retirar del calendario la reserva ${booking.id} al dar de baja al usuario ${userId}: ${error}`,
+        );
+      }
+    }
+
+    return { cancelled: bookings.length, calendarFailures };
   }
 
   async findMy(userId: string, status?: BookingStatus, upcoming?: boolean): Promise<Booking[]> {
@@ -413,6 +493,7 @@ export class BookingsService {
       .leftJoinAndSelect('room.office', 'office')
       .leftJoinAndSelect('office.city', 'city')
       .leftJoinAndSelect('booking.user', 'user')
+      .withDeleted()
       .orderBy('booking.startTime', 'DESC')
       // Desempate estable: sin él, dos reservas con el mismo start_time pueden
       // alternar de orden entre páginas y el cursor saltarse o repetir filas.
@@ -675,6 +756,7 @@ export class BookingsService {
       .createQueryBuilder('booking')
       .leftJoinAndSelect('booking.room', 'room')
       .leftJoinAndSelect('booking.user', 'user')
+      .withDeleted()
       .where('room.officeId = :officeId', { officeId })
       .andWhere('booking.status != :cancelled', { cancelled: BookingStatus.CANCELADA })
       .andWhere('booking.startTime >= :start AND booking.startTime < :end', { start, end })

@@ -11,6 +11,7 @@ import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { HelpdeskService } from '../helpdesk/helpdesk.service';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
+import { BookingsService } from '../rooms/bookings.service';
 import { VacationsService } from '../vacations/vacations.service';
 import { EmployeeStatus } from './constants/employee-status.constant';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -105,6 +106,7 @@ export class EmployeesService {
     private readonly helpdeskService: HelpdeskService,
     private readonly notificationFlows: NotificationFlowsService,
     private readonly vacationsService: VacationsService,
+    private readonly bookingsService: BookingsService,
   ) {}
 
   /**
@@ -492,22 +494,51 @@ export class EmployeesService {
     termination: TerminationData,
   ): Promise<void> {
     // PASO 1 — Revocar el acceso a la plataforma.
+    let authUserId: string | null = employee.authUserId ?? null;
     try {
       if (employee.corporateEmail) {
         const user = await this.usersRepository.findOne({
           where: { email: employee.corporateEmail },
         });
-        if (user?.isActive) {
-          user.isActive = false;
-          await this.usersRepository.save(user);
-          this.logger.log(`Usuario desactivado por baja: ${employee.corporateEmail}`);
+        if (user) {
+          authUserId = user.id;
+          if (user.isActive) {
+            user.isActive = false;
+            await this.usersRepository.save(user);
+            this.logger.log(`Usuario desactivado por baja: ${employee.corporateEmail}`);
+          }
         }
       }
     } catch (err) {
       this.logger.error(`No se pudo desactivar el usuario de ${employee.fullName}: ${msg(err)}`);
     }
 
-    // PASO 2 — Ticket de HelpDesk con el checklist de la baja.
+    // PASO 2 — Liberar las salas que tuviera reservadas a futuro.
+    //
+    // Desactivar la cuenta no libera nada por sí solo: la reserva sigue
+    // ocupando la sala y el evento sigue en los calendarios de los invitados,
+    // así que alguien tiene que cancelarlas a mano. Solo se tocan las futuras;
+    // las pasadas son historial.
+    if (authUserId) {
+      try {
+        const { cancelled, calendarFailures } = await this.bookingsService.cancelFutureBookingsForUser(
+          authUserId,
+          null,
+        );
+        if (cancelled > 0) {
+          this.logger.log(
+            `${cancelled} reserva(s) de sala canceladas por baja de ${employee.fullName}` +
+              (calendarFailures > 0 ? ` (${calendarFailures} sin retirar del calendario)` : ''),
+          );
+        }
+      } catch (err) {
+        this.logger.error(
+          `No se pudieron cancelar las reservas de sala de ${employee.fullName}: ${msg(err)}`,
+        );
+      }
+    }
+
+    // PASO 3 — Ticket de HelpDesk con el checklist de la baja.
     try {
       const equipos = await this.listAssignedEquipment(employee.id);
       const ticket = await this.helpdeskService.createSystemTicket({
@@ -524,7 +555,7 @@ export class EmployeesService {
       this.logger.error(`No se pudo crear el ticket de baja de ${employee.fullName}: ${msg(err)}`);
     }
 
-    // PASO 3 — Avisar a las áreas que deben ejecutar su parte.
+    // PASO 4 — Avisar a las áreas que deben ejecutar su parte.
     //
     // Los destinatarios se configuran en /admin/flujos-notificacion, cada uno
     // con su `label` ('TI', 'CORE', 'Operaciones'), que es lo que determina qué

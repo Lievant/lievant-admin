@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Booking, ListAdminBookingsParams, Room } from '@/lib/api';
+import { isBookingUserInactive, type Booking, type ListAdminBookingsParams, type Room } from '@/lib/api';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { cancelBookingAction, listAdminBookingsAction, listRoomsByOfficeAction } from '../actions';
 import { BOOKING_STATUS_BADGE_STYLES, BOOKING_STATUS_LABELS, formatDateTimeRange } from '../constants';
@@ -142,7 +142,14 @@ export function AllBookingsTab({ offices }: AllBookingsTabProps) {
                     {booking.room?.office?.city?.name ? ` · ${booking.room.office.city.name}` : ''}
                   </td>
                   <td className="px-4 py-3 text-slate-500">{formatDateTimeRange(booking.startTime, booking.endTime)}</td>
-                  <td className="px-4 py-3 text-slate-500">{booking.user?.name ?? '—'}</td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {booking.user?.name ?? booking.user?.email ?? 'Usuario dado de baja'}
+                    {isBookingUserInactive(booking.user) && (
+                      <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">
+                        Dado de baja
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${BOOKING_STATUS_BADGE_STYLES[booking.status]}`}>
                       {BOOKING_STATUS_LABELS[booking.status]}
