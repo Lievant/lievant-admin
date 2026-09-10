@@ -296,7 +296,15 @@ export class EmployeesService {
     if (dto.contractSchema !== undefined) record.contractSchema = dto.contractSchema ?? null;
     if (dto.fullName !== undefined) record.fullName = dto.fullName.trim();
     if (dto.directReportTo !== undefined) record.directReportTo = dto.directReportTo?.trim() ?? null;
-    if (dto.directReportToId !== undefined) record.directReportToId = dto.directReportToId ?? null;
+    if (dto.directReportToId !== undefined) {
+      // Un expediente que se apunta a sí mismo como jefe hace que su dueño
+      // aparezca en su propia pantalla de equipo y, peor, que pase el control
+      // de "solo el jefe directo" sobre sus propias solicitudes.
+      if (dto.directReportToId && dto.directReportToId === record.id) {
+        throw new BadRequestException('Un empleado no puede ser su propio jefe.');
+      }
+      record.directReportToId = dto.directReportToId ?? null;
+    }
     if (dto.gender !== undefined) record.gender = dto.gender ?? null;
     if (dto.nationality !== undefined) record.nationality = dto.nationality ?? null;
     if (dto.seniorityDate !== undefined) record.seniorityDate = dto.seniorityDate ?? null;
