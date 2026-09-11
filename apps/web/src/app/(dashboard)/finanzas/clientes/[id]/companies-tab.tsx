@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import type { ClientDetail } from '@/lib/api';
 import { PlusIcon } from '@/components/icons';
 import { AddCompanyDialog } from './add-company-dialog';
 import { AddBrandDialog } from './add-brand-dialog';
+import { BrandChip } from './brand-chip';
 
 export function CompaniesTab({ client }: { client: ClientDetail }) {
   const [isAddCompanyOpen, setAddCompanyOpen] = useState(false);
@@ -62,9 +62,7 @@ export function CompaniesTab({ client }: { client: ClientDetail }) {
               {brands.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {brands.map((brand) => (
-                    <span key={brand.id} className={cn('rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600')}>
-                      {brand.name}
-                    </span>
+                    <BrandChip key={brand.id} clientId={client.id} brand={brand} />
                   ))}
                 </div>
               ) : (

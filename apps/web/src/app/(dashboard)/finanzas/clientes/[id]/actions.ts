@@ -5,6 +5,8 @@ import {
   ApiError,
   addBrand,
   addClientCompany,
+  deleteBrand,
+  updateBrand,
   addClientContact,
   removeClientContact,
   removeClientDocument,
@@ -53,6 +55,33 @@ export async function addCompanyAction(clientId: string, payload: CompanyPayload
 export async function addBrandAction(clientId: string, companyId: string, name: string): Promise<ActionResult> {
   try {
     await addBrand(companyId, { name });
+    revalidatePath(`/finanzas/clientes/${clientId}`);
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function updateBrandAction(
+  clientId: string,
+  brandId: string,
+  name: string,
+): Promise<ActionResult> {
+  const limpio = name.trim();
+  if (!limpio) return { success: false, error: 'El nombre de la marca es obligatorio.' };
+
+  try {
+    await updateBrand(brandId, { name: limpio });
+    revalidatePath(`/finanzas/clientes/${clientId}`);
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+export async function deleteBrandAction(clientId: string, brandId: string): Promise<ActionResult> {
+  try {
+    await deleteBrand(brandId);
     revalidatePath(`/finanzas/clientes/${clientId}`);
     return { success: true };
   } catch (err) {
