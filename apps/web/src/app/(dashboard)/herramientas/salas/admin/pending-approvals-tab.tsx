@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { isBookingUserInactive, type Booking } from '@/lib/api';
+import type { Booking } from '@/lib/api';
+import { isBookingUserInactive } from '@/lib/booking-utils';
 import { approveBookingAction, rejectBookingAction } from '../actions';
 import { formatDateTimeRange } from '../constants';
 

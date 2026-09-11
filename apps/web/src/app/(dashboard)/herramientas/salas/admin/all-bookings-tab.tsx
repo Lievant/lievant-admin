@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { isBookingUserInactive, type Booking, type ListAdminBookingsParams, type Room } from '@/lib/api';
+import type { Booking, ListAdminBookingsParams, Room } from '@/lib/api';
+import { isBookingUserInactive } from '@/lib/booking-utils';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { cancelBookingAction, listAdminBookingsAction, listRoomsByOfficeAction } from '../actions';
 import { BOOKING_STATUS_BADGE_STYLES, BOOKING_STATUS_LABELS, formatDateTimeRange } from '../constants';
