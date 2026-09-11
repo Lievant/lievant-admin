@@ -468,6 +468,11 @@ export function updateBrand(brandId: string, payload: { name?: string }): Promis
   });
 }
 
+/** Baja lógica: la marca se conserva para no romper los proyectos que la citan. */
+export function deleteBrand(brandId: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/clients/brands/${brandId}`, { method: 'DELETE' });
+}
+
 export function getClientFinancial(clientId: string): Promise<FinancialData | null> {
   return apiFetchWithRetry<FinancialData | null>(`/clients/${clientId}/financial`);
 }

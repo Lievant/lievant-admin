@@ -100,6 +100,17 @@ export class ClientsController {
     return this.clientsService.updateBrand(brandId, dto);
   }
 
+  // La ruta cuelga de 'brands' y no de ':id/brands' porque una marca pertenece
+  // a una empresa (brands.company_id), no al cliente: el id del cliente no
+  // aparece en la fila y exigirlo en la URL obligaría a una comprobación que no
+  // aporta. Es el mismo esquema que ya usan addBrand y updateBrand.
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('finanzas', 'clientes', 'write')
+  @Delete('brands/:brandId')
+  deleteBrand(@Param('brandId', ParseUUIDPipe) brandId: string) {
+    return this.clientsService.deleteBrand(brandId);
+  }
+
   @UseGuards(PermissionsGuard)
   @RequirePermission('finanzas', 'clientes.financiero', 'read')
   @Get(':id/financial')
