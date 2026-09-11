@@ -1,6 +1,7 @@
 'use client';
 
-import { isBookingUserInactive, type Booking } from '@/lib/api';
+import type { Booking } from '@/lib/api';
+import { isBookingUserInactive } from '@/lib/booking-utils';
 import { CloseIcon } from '@/components/icons';
 import {
   BOOKING_STATUS_BADGE_STYLES,

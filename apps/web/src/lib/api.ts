@@ -1560,11 +1560,6 @@ export interface BookingUserSummary {
   deletedAt?: string | null;
 }
 
-/** true si la cuenta de quien reservó ya no está vigente. */
-export function isBookingUserInactive(user?: BookingUserSummary | null): boolean {
-  if (!user) return false;
-  return user.isActive === false || !!user.deletedAt;
-}
 
 export interface Booking {
   id: string;
