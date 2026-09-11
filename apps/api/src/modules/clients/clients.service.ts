@@ -301,6 +301,26 @@ export class ClientsService {
     return this.brandsRepository.save(brand);
   }
 
+  /**
+   * Baja lógica de una marca.
+   *
+   * Soft delete y no borrado físico porque projects.project_records.brand_id
+   * apunta aquí con una FK sin ON DELETE (o sea RESTRICT): un DELETE real
+   * fallaría en cuanto la marca tuviera un proyecto, y perdería el nombre con
+   * el que se facturó históricamente. Con softDelete la fila permanece, los
+   * proyectos conservan su referencia y la marca desaparece de los listados,
+   * que ya filtran por deleted_at vía @DeleteDateColumn.
+   */
+  async deleteBrand(brandId: string): Promise<{ deleted: true }> {
+    const brand = await this.brandsRepository.findOne({ where: { id: brandId } });
+    if (!brand) {
+      throw new NotFoundException(`Marca ${brandId} no encontrada`);
+    }
+
+    await this.brandsRepository.softDelete(brandId);
+    return { deleted: true };
+  }
+
   async getFinancial(clientId: string): Promise<FinancialData | null> {
     await this.getClientOrFail(clientId);
     return this.financialRepository.findOne({ where: { clientRecordId: clientId } });
