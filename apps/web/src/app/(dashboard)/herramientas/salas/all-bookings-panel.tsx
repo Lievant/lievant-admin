@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { cn } from '@/lib/utils';
-import { isBookingUserInactive, type Booking } from '@/lib/api';
+import type { Booking } from '@/lib/api';
+import { isBookingUserInactive } from '@/lib/booking-utils';
 import { listAdminBookingsAction } from './actions';
 import { BookRoomDialog } from './book-room-dialog';
 import { CancelBookingDialog } from './mis-reservas/cancel-booking-dialog';
