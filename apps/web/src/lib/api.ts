@@ -2953,7 +2953,6 @@ export function createTool(payload: CreateToolPayload): Promise<ToolCatalogItem>
 
 export type ToolContractStatus = 'activo' | 'en_negociacion' | 'por_cancelar' | 'cancelado';
 export type ToolBillingPeriod = 'mensual' | 'trimestral' | 'anual' | 'unico';
-export type ToolAssignmentStatus = 'activa' | 'pendiente_aprobacion' | 'revocada';
 
 export interface ToolRecord {
   id: string;
@@ -2977,26 +2976,6 @@ export interface ToolRecord {
   monthlyCost: number;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface ToolAssignmentRow {
-  id: string;
-  employeeId: string;
-  displayId: string;
-  fullName: string;
-  corporateEmail: string | null;
-  area: string | null;
-  division: string | null;
-  status: ToolAssignmentStatus;
-  isAdmin: boolean;
-  unitCostOverride: number | null;
-  notes: string | null;
-  assignedAt: string;
-  revokedAt: string | null;
-}
-
-export interface ToolDetail extends ToolRecord {
-  assignments: ToolAssignmentRow[];
 }
 
 export interface ToolStats {
@@ -3036,8 +3015,8 @@ export function listTools(params: ListToolsParams = {}): Promise<ToolRecord[]> {
   return apiFetchWithRetry<ToolRecord[]>(`/tools${qs ? `?${qs}` : ''}`);
 }
 
-export function getTool(id: string): Promise<ToolDetail> {
-  return apiFetchWithRetry<ToolDetail>(`/tools/${id}`);
+export function getTool(id: string): Promise<ToolRecord> {
+  return apiFetchWithRetry<ToolRecord>(`/tools/${id}`);
 }
 
 export function getToolStats(): Promise<ToolStats> {
@@ -3084,200 +3063,149 @@ export function deleteToolRecord(id: string): Promise<{ id: string; deleted: boo
   return apiFetchWithRetry<{ id: string; deleted: boolean }>(`/tools/${id}`, { method: 'DELETE' });
 }
 
-export interface AssignToolPayload {
-  employeeId: string;
-  isAdmin?: boolean;
-  unitCostOverride?: number;
-  notes?: string;
-}
 
-export function assignTool(toolId: string, payload: AssignToolPayload): Promise<ToolAssignmentRow> {
-  return apiFetchWithRetry<ToolAssignmentRow>(`/tools/${toolId}/assignments`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
+// ---------------------------------------------------------------------------
+// Asignaciones herramienta ↔ colaborador (tools.assignments)
+// ---------------------------------------------------------------------------
 
-export function approveToolAssignment(
-  toolId: string,
-  assignmentId: string,
-): Promise<ToolAssignmentRow> {
-  return apiFetchWithRetry<ToolAssignmentRow>(
-    `/tools/${toolId}/assignments/${assignmentId}/approve`,
-    { method: 'PATCH' },
-  );
-}
+export type AssignmentStatus = 'activo' | 'revocado';
 
-export function revokeToolAssignment(
-  toolId: string,
-  assignmentId: string,
-  notes?: string,
-): Promise<ToolAssignmentRow> {
-  return apiFetchWithRetry<ToolAssignmentRow>(
-    `/tools/${toolId}/assignments/${assignmentId}/revoke`,
-    { method: 'PATCH', body: JSON.stringify({ notes }) },
-  );
-}
-
-export interface EmployeeToolRow {
+export interface AssignmentEmployee {
   id: string;
-  toolId: string;
-  toolCode: string;
+  fullName: string;
+  area: string | null;
+  position: string | null;
+  photoUrl: string | null;
+}
+
+export interface AssignmentTool {
+  id: string;
   name: string;
+  toolCode: string;
   category: string;
-  provider: string;
-  currency: string;
-  billingPeriod: ToolBillingPeriod;
-  unitCost: number;
-  status: ToolAssignmentStatus;
-  isAdmin: boolean;
-  assignedAt: string;
-  revokedAt: string | null;
 }
 
-export function listEmployeeTools(employeeId: string): Promise<EmployeeToolRow[]> {
-  return apiFetchWithRetry<EmployeeToolRow[]>(`/tools/by-employee/${employeeId}`);
-}
-
-// ---------------------------------------------------------------------------
-// Licencias individuales (tools.licenses)
-// ---------------------------------------------------------------------------
-
-export type LicenseStatus = 'activa' | 'pendiente_aprobacion' | 'suspendida' | 'cancelada';
-
-export interface LicenseRecord {
+export interface AssignmentRecord {
   id: string;
-  licenseCode: string;
-  toolId: string;
-  toolCode: string;
-  toolName: string;
-  licenseType: string | null;
-  employeeId: string | null;
-  employeeName: string | null;
-  employeeEmail: string | null;
-  businessUnit: string | null;
-  unitCost: number | null;
-  currency: string | null;
-  status: LicenseStatus;
-  assignedAt: string;
-  expiresAt: string | null;
+  assignmentCode: string;
+  status: AssignmentStatus;
+  assignmentDate: string;
+  revocationDate: string | null;
+  lastUsedDate: string | null;
+  /** null = nunca se registró uso; la UI lo trata como el caso más crítico. */
+  diasSinUso: number | null;
   notes: string | null;
+  revocationReason: string | null;
+  assignedById: string | null;
+  assignedByName: string | null;
+  employee: AssignmentEmployee;
+  tool: AssignmentTool;
 }
 
-export interface LicensesPage {
-  data: LicenseRecord[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+export interface AssignmentsPage {
+  data: AssignmentRecord[];
+  nextCursor: string | null;
 }
 
-export interface LicenseStatsByUnit {
-  unit: string;
-  count: number;
-  costMXN: number;
-  costUSD: number;
+export interface AssignmentStats {
+  totalActive: number;
+  totalRevoked: number;
+  unusedOver60Days: number;
+  byTool: { toolCode: string; toolName: string; activeCount: number }[];
+  byArea: { area: string; activeCount: number }[];
+  recentAssignments: AssignmentRecord[];
 }
 
-export interface LicenseStatsByTool {
-  toolName: string;
-  toolCode: string;
-  currency: string;
-  count: number;
-  totalCost: number;
+export interface AssignerRecord {
+  id: string;
+  userId: string;
+  employeeId: string | null;
+  displayName: string;
+  isActive: boolean;
 }
 
-export interface LicenseModuleStats {
-  totalLicenses: number;
-  activeLicenses: number;
-  totalCostMXN: number;
-  totalCostUSD: number;
-  byBusinessUnit: LicenseStatsByUnit[];
-  byTool: LicenseStatsByTool[];
-  expiringIn30Days: number;
-}
-
-export interface ListLicenseRecordsParams {
+export interface ListAssignmentsParams {
   toolId?: string;
   employeeId?: string;
-  businessUnit?: string;
+  assignedById?: string;
   status?: string;
-  currency?: string;
   search?: string;
-  page?: number;
+  cursor?: string;
   limit?: number;
 }
 
-// El API monta estas rutas en /tool-licenses: /licenses ya lo ocupa el Maestro
-// de Licenciamientos y un /licenses/:id aquí se comería /licenses/tools.
-export function listLicenseRecords(
-  params: ListLicenseRecordsParams = {},
-): Promise<LicensesPage> {
+export function listAssignments(params: ListAssignmentsParams = {}): Promise<AssignmentsPage> {
   const q = new URLSearchParams();
   if (params.toolId) q.set('toolId', params.toolId);
   if (params.employeeId) q.set('employeeId', params.employeeId);
-  if (params.businessUnit) q.set('businessUnit', params.businessUnit);
+  if (params.assignedById) q.set('assignedById', params.assignedById);
   if (params.status) q.set('status', params.status);
-  if (params.currency) q.set('currency', params.currency);
   if (params.search) q.set('search', params.search);
-  if (params.page) q.set('page', String(params.page));
+  if (params.cursor) q.set('cursor', params.cursor);
   if (params.limit) q.set('limit', String(params.limit));
   const qs = q.toString();
-  return apiFetchWithRetry<LicensesPage>(`/tool-licenses${qs ? `?${qs}` : ''}`);
+  return apiFetchWithRetry<AssignmentsPage>(`/assignments${qs ? `?${qs}` : ''}`);
 }
 
-export function getLicenseRecord(id: string): Promise<LicenseRecord> {
-  return apiFetchWithRetry<LicenseRecord>(`/tool-licenses/${id}`);
+export function getAssignment(id: string): Promise<AssignmentRecord> {
+  return apiFetchWithRetry<AssignmentRecord>(`/assignments/${id}`);
 }
 
-export function getLicenseModuleStats(): Promise<LicenseModuleStats> {
-  return apiFetchWithRetry<LicenseModuleStats>('/tool-licenses/stats');
+export function getAssignmentStats(): Promise<AssignmentStats> {
+  return apiFetchWithRetry<AssignmentStats>('/assignments/stats');
 }
 
-export function listLicensesByTool(toolId: string): Promise<LicenseRecord[]> {
-  return apiFetchWithRetry<LicenseRecord[]>(`/tool-licenses/by-tool/${toolId}`);
+export function listAssigners(): Promise<AssignerRecord[]> {
+  return apiFetchWithRetry<AssignerRecord[]>('/assignments/assigners');
 }
 
-export function listLicensesByEmployee(employeeId: string): Promise<LicenseRecord[]> {
-  return apiFetchWithRetry<LicenseRecord[]>(`/tool-licenses/by-employee/${employeeId}`);
-}
-
-export interface CreateLicensePayload {
-  toolId: string;
+/** Basta con uno de los dos ids: el API resuelve el otro por correo. */
+export interface CreateAssignerPayload {
+  userId?: string;
   employeeId?: string;
-  licenseType?: string;
-  businessUnit?: string;
-  unitCost?: number;
-  currency?: string;
-  assignedAt?: string;
-  expiresAt?: string;
-  notes?: string;
+  displayName?: string;
 }
 
-export function createLicenseRecord(payload: CreateLicensePayload): Promise<LicenseRecord> {
-  return apiFetchWithRetry<LicenseRecord>('/tool-licenses', {
+export function addAssigner(payload: CreateAssignerPayload): Promise<AssignerRecord> {
+  return apiFetchWithRetry<AssignerRecord>('/assignments/assigners', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export function updateLicenseRecord(
-  id: string,
-  payload: Partial<CreateLicensePayload> & { status?: LicenseStatus },
-): Promise<LicenseRecord> {
-  return apiFetchWithRetry<LicenseRecord>(`/tool-licenses/${id}`, {
-    method: 'PATCH',
+export function removeAssigner(id: string): Promise<{ id: string; removed: boolean }> {
+  return apiFetchWithRetry<{ id: string; removed: boolean }>(`/assignments/assigners/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export interface CreateAssignmentPayload {
+  toolId: string;
+  employeeId: string;
+  assignedById?: string;
+  assignmentDate?: string;
+  lastUsedDate?: string;
+  notes?: string;
+}
+
+export function createAssignment(payload: CreateAssignmentPayload): Promise<AssignmentRecord> {
+  return apiFetchWithRetry<AssignmentRecord>('/assignments', {
+    method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export function revokeLicenseRecord(
-  id: string,
-  note?: string,
-): Promise<{ id: string; revoked: boolean }> {
-  return apiFetchWithRetry<{ id: string; revoked: boolean }>(`/tool-licenses/${id}`, {
-    method: 'DELETE',
-    body: JSON.stringify({ note }),
+export function revokeAssignment(id: string, reason?: string): Promise<AssignmentRecord> {
+  return apiFetchWithRetry<AssignmentRecord>(`/assignments/${id}/revoke`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function updateAssignmentLastUsed(id: string, date: string): Promise<AssignmentRecord> {
+  return apiFetchWithRetry<AssignmentRecord>(`/assignments/${id}/last-used`, {
+    method: 'PATCH',
+    body: JSON.stringify({ date }),
   });
 }
 

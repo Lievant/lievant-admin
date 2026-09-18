@@ -40,7 +40,12 @@ export const TOOL_CONTRACT_STATUSES = [
   'cancelado',
 ] as const;
 
-export const TOOL_ASSIGNMENT_STATUSES = ['activa', 'pendiente_aprobacion', 'revocada'] as const;
+/** Estados de una asignación herramienta ↔ colaborador (tools.assignments). */
+export const ASSIGNMENT_STATUSES = ['activo', 'revocado'] as const;
+
+/** Umbrales de alerta por días sin uso. Los comparte el API con la UI. */
+export const UNUSED_WARNING_DAYS = 30;
+export const UNUSED_CRITICAL_DAYS = 60;
 
 /**
  * Estados de una licencia individual. 'pendiente_aprobacion' existe porque una

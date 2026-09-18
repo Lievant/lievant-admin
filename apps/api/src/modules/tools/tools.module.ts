@@ -2,26 +2,22 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogToolCategory } from '../catalogs/entities/catalog-tool-category.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
-import { License } from './entities/license.entity';
-import { ToolAssignmentRecord } from './entities/tool-assignment-record.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { AssignmentsController } from './assignments.controller';
+import { AssignmentsService } from './assignments.service';
+import { Assigner } from './entities/assigner.entity';
+import { Assignment } from './entities/assignment.entity';
 import { Tool } from './entities/tool.entity';
-import { ToolLicensesController } from './licenses.controller';
-import { ToolLicensesService } from './licenses.service';
 import { ToolsController } from './tools.controller';
 import { ToolsService } from './tools.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Tool,
-      ToolAssignmentRecord,
-      License,
-      EmployeeRecord,
-      CatalogToolCategory,
-    ]),
+    TypeOrmModule.forFeature([Tool, Assignment, Assigner, EmployeeRecord, CatalogToolCategory]),
+    NotificationsModule,
   ],
-  controllers: [ToolsController, ToolLicensesController],
-  providers: [ToolsService, ToolLicensesService],
-  exports: [ToolsService, ToolLicensesService],
+  controllers: [ToolsController, AssignmentsController],
+  providers: [ToolsService, AssignmentsService],
+  exports: [ToolsService, AssignmentsService],
 })
 export class ToolsModule {}

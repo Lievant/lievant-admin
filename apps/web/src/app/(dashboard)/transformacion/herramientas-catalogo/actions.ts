@@ -3,13 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import {
   ApiError,
-  approveToolAssignment,
-  assignTool,
   createToolRecord,
   deleteToolRecord,
-  revokeToolAssignment,
   updateToolRecord,
-  type AssignToolPayload,
   type CreateToolRecordPayload,
 } from '@/lib/api';
 
@@ -61,45 +57,3 @@ export async function deleteToolRecordAction(id: string): Promise<ActionResult> 
   }
 }
 
-export async function assignToolAction(
-  toolId: string,
-  payload: AssignToolPayload,
-): Promise<ActionResult> {
-  try {
-    await assignTool(toolId, payload);
-    revalidatePath(LIST_PATH);
-    revalidatePath(`${LIST_PATH}/${toolId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}
-
-export async function approveToolAssignmentAction(
-  toolId: string,
-  assignmentId: string,
-): Promise<ActionResult> {
-  try {
-    await approveToolAssignment(toolId, assignmentId);
-    revalidatePath(LIST_PATH);
-    revalidatePath(`${LIST_PATH}/${toolId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}
-
-export async function revokeToolAssignmentAction(
-  toolId: string,
-  assignmentId: string,
-  notes?: string,
-): Promise<ActionResult> {
-  try {
-    await revokeToolAssignment(toolId, assignmentId, notes);
-    revalidatePath(LIST_PATH);
-    revalidatePath(`${LIST_PATH}/${toolId}`);
-    return { success: true };
-  } catch (err) {
-    return toResult(err);
-  }
-}

@@ -5,7 +5,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const accessToken = request.cookies.get('access_token')?.value;
 
-  const res = await fetch(`${API_URL}/tool-licenses/stats`, {
+  const res = await fetch(`${API_URL}/assignments/assigners`, {
     headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
   });
 

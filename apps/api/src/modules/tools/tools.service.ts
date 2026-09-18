@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
 import { CatalogToolCategory } from '../catalogs/entities/catalog-tool-category.entity';
-import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import {
   BILLING_PERIODS_PER_YEAR,
   TOOL_BILLING_PERIODS,
@@ -10,35 +9,15 @@ import {
   TOOL_CONTRACT_STATUSES,
   TOOL_CURRENCIES,
 } from './constants/tools.constants';
-import { AssignToolDto, RevokeAssignmentDto } from './dto/assign-tool.dto';
 import { CreateToolDto } from './dto/create-tool.dto';
 import { QueryToolsDto } from './dto/query-tools.dto';
 import { UpdateToolDto } from './dto/update-tool.dto';
-import { ToolAssignmentRecord } from './entities/tool-assignment-record.entity';
 import { Tool } from './entities/tool.entity';
-
-interface ToolAssignmentRow {
-  id: string;
-  employee_id: string;
-  display_id: string;
-  full_name: string;
-  corporate_email: string | null;
-  area: string | null;
-  division: string | null;
-  status: string;
-  is_admin: boolean;
-  unit_cost_override: string | null;
-  notes: string | null;
-  assigned_at: Date;
-  revoked_at: Date | null;
-}
 
 @Injectable()
 export class ToolsService {
   constructor(
     @InjectRepository(Tool) private readonly toolsRepo: Repository<Tool>,
-    @InjectRepository(ToolAssignmentRecord)
-    private readonly assignmentsRepo: Repository<ToolAssignmentRecord>,
     @InjectRepository(CatalogToolCategory)
     private readonly categoriesRepo: Repository<CatalogToolCategory>,
     private readonly dataSource: DataSource,
@@ -115,9 +94,7 @@ export class ToolsService {
   async findOne(id: string) {
     const tool = await this.toolsRepo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!tool) throw new NotFoundException(`Herramienta ${id} no encontrada`);
-
-    const assignments = await this.listAssignmentRows(id);
-    return { ...this.toDto(tool), assignments };
+    return this.toDto(tool);
   }
 
   async create(dto: CreateToolDto, userId: string) {
@@ -179,9 +156,14 @@ export class ToolsService {
 
       await manager.save(Tool, tool);
 
-      // El costo unitario entra en el total: si cambió, el acumulado que se
-      // guardó en la última asignación quedó viejo.
-      if (dto.unitCost !== undefined) await this.recalculate(manager, id);
+      // El costo unitario entra en el total, que mantiene AssignmentsService
+      // (es quien conoce las asignaciones vivas); aquí solo se reproyecta.
+      if (dto.unitCost !== undefined) {
+        await manager.query(
+          `UPDATE tools.tools SET total_cost_calculated = (unit_cost * active_assignments_count)::numeric(14,2) WHERE id = $1`,
+          [id],
+        );
+      }
 
       const fresh = await manager.findOneOrFail(Tool, { where: { id } });
       return this.toDto(fresh);
@@ -206,152 +188,6 @@ export class ToolsService {
     await this.toolsRepo.save(tool);
     await this.toolsRepo.softDelete(id);
     return { id, deleted: true };
-  }
-
-  // -------------------------------------------------------------------------
-  // Asignaciones
-  // -------------------------------------------------------------------------
-
-  async listAssignments(toolId: string) {
-    const exists = await this.toolsRepo.findOne({
-      where: { id: toolId, deletedAt: IsNull() },
-      select: { id: true },
-    });
-    if (!exists) throw new NotFoundException(`Herramienta ${toolId} no encontrada`);
-    return this.listAssignmentRows(toolId);
-  }
-
-  async assign(toolId: string, dto: AssignToolDto, userId: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const tool = await manager.findOne(Tool, { where: { id: toolId, deletedAt: IsNull() } });
-      if (!tool) throw new NotFoundException(`Herramienta ${toolId} no encontrada`);
-
-      if (tool.contractStatus === 'cancelado') {
-        throw new BadRequestException(
-          'No se puede asignar una herramienta con el contrato cancelado.',
-        );
-      }
-
-      const employee = await manager.findOne(EmployeeRecord, { where: { id: dto.employeeId } });
-      if (!employee) throw new NotFoundException(`Colaborador ${dto.employeeId} no encontrado`);
-
-      const live = await manager.findOne(ToolAssignmentRecord, {
-        where: { toolId, employeeId: dto.employeeId, revokedAt: IsNull() },
-      });
-      if (live) {
-        throw new BadRequestException(
-          `${employee.fullName} ya tiene esta herramienta asignada.`,
-        );
-      }
-
-      // requires_approval no bloquea la captura: la asignación se crea en
-      // 'pendiente_aprobacion' y no cuenta para el costo hasta que se aprueba.
-      const status = tool.requiresApproval ? 'pendiente_aprobacion' : 'activa';
-
-      const assignment = manager.create(ToolAssignmentRecord, {
-        toolId,
-        employeeId: dto.employeeId,
-        status,
-        isAdmin: dto.isAdmin ?? false,
-        unitCostOverride: dto.unitCostOverride ?? null,
-        notes: dto.notes ?? null,
-        assignedAt: new Date(),
-        revokedAt: null,
-        approvedBy: null,
-        approvedAt: null,
-        createdBy: userId,
-        updatedBy: userId,
-      });
-
-      const saved = await manager.save(ToolAssignmentRecord, assignment);
-      await this.recalculate(manager, toolId);
-      return saved;
-    });
-  }
-
-  async approve(toolId: string, assignmentId: string, userId: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const assignment = await manager.findOne(ToolAssignmentRecord, {
-        where: { id: assignmentId, toolId },
-      });
-      if (!assignment) throw new NotFoundException(`Asignación ${assignmentId} no encontrada`);
-      if (assignment.status !== 'pendiente_aprobacion') {
-        throw new BadRequestException('La asignación no está pendiente de aprobación.');
-      }
-
-      assignment.status = 'activa';
-      assignment.approvedBy = userId;
-      assignment.approvedAt = new Date();
-      assignment.updatedBy = userId;
-
-      const saved = await manager.save(ToolAssignmentRecord, assignment);
-      await this.recalculate(manager, toolId);
-      return saved;
-    });
-  }
-
-  async revoke(toolId: string, assignmentId: string, dto: RevokeAssignmentDto, userId: string) {
-    return this.dataSource.transaction(async (manager) => {
-      const assignment = await manager.findOne(ToolAssignmentRecord, {
-        where: { id: assignmentId, toolId },
-      });
-      if (!assignment) throw new NotFoundException(`Asignación ${assignmentId} no encontrada`);
-      if (assignment.revokedAt) {
-        throw new BadRequestException('La asignación ya estaba revocada.');
-      }
-
-      assignment.status = 'revocada';
-      assignment.revokedAt = new Date();
-      assignment.updatedBy = userId;
-      if (dto.notes) assignment.notes = dto.notes;
-
-      const saved = await manager.save(ToolAssignmentRecord, assignment);
-      await this.recalculate(manager, toolId);
-      return saved;
-    });
-  }
-
-  /** Herramientas asignadas a un colaborador — alimenta su ficha en RRHH. */
-  async findByEmployee(employeeId: string) {
-    const rows = await this.assignmentsRepo
-      .createQueryBuilder('a')
-      .innerJoin(Tool, 't', 't.id = a.tool_id')
-      .select([
-        'a.id AS id',
-        'a.status AS status',
-        'a.is_admin AS is_admin',
-        'a.assigned_at AS assigned_at',
-        'a.revoked_at AS revoked_at',
-        'COALESCE(a.unit_cost_override, t.unit_cost) AS unit_cost',
-        't.id AS tool_id',
-        't.tool_code AS tool_code',
-        't.name AS name',
-        't.category AS category',
-        't.provider AS provider',
-        't.currency AS currency',
-        't.billing_period AS billing_period',
-      ])
-      .where('a.employee_id = :employeeId', { employeeId })
-      .andWhere('t.deleted_at IS NULL')
-      .orderBy('a.revoked_at', 'ASC', 'NULLS FIRST')
-      .addOrderBy('t.name', 'ASC')
-      .getRawMany();
-
-    return rows.map((r) => ({
-      id: r.id as string,
-      toolId: r.tool_id as string,
-      toolCode: r.tool_code as string,
-      name: r.name as string,
-      category: r.category as string,
-      provider: r.provider as string,
-      currency: r.currency as string,
-      billingPeriod: r.billing_period as string,
-      unitCost: Number(r.unit_cost),
-      status: r.status as string,
-      isAdmin: r.is_admin as boolean,
-      assignedAt: r.assigned_at as Date,
-      revokedAt: r.revoked_at as Date | null,
-    }));
   }
 
   // -------------------------------------------------------------------------
@@ -412,91 +248,13 @@ export class ToolsService {
   // Internos
   // -------------------------------------------------------------------------
 
-  /**
-   * Recalcula los denormalizados del catálogo desde las asignaciones.
-   *
-   * Cuenta solo las 'activa' sin revocar: una pendiente de aprobación todavía
-   * no genera cargo, y una revocada dejó de generarlo. El costo usa el override
-   * cuando existe, porque ahí es donde vive el precio real de esa licencia.
-   */
-  private async recalculate(manager: EntityManager, toolId: string) {
-    await manager.query(
-      `
-      UPDATE tools.tools t
-      SET active_assignments_count = agg.count,
-          total_cost_calculated = agg.total,
-          updated_at = NOW()
-      FROM (
-        SELECT
-          COUNT(*)::int AS count,
-          COALESCE(SUM(COALESCE(a.unit_cost_override, t2.unit_cost)), 0)::numeric(14,2) AS total
-        FROM tools.tool_assignments a
-        JOIN tools.tools t2 ON t2.id = a.tool_id
-        WHERE a.tool_id = $1
-          AND a.revoked_at IS NULL
-          AND a.status = 'activa'
-      ) AS agg
-      WHERE t.id = $1
-      `,
-      [toolId],
-    );
-  }
-
-  /**
-   * Siguiente folio HTA-###. Sale de la secuencia y no de un COUNT: al borrar
-   * una herramienta el conteo reutilizaría un código ya impreso en reportes.
-   */
+  /** Folio HTA-###. Sale de la secuencia para no reutilizar códigos emitidos. */
   private async nextToolCode(manager: EntityManager): Promise<string> {
     const rows = await manager.query(`SELECT nextval('tools.tool_number_seq') AS value`);
     const value = Number(rows[0].value);
     return `HTA-${String(value).padStart(3, '0')}`;
   }
 
-  private async listAssignmentRows(toolId: string) {
-    const rows: ToolAssignmentRow[] = await this.assignmentsRepo.query(
-      `
-      SELECT a.id,
-             a.employee_id,
-             e.display_id,
-             e.full_name,
-             e.corporate_email,
-             e.area,
-             e.division,
-             a.status,
-             a.is_admin,
-             a.unit_cost_override,
-             a.notes,
-             a.assigned_at,
-             a.revoked_at
-      FROM tools.tool_assignments a
-      JOIN employees.employee_records e ON e.id = a.employee_id
-      WHERE a.tool_id = $1
-      ORDER BY a.revoked_at ASC NULLS FIRST, e.full_name ASC
-      `,
-      [toolId],
-    );
-
-    return rows.map((r) => ({
-      id: r.id,
-      employeeId: r.employee_id,
-      displayId: r.display_id,
-      fullName: r.full_name,
-      corporateEmail: r.corporate_email,
-      area: r.area,
-      division: r.division,
-      status: r.status,
-      isAdmin: r.is_admin,
-      unitCostOverride: r.unit_cost_override === null ? null : Number(r.unit_cost_override),
-      notes: r.notes,
-      assignedAt: r.assigned_at,
-      revokedAt: r.revoked_at,
-    }));
-  }
-
-  /**
-   * Costo anualizado de la herramienta: lo calcula el API para que la tabla, el
-   * detalle y los reportes no repitan (y desincronicen) la misma fórmula.
-   */
   private toDto(tool: Tool) {
     const perYear = BILLING_PERIODS_PER_YEAR[tool.billingPeriod] ?? 0;
     const annualCost = round2(tool.totalCostCalculated * perYear);
