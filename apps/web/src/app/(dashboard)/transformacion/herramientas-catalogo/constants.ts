@@ -26,18 +26,6 @@ export const BILLING_PERIOD_LABEL: Record<ToolBillingPeriod, string> = {
   unico: 'Pago único',
 };
 
-export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {
-  activa: 'Activa',
-  pendiente_aprobacion: 'Pendiente de aprobación',
-  revocada: 'Revocada',
-};
-
-export const ASSIGNMENT_STATUS_STYLE: Record<string, string> = {
-  activa: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-  pendiente_aprobacion: 'bg-amber-50 text-amber-700 ring-amber-200',
-  revocada: 'bg-slate-100 text-slate-500 ring-slate-200',
-};
-
 /** Formatea con la moneda de la herramienta: MXN y USD no son intercambiables. */
 export function formatMoney(value: number, currency: string): string {
   return new Intl.NumberFormat('es-MX', {
