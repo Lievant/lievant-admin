@@ -1,27 +1,21 @@
 import { Transform } from 'class-transformer';
 import { IsIn, IsOptional, IsString } from 'class-validator';
-import {
-  TOOL_CATEGORIES,
-  TOOL_CONTRACT_STATUSES,
-  TOOL_COST_CENTERS,
-} from '../constants/tools.constants';
+import { TOOL_CONTRACT_STATUSES } from '../constants/tools.constants';
 
 export class QueryToolsDto {
   @IsOptional()
   @IsString()
   search?: string;
 
+  // La categoría se valida contra catalogs.tool_categories, no contra una lista
+  // fija: el catálogo es editable desde /admin/catalogos.
   @IsOptional()
-  @IsIn(TOOL_CATEGORIES as unknown as string[])
+  @IsString()
   category?: string;
 
   @IsOptional()
   @IsIn(TOOL_CONTRACT_STATUSES as unknown as string[])
   contractStatus?: string;
-
-  @IsOptional()
-  @IsIn(TOOL_COST_CENTERS as unknown as string[])
-  costCenter?: string;
 
   /**
    * Herramientas que renuevan dentro de los próximos N días. Sirve al filtro

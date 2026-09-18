@@ -15,13 +15,6 @@ import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import {
-  TOOL_BILLING_PERIODS,
-  TOOL_CATEGORIES,
-  TOOL_CONTRACT_STATUSES,
-  TOOL_COST_CENTERS,
-  TOOL_CURRENCIES,
-} from './constants/tools.constants';
 import { AssignToolDto, RevokeAssignmentDto } from './dto/assign-tool.dto';
 import { CreateToolDto } from './dto/create-tool.dto';
 import { QueryToolsDto } from './dto/query-tools.dto';
@@ -35,16 +28,12 @@ export class ToolsController {
 
   // Rutas literales antes de /:id para que 'options' y 'stats' no se parseen
   // como UUID.
+  // Las categorías salen de catalogs.tool_categories, así que las arma el
+  // servicio y no una constante del controlador.
   @Get('options')
   @RequirePermission('transformacion', 'herramientas', 'read')
   getOptions() {
-    return {
-      categories: TOOL_CATEGORIES,
-      currencies: TOOL_CURRENCIES,
-      billingPeriods: TOOL_BILLING_PERIODS,
-      costCenters: TOOL_COST_CENTERS,
-      contractStatuses: TOOL_CONTRACT_STATUSES,
-    };
+    return this.service.getOptions();
   }
 
   @Get('stats')

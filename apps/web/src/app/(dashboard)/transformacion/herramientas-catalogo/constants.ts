@@ -1,8 +1,4 @@
-import type {
-  ToolBillingPeriod,
-  ToolContractStatus,
-  ToolCostCenter,
-} from '@/lib/api';
+import type { ToolBillingPeriod, ToolContractStatus } from '@/lib/api';
 
 /**
  * Etiquetas de presentación. El API manda los valores crudos ('en_negociacion')
@@ -28,12 +24,6 @@ export const BILLING_PERIOD_LABEL: Record<ToolBillingPeriod, string> = {
   trimestral: 'Trimestral',
   anual: 'Anual',
   unico: 'Pago único',
-};
-
-export const COST_CENTER_LABEL: Record<ToolCostCenter, string> = {
-  TD: 'Transformación Digital',
-  TI: 'Tecnologías de la Información',
-  Compartido: 'Compartido',
 };
 
 export const ASSIGNMENT_STATUS_LABEL: Record<string, string> = {

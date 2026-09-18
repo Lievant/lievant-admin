@@ -1038,7 +1038,8 @@ export type CatalogEntity =
   | 'employee_document_types'
   | 'ticket_assignees'
   | 'holidays'
-  | 'equipment_brands';
+  | 'equipment_brands'
+  | 'tool_categories';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -2952,7 +2953,6 @@ export function createTool(payload: CreateToolPayload): Promise<ToolCatalogItem>
 
 export type ToolContractStatus = 'activo' | 'en_negociacion' | 'por_cancelar' | 'cancelado';
 export type ToolBillingPeriod = 'mensual' | 'trimestral' | 'anual' | 'unico';
-export type ToolCostCenter = 'TD' | 'TI' | 'Compartido';
 export type ToolAssignmentStatus = 'activa' | 'pendiente_aprobacion' | 'revocada';
 
 export interface ToolRecord {
@@ -2962,12 +2962,10 @@ export interface ToolRecord {
   category: string;
   provider: string;
   description: string | null;
-  url: string | null;
   unitCost: number;
   currency: string;
   billingPeriod: ToolBillingPeriod;
   billingDay: number | null;
-  costCenter: ToolCostCenter;
   commercialContact: string | null;
   nextRenewalDate: string | null;
   contractStatus: ToolContractStatus;
@@ -3004,7 +3002,6 @@ export interface ToolDetail extends ToolRecord {
 export interface ToolStats {
   total: number;
   byContractStatus: Record<string, number>;
-  byCostCenter: Record<string, number>;
   byCategory: Record<string, number>;
   activeAssignments: number;
   annualCostByCurrency: Record<string, number>;
@@ -3013,10 +3010,10 @@ export interface ToolStats {
 }
 
 export interface ToolOptions {
+  /** Vienen de catalogs.tool_categories, editable en /admin/catalogos. */
   categories: string[];
   currencies: string[];
   billingPeriods: ToolBillingPeriod[];
-  costCenters: ToolCostCenter[];
   contractStatuses: ToolContractStatus[];
 }
 
@@ -3024,7 +3021,6 @@ export interface ListToolsParams {
   search?: string;
   category?: string;
   contractStatus?: string;
-  costCenter?: string;
   renewingWithinDays?: number;
 }
 
@@ -3033,7 +3029,6 @@ export function listTools(params: ListToolsParams = {}): Promise<ToolRecord[]> {
   if (params.search) q.set('search', params.search);
   if (params.category) q.set('category', params.category);
   if (params.contractStatus) q.set('contractStatus', params.contractStatus);
-  if (params.costCenter) q.set('costCenter', params.costCenter);
   if (params.renewingWithinDays !== undefined) {
     q.set('renewingWithinDays', String(params.renewingWithinDays));
   }
@@ -3058,12 +3053,10 @@ export interface CreateToolRecordPayload {
   category: string;
   provider: string;
   description?: string;
-  url?: string;
   unitCost?: number;
   currency?: string;
   billingPeriod: ToolBillingPeriod;
   billingDay?: number;
-  costCenter?: ToolCostCenter;
   commercialContact?: string;
   nextRenewalDate?: string;
   contractStatus?: ToolContractStatus;
@@ -3144,6 +3137,148 @@ export interface EmployeeToolRow {
 
 export function listEmployeeTools(employeeId: string): Promise<EmployeeToolRow[]> {
   return apiFetchWithRetry<EmployeeToolRow[]>(`/tools/by-employee/${employeeId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Licencias individuales (tools.licenses)
+// ---------------------------------------------------------------------------
+
+export type LicenseStatus = 'activa' | 'pendiente_aprobacion' | 'suspendida' | 'cancelada';
+
+export interface LicenseRecord {
+  id: string;
+  licenseCode: string;
+  toolId: string;
+  toolCode: string;
+  toolName: string;
+  licenseType: string | null;
+  employeeId: string | null;
+  employeeName: string | null;
+  employeeEmail: string | null;
+  businessUnit: string | null;
+  unitCost: number | null;
+  currency: string | null;
+  status: LicenseStatus;
+  assignedAt: string;
+  expiresAt: string | null;
+  notes: string | null;
+}
+
+export interface LicensesPage {
+  data: LicenseRecord[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface LicenseStatsByUnit {
+  unit: string;
+  count: number;
+  costMXN: number;
+  costUSD: number;
+}
+
+export interface LicenseStatsByTool {
+  toolName: string;
+  toolCode: string;
+  currency: string;
+  count: number;
+  totalCost: number;
+}
+
+export interface LicenseModuleStats {
+  totalLicenses: number;
+  activeLicenses: number;
+  totalCostMXN: number;
+  totalCostUSD: number;
+  byBusinessUnit: LicenseStatsByUnit[];
+  byTool: LicenseStatsByTool[];
+  expiringIn30Days: number;
+}
+
+export interface ListLicenseRecordsParams {
+  toolId?: string;
+  employeeId?: string;
+  businessUnit?: string;
+  status?: string;
+  currency?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+// El API monta estas rutas en /tool-licenses: /licenses ya lo ocupa el Maestro
+// de Licenciamientos y un /licenses/:id aquí se comería /licenses/tools.
+export function listLicenseRecords(
+  params: ListLicenseRecordsParams = {},
+): Promise<LicensesPage> {
+  const q = new URLSearchParams();
+  if (params.toolId) q.set('toolId', params.toolId);
+  if (params.employeeId) q.set('employeeId', params.employeeId);
+  if (params.businessUnit) q.set('businessUnit', params.businessUnit);
+  if (params.status) q.set('status', params.status);
+  if (params.currency) q.set('currency', params.currency);
+  if (params.search) q.set('search', params.search);
+  if (params.page) q.set('page', String(params.page));
+  if (params.limit) q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return apiFetchWithRetry<LicensesPage>(`/tool-licenses${qs ? `?${qs}` : ''}`);
+}
+
+export function getLicenseRecord(id: string): Promise<LicenseRecord> {
+  return apiFetchWithRetry<LicenseRecord>(`/tool-licenses/${id}`);
+}
+
+export function getLicenseModuleStats(): Promise<LicenseModuleStats> {
+  return apiFetchWithRetry<LicenseModuleStats>('/tool-licenses/stats');
+}
+
+export function listLicensesByTool(toolId: string): Promise<LicenseRecord[]> {
+  return apiFetchWithRetry<LicenseRecord[]>(`/tool-licenses/by-tool/${toolId}`);
+}
+
+export function listLicensesByEmployee(employeeId: string): Promise<LicenseRecord[]> {
+  return apiFetchWithRetry<LicenseRecord[]>(`/tool-licenses/by-employee/${employeeId}`);
+}
+
+export interface CreateLicensePayload {
+  toolId: string;
+  employeeId?: string;
+  licenseType?: string;
+  businessUnit?: string;
+  unitCost?: number;
+  currency?: string;
+  assignedAt?: string;
+  expiresAt?: string;
+  notes?: string;
+}
+
+export function createLicenseRecord(payload: CreateLicensePayload): Promise<LicenseRecord> {
+  return apiFetchWithRetry<LicenseRecord>('/tool-licenses', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateLicenseRecord(
+  id: string,
+  payload: Partial<CreateLicensePayload> & { status?: LicenseStatus },
+): Promise<LicenseRecord> {
+  return apiFetchWithRetry<LicenseRecord>(`/tool-licenses/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeLicenseRecord(
+  id: string,
+  note?: string,
+): Promise<{ id: string; revoked: boolean }> {
+  return apiFetchWithRetry<{ id: string; revoked: boolean }>(`/tool-licenses/${id}`, {
+    method: 'DELETE',
+    body: JSON.stringify({ note }),
+  });
 }
 
 // ---------------------------------------------------------------------------

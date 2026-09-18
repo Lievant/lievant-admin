@@ -15,6 +15,7 @@ import { CatalogLocation } from './entities/catalog-location.entity';
 import { CatalogMaritalStatus } from './entities/catalog-marital-status.entity';
 import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
+import { CatalogToolCategory } from './entities/catalog-tool-category.entity';
 import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
@@ -63,6 +64,7 @@ export class CatalogsService {
     @InjectRepository(TicketAssignee) ticketAssignees: Repository<TicketAssignee>,
     @InjectRepository(Holiday) holidays: Repository<Holiday>,
     @InjectRepository(EquipmentBrand) equipmentBrands: Repository<EquipmentBrand>,
+    @InjectRepository(CatalogToolCategory) toolCategories: Repository<CatalogToolCategory>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -82,6 +84,7 @@ export class CatalogsService {
       ticket_assignees: ticketAssignees as unknown as Repository<CatalogRecord>,
       holidays: holidays as unknown as Repository<CatalogRecord>,
       equipment_brands: equipmentBrands as unknown as Repository<CatalogRecord>,
+      tool_categories: toolCategories as unknown as Repository<CatalogRecord>,
     };
   }
 

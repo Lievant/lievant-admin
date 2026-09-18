@@ -1,8 +1,15 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import { CatalogToolCategory } from '../catalogs/entities/catalog-tool-category.entity';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
-import { BILLING_PERIODS_PER_YEAR } from './constants/tools.constants';
+import {
+  BILLING_PERIODS_PER_YEAR,
+  TOOL_BILLING_PERIODS,
+  TOOL_CATEGORIES_FALLBACK,
+  TOOL_CONTRACT_STATUSES,
+  TOOL_CURRENCIES,
+} from './constants/tools.constants';
 import { AssignToolDto, RevokeAssignmentDto } from './dto/assign-tool.dto';
 import { CreateToolDto } from './dto/create-tool.dto';
 import { QueryToolsDto } from './dto/query-tools.dto';
@@ -32,6 +39,8 @@ export class ToolsService {
     @InjectRepository(Tool) private readonly toolsRepo: Repository<Tool>,
     @InjectRepository(ToolAssignmentRecord)
     private readonly assignmentsRepo: Repository<ToolAssignmentRecord>,
+    @InjectRepository(CatalogToolCategory)
+    private readonly categoriesRepo: Repository<CatalogToolCategory>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -55,8 +64,6 @@ export class ToolsService {
     if (query.contractStatus) {
       qb.andWhere('t.contract_status = :contractStatus', { contractStatus: query.contractStatus });
     }
-    if (query.costCenter) qb.andWhere('t.cost_center = :costCenter', { costCenter: query.costCenter });
-
     if (query.renewingWithinDays !== undefined && !Number.isNaN(query.renewingWithinDays)) {
       qb.andWhere('t.next_renewal_date IS NOT NULL').andWhere(
         `t.next_renewal_date <= CURRENT_DATE + (:days || ' days')::interval`,
@@ -68,6 +75,43 @@ export class ToolsService {
     return tools.map((tool) => this.toDto(tool));
   }
 
+  /**
+   * Opciones del formulario. Las categorías vienen del catálogo editable; si
+   * está vacío se cae a la semilla para que el alta no quede sin opciones.
+   */
+  async getOptions() {
+    const categories = await this.listCategoryNames();
+    return {
+      categories: categories.length ? categories : [...TOOL_CATEGORIES_FALLBACK],
+      currencies: [...TOOL_CURRENCIES],
+      billingPeriods: [...TOOL_BILLING_PERIODS],
+      contractStatuses: [...TOOL_CONTRACT_STATUSES],
+    };
+  }
+
+  private async listCategoryNames(): Promise<string[]> {
+    const rows = await this.categoriesRepo.find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC', name: 'ASC' },
+    });
+    return rows.map((r) => r.name);
+  }
+
+  /**
+   * La categoría se valida contra el catálogo en vez de contra un @IsIn: la
+   * lista es editable desde /admin/catalogos y congelarla en el DTO obligaría
+   * a un deploy por cada categoría nueva. Si el catálogo está vacío se acepta
+   * cualquier valor, para no bloquear el alta por una siembra pendiente.
+   */
+  private async assertCategory(category: string) {
+    const names = await this.listCategoryNames();
+    if (names.length && !names.includes(category)) {
+      throw new BadRequestException(
+        `Categoría "${category}" no existe en el catálogo. Opciones: ${names.join(', ')}.`,
+      );
+    }
+  }
+
   async findOne(id: string) {
     const tool = await this.toolsRepo.findOne({ where: { id, deletedAt: IsNull() } });
     if (!tool) throw new NotFoundException(`Herramienta ${id} no encontrada`);
@@ -77,6 +121,8 @@ export class ToolsService {
   }
 
   async create(dto: CreateToolDto, userId: string) {
+    await this.assertCategory(dto.category);
+
     return this.dataSource.transaction(async (manager) => {
       const toolCode = await this.nextToolCode(manager);
 
@@ -86,12 +132,11 @@ export class ToolsService {
         category: dto.category,
         provider: dto.provider,
         description: dto.description ?? null,
-        url: dto.url ?? null,
+        url: null,
         unitCost: dto.unitCost ?? 0,
         currency: dto.currency ?? 'MXN',
         billingPeriod: dto.billingPeriod,
         billingDay: dto.billingDay ?? null,
-        costCenter: dto.costCenter ?? 'TI',
         commercialContact: dto.commercialContact ?? null,
         nextRenewalDate: dto.nextRenewalDate ?? null,
         contractStatus: dto.contractStatus ?? 'activo',
@@ -108,6 +153,8 @@ export class ToolsService {
   }
 
   async update(id: string, dto: UpdateToolDto, userId: string) {
+    if (dto.category !== undefined) await this.assertCategory(dto.category);
+
     return this.dataSource.transaction(async (manager) => {
       const tool = await manager.findOne(Tool, { where: { id, deletedAt: IsNull() } });
       if (!tool) throw new NotFoundException(`Herramienta ${id} no encontrada`);
@@ -117,12 +164,10 @@ export class ToolsService {
         ...(dto.category !== undefined && { category: dto.category }),
         ...(dto.provider !== undefined && { provider: dto.provider }),
         ...(dto.description !== undefined && { description: dto.description ?? null }),
-        ...(dto.url !== undefined && { url: dto.url ?? null }),
         ...(dto.unitCost !== undefined && { unitCost: dto.unitCost }),
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.billingPeriod !== undefined && { billingPeriod: dto.billingPeriod }),
         ...(dto.billingDay !== undefined && { billingDay: dto.billingDay ?? null }),
-        ...(dto.costCenter !== undefined && { costCenter: dto.costCenter }),
         ...(dto.commercialContact !== undefined && {
           commercialContact: dto.commercialContact ?? null,
         }),
@@ -316,11 +361,14 @@ export class ToolsService {
   async getStats() {
     const tools = await this.toolsRepo.find({ where: { deletedAt: IsNull() } });
 
+    // Las categorías del catálogo se siembran en 0 para que una recién creada
+    // aparezca en el desglose aunque todavía no tenga herramientas.
+    const categoryNames = await this.listCategoryNames();
+
     const stats = {
       total: tools.length,
       byContractStatus: {} as Record<string, number>,
-      byCostCenter: {} as Record<string, number>,
-      byCategory: {} as Record<string, number>,
+      byCategory: Object.fromEntries(categoryNames.map((n) => [n, 0])) as Record<string, number>,
       activeAssignments: 0,
       // Gasto anualizado por moneda: sumar MXN y USD en un solo número exigiría
       // un tipo de cambio que el módulo no tiene, y daría una cifra falsa.
@@ -335,7 +383,6 @@ export class ToolsService {
     for (const tool of tools) {
       stats.byContractStatus[tool.contractStatus] =
         (stats.byContractStatus[tool.contractStatus] ?? 0) + 1;
-      stats.byCostCenter[tool.costCenter] = (stats.byCostCenter[tool.costCenter] ?? 0) + 1;
       stats.byCategory[tool.category] = (stats.byCategory[tool.category] ?? 0) + 1;
       stats.activeAssignments += tool.activeAssignmentsCount;
 
@@ -461,12 +508,10 @@ export class ToolsService {
       category: tool.category,
       provider: tool.provider,
       description: tool.description,
-      url: tool.url,
       unitCost: tool.unitCost,
       currency: tool.currency,
       billingPeriod: tool.billingPeriod,
       billingDay: tool.billingDay,
-      costCenter: tool.costCenter,
       commercialContact: tool.commercialContact,
       nextRenewalDate: tool.nextRenewalDate,
       contractStatus: tool.contractStatus,
