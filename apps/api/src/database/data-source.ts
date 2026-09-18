@@ -47,6 +47,8 @@ import { ExpenseReport } from '../modules/expenses/entities/expense-report.entit
 import { EmployeeLicense } from '../modules/licenses/entities/employee-license.entity';
 import { ToolAssignment } from '../modules/licenses/entities/tool-assignment.entity';
 import { ToolCatalog } from '../modules/licenses/entities/tool-catalog.entity';
+import { Tool } from '../modules/tools/entities/tool.entity';
+import { ToolAssignmentRecord } from '../modules/tools/entities/tool-assignment-record.entity';
 import { AdAccount } from '../modules/media/entities/ad-account.entity';
 import { ApiCredential } from '../modules/media/entities/api-credential.entity';
 import { MediaBudget } from '../modules/media/entities/budget.entity';
@@ -132,6 +134,8 @@ const AppDataSource = new DataSource({
     ToolCatalog,
     EmployeeLicense,
     ToolAssignment,
+    Tool,
+    ToolAssignmentRecord,
     VacationBalance,
     VacationRequest,
     VacationMovement,

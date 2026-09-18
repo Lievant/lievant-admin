@@ -17,6 +17,7 @@ import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { ToolsModule } from './modules/tools/tools.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { VacationsModule } from './modules/vacations/vacations.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
@@ -71,6 +72,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     ExpensesModule,
     CreditCardsModule,
     ReportsModule,
+    ToolsModule,
   ],
 })
 export class AppModule {}

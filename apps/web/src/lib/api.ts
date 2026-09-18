@@ -2947,6 +2947,206 @@ export function createTool(payload: CreateToolPayload): Promise<ToolCatalogItem>
 }
 
 // ---------------------------------------------------------------------------
+// Catálogo de Herramientas y Licencias
+// ---------------------------------------------------------------------------
+
+export type ToolContractStatus = 'activo' | 'en_negociacion' | 'por_cancelar' | 'cancelado';
+export type ToolBillingPeriod = 'mensual' | 'trimestral' | 'anual' | 'unico';
+export type ToolCostCenter = 'TD' | 'TI' | 'Compartido';
+export type ToolAssignmentStatus = 'activa' | 'pendiente_aprobacion' | 'revocada';
+
+export interface ToolRecord {
+  id: string;
+  toolCode: string;
+  name: string;
+  category: string;
+  provider: string;
+  description: string | null;
+  url: string | null;
+  unitCost: number;
+  currency: string;
+  billingPeriod: ToolBillingPeriod;
+  billingDay: number | null;
+  costCenter: ToolCostCenter;
+  commercialContact: string | null;
+  nextRenewalDate: string | null;
+  contractStatus: ToolContractStatus;
+  requiresApproval: boolean;
+  totalCostCalculated: number;
+  activeAssignmentsCount: number;
+  /** Anualizado por el API: un pago 'unico' no suma al gasto recurrente. */
+  annualCost: number;
+  monthlyCost: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ToolAssignmentRow {
+  id: string;
+  employeeId: string;
+  displayId: string;
+  fullName: string;
+  corporateEmail: string | null;
+  area: string | null;
+  division: string | null;
+  status: ToolAssignmentStatus;
+  isAdmin: boolean;
+  unitCostOverride: number | null;
+  notes: string | null;
+  assignedAt: string;
+  revokedAt: string | null;
+}
+
+export interface ToolDetail extends ToolRecord {
+  assignments: ToolAssignmentRow[];
+}
+
+export interface ToolStats {
+  total: number;
+  byContractStatus: Record<string, number>;
+  byCostCenter: Record<string, number>;
+  byCategory: Record<string, number>;
+  activeAssignments: number;
+  annualCostByCurrency: Record<string, number>;
+  monthlyCostByCurrency: Record<string, number>;
+  renewingIn30Days: number;
+}
+
+export interface ToolOptions {
+  categories: string[];
+  currencies: string[];
+  billingPeriods: ToolBillingPeriod[];
+  costCenters: ToolCostCenter[];
+  contractStatuses: ToolContractStatus[];
+}
+
+export interface ListToolsParams {
+  search?: string;
+  category?: string;
+  contractStatus?: string;
+  costCenter?: string;
+  renewingWithinDays?: number;
+}
+
+export function listTools(params: ListToolsParams = {}): Promise<ToolRecord[]> {
+  const q = new URLSearchParams();
+  if (params.search) q.set('search', params.search);
+  if (params.category) q.set('category', params.category);
+  if (params.contractStatus) q.set('contractStatus', params.contractStatus);
+  if (params.costCenter) q.set('costCenter', params.costCenter);
+  if (params.renewingWithinDays !== undefined) {
+    q.set('renewingWithinDays', String(params.renewingWithinDays));
+  }
+  const qs = q.toString();
+  return apiFetchWithRetry<ToolRecord[]>(`/tools${qs ? `?${qs}` : ''}`);
+}
+
+export function getTool(id: string): Promise<ToolDetail> {
+  return apiFetchWithRetry<ToolDetail>(`/tools/${id}`);
+}
+
+export function getToolStats(): Promise<ToolStats> {
+  return apiFetchWithRetry<ToolStats>('/tools/stats');
+}
+
+export function getToolOptions(): Promise<ToolOptions> {
+  return apiFetchWithRetry<ToolOptions>('/tools/options');
+}
+
+export interface CreateToolRecordPayload {
+  name: string;
+  category: string;
+  provider: string;
+  description?: string;
+  url?: string;
+  unitCost?: number;
+  currency?: string;
+  billingPeriod: ToolBillingPeriod;
+  billingDay?: number;
+  costCenter?: ToolCostCenter;
+  commercialContact?: string;
+  nextRenewalDate?: string;
+  contractStatus?: ToolContractStatus;
+  requiresApproval?: boolean;
+}
+
+export function createToolRecord(payload: CreateToolRecordPayload): Promise<ToolRecord> {
+  return apiFetchWithRetry<ToolRecord>('/tools', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateToolRecord(
+  id: string,
+  payload: Partial<CreateToolRecordPayload>,
+): Promise<ToolRecord> {
+  return apiFetchWithRetry<ToolRecord>(`/tools/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteToolRecord(id: string): Promise<{ id: string; deleted: boolean }> {
+  return apiFetchWithRetry<{ id: string; deleted: boolean }>(`/tools/${id}`, { method: 'DELETE' });
+}
+
+export interface AssignToolPayload {
+  employeeId: string;
+  isAdmin?: boolean;
+  unitCostOverride?: number;
+  notes?: string;
+}
+
+export function assignTool(toolId: string, payload: AssignToolPayload): Promise<ToolAssignmentRow> {
+  return apiFetchWithRetry<ToolAssignmentRow>(`/tools/${toolId}/assignments`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function approveToolAssignment(
+  toolId: string,
+  assignmentId: string,
+): Promise<ToolAssignmentRow> {
+  return apiFetchWithRetry<ToolAssignmentRow>(
+    `/tools/${toolId}/assignments/${assignmentId}/approve`,
+    { method: 'PATCH' },
+  );
+}
+
+export function revokeToolAssignment(
+  toolId: string,
+  assignmentId: string,
+  notes?: string,
+): Promise<ToolAssignmentRow> {
+  return apiFetchWithRetry<ToolAssignmentRow>(
+    `/tools/${toolId}/assignments/${assignmentId}/revoke`,
+    { method: 'PATCH', body: JSON.stringify({ notes }) },
+  );
+}
+
+export interface EmployeeToolRow {
+  id: string;
+  toolId: string;
+  toolCode: string;
+  name: string;
+  category: string;
+  provider: string;
+  currency: string;
+  billingPeriod: ToolBillingPeriod;
+  unitCost: number;
+  status: ToolAssignmentStatus;
+  isAdmin: boolean;
+  assignedAt: string;
+  revokedAt: string | null;
+}
+
+export function listEmployeeTools(employeeId: string): Promise<EmployeeToolRow[]> {
+  return apiFetchWithRetry<EmployeeToolRow[]>(`/tools/by-employee/${employeeId}`);
+}
+
+// ---------------------------------------------------------------------------
 // Vacaciones (Módulo)
 // ---------------------------------------------------------------------------
 
