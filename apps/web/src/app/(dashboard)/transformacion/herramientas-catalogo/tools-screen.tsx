@@ -13,7 +13,6 @@ import {
   BILLING_PERIOD_LABEL,
   CONTRACT_STATUS_LABEL,
   CONTRACT_STATUS_STYLE,
-  COST_CENTER_LABEL,
   daysUntil,
   formatDate,
   formatMoney,
@@ -23,7 +22,6 @@ interface Filters {
   search: string;
   category: string;
   contractStatus: string;
-  costCenter: string;
 }
 
 interface ToolsScreenProps {
@@ -85,9 +83,8 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
     if (next.search) params.set('search', next.search);
     if (next.category) params.set('category', next.category);
     if (next.contractStatus) params.set('contractStatus', next.contractStatus);
-    if (next.costCenter) params.set('costCenter', next.costCenter);
     const qs = params.toString();
-    router.push(`/transformacion/herramientas${qs ? `?${qs}` : ''}`);
+    router.push(`/transformacion/herramientas-catalogo${qs ? `?${qs}` : ''}`);
   }
 
   const currencies = Object.keys(stats.monthlyCostByCurrency).sort();
@@ -172,19 +169,6 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
             </option>
           ))}
         </select>
-
-        <select
-          value={filters.costCenter}
-          onChange={(e) => applyFilter('costCenter', e.target.value)}
-          className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-navy"
-        >
-          <option value="">Todos los centros</option>
-          {options.costCenters.map((c) => (
-            <option key={c} value={c}>
-              {COST_CENTER_LABEL[c] ?? c}
-            </option>
-          ))}
-        </select>
       </div>
 
       <ScrollableTable>
@@ -199,7 +183,6 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
               <th className="px-4 py-3">Periodo</th>
               <th className="px-4 py-3 text-right">Licencias</th>
               <th className="px-4 py-3 text-right">Costo total</th>
-              <th className="px-4 py-3">Centro</th>
               <th className="px-4 py-3">Renovación</th>
               <th className="px-4 py-3">Contrato</th>
             </tr>
@@ -207,7 +190,7 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
           <tbody className="divide-y divide-slate-100">
             {tools.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
+                <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
                   No hay herramientas que coincidan con los filtros.
                 </td>
               </tr>
@@ -217,7 +200,7 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{tool.toolCode}</td>
                 <td className="px-4 py-3">
                   <Link
-                    href={`/transformacion/herramientas/${tool.id}`}
+                    href={`/transformacion/herramientas-catalogo/${tool.id}`}
                     className="font-medium text-navy hover:underline"
                   >
                     {tool.name}
@@ -242,7 +225,6 @@ export function ToolsScreen({ tools, stats, options, filters, errorKind }: Tools
                 <td className="px-4 py-3 text-right font-semibold tabular-nums text-navy">
                   {formatMoney(tool.totalCostCalculated, tool.currency)}
                 </td>
-                <td className="px-4 py-3 text-slate-600">{tool.costCenter}</td>
                 <td className="px-4 py-3">
                   <RenewalCell date={tool.nextRenewalDate} />
                 </td>

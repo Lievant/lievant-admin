@@ -14,6 +14,7 @@ import { CatalogLocation } from './entities/catalog-location.entity';
 import { CatalogMaritalStatus } from './entities/catalog-marital-status.entity';
 import { CatalogModality } from './entities/catalog-modality.entity';
 import { CatalogOrgLevel } from './entities/catalog-org-level.entity';
+import { CatalogToolCategory } from './entities/catalog-tool-category.entity';
 import { CatalogVendorCategory } from './entities/catalog-vendor-category.entity';
 import { CatalogEmployeeDocumentType } from './entities/catalog-employee-document-type.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
@@ -40,6 +41,7 @@ import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
       TicketAssignee,
       Holiday,
       EquipmentBrand,
+      CatalogToolCategory,
     ]),
   ],
   controllers: [CatalogsController],

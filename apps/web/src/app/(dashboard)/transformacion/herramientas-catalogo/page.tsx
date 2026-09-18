@@ -35,13 +35,11 @@ export default async function HerramientasPage({ searchParams }: HerramientasPag
   const search = asString(params.search);
   const category = asString(params.category);
   const contractStatus = asString(params.contractStatus);
-  const costCenter = asString(params.costCenter);
 
   const query: ListToolsParams = {};
   if (search) query.search = search;
   if (category) query.category = category;
   if (contractStatus) query.contractStatus = contractStatus;
-  if (costCenter) query.costCenter = costCenter;
 
   const [toolsResult, statsResult, optionsResult] = await Promise.all([
     safe(listTools(query)),
@@ -52,7 +50,6 @@ export default async function HerramientasPage({ searchParams }: HerramientasPag
   const emptyStats: ToolStats = {
     total: 0,
     byContractStatus: {},
-    byCostCenter: {},
     byCategory: {},
     activeAssignments: 0,
     annualCostByCurrency: {},
@@ -66,7 +63,6 @@ export default async function HerramientasPage({ searchParams }: HerramientasPag
     categories: [],
     currencies: ['MXN', 'USD'],
     billingPeriods: ['mensual', 'trimestral', 'anual', 'unico'],
-    costCenters: ['TD', 'TI', 'Compartido'],
     contractStatuses: ['activo', 'en_negociacion', 'por_cancelar', 'cancelado'],
   };
 
@@ -81,7 +77,6 @@ export default async function HerramientasPage({ searchParams }: HerramientasPag
           search: search ?? '',
           category: category ?? '',
           contractStatus: contractStatus ?? '',
-          costCenter: costCenter ?? '',
         }}
       />
     </div>

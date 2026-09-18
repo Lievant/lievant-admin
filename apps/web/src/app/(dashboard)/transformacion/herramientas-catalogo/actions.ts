@@ -23,7 +23,7 @@ function toResult(err: unknown): ActionResult {
   return { success: false, error: 'Ocurrió un error inesperado.' };
 }
 
-const LIST_PATH = '/transformacion/herramientas';
+const LIST_PATH = '/transformacion/herramientas-catalogo';
 
 export async function createToolRecordAction(
   payload: CreateToolRecordPayload,

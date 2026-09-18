@@ -186,6 +186,13 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     icon: LaptopIcon,
     fields: [],
   },
+  {
+    entity: 'tool_categories',
+    label: 'Categorías de herramientas',
+    itemLabel: 'categoría',
+    icon: LayersIcon,
+    fields: [],
+  },
 ];
 
 export function getCatalogConfig(entity: string): CatalogConfig | undefined {

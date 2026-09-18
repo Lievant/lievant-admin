@@ -6,12 +6,11 @@ import type {
   CreateToolRecordPayload,
   ToolBillingPeriod,
   ToolContractStatus,
-  ToolCostCenter,
   ToolOptions,
   ToolRecord,
 } from '@/lib/api';
 import { createToolRecordAction, updateToolRecordAction } from './actions';
-import { BILLING_PERIOD_LABEL, CONTRACT_STATUS_LABEL, COST_CENTER_LABEL } from './constants';
+import { BILLING_PERIOD_LABEL, CONTRACT_STATUS_LABEL } from './constants';
 
 interface ToolDialogProps {
   options: ToolOptions;
@@ -35,12 +34,10 @@ export function ToolDialog({ options, tool, open, onClose }: ToolDialogProps) {
     category: tool?.category ?? options.categories[0] ?? 'Otro',
     provider: tool?.provider ?? '',
     description: tool?.description ?? '',
-    url: tool?.url ?? '',
     unitCost: tool ? String(tool.unitCost) : '0',
     currency: tool?.currency ?? 'MXN',
     billingPeriod: (tool?.billingPeriod ?? 'mensual') as ToolBillingPeriod,
     billingDay: tool?.billingDay ? String(tool.billingDay) : '',
-    costCenter: (tool?.costCenter ?? 'TI') as ToolCostCenter,
     commercialContact: tool?.commercialContact ?? '',
     nextRenewalDate: tool?.nextRenewalDate?.slice(0, 10) ?? '',
     contractStatus: (tool?.contractStatus ?? 'activo') as ToolContractStatus,
@@ -71,12 +68,10 @@ export function ToolDialog({ options, tool, open, onClose }: ToolDialogProps) {
       billingPeriod: form.billingPeriod,
       unitCost: Number(form.unitCost) || 0,
       currency: form.currency,
-      costCenter: form.costCenter,
       contractStatus: form.contractStatus,
       requiresApproval: form.requiresApproval,
     };
     if (form.description.trim()) payload.description = form.description.trim();
-    if (form.url.trim()) payload.url = form.url.trim();
     if (form.billingDay) payload.billingDay = Number(form.billingDay);
     if (form.commercialContact.trim()) payload.commercialContact = form.commercialContact.trim();
     if (form.nextRenewalDate) payload.nextRenewalDate = form.nextRenewalDate;
@@ -148,22 +143,11 @@ export function ToolDialog({ options, tool, open, onClose }: ToolDialogProps) {
             </div>
 
             <div className="sm:col-span-2">
-              <label className={LABEL}>Descripción</label>
+              <label className={LABEL}>Descripción (opcional)</label>
               <textarea
                 className={`${INPUT} min-h-[72px]`}
                 value={form.description}
                 onChange={(e) => set('description', e.target.value)}
-              />
-            </div>
-
-            <div className="sm:col-span-2">
-              <label className={LABEL}>URL</label>
-              <input
-                className={INPUT}
-                value={form.url}
-                onChange={(e) => set('url', e.target.value)}
-                placeholder="https://…"
-                maxLength={500}
               />
             </div>
           </div>
@@ -232,20 +216,6 @@ export function ToolDialog({ options, tool, open, onClose }: ToolDialogProps) {
               Administración
             </legend>
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className={LABEL}>Centro de costos</label>
-                <select
-                  className={INPUT}
-                  value={form.costCenter}
-                  onChange={(e) => set('costCenter', e.target.value as ToolCostCenter)}
-                >
-                  {options.costCenters.map((c) => (
-                    <option key={c} value={c}>
-                      {COST_CENTER_LABEL[c] ?? c}
-                    </option>
-                  ))}
-                </select>
-              </div>
               <div>
                 <label className={LABEL}>Contacto comercial</label>
                 <input

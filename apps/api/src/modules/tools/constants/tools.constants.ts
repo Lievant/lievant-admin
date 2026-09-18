@@ -7,7 +7,13 @@
  * es mover estos arreglos a una tabla, no reescribir los DTO.
  */
 
-export const TOOL_CATEGORIES = [
+/**
+ * Semilla histórica de categorías. La fuente de verdad es
+ * catalogs.tool_categories (editable desde /admin/catalogos); esta lista solo
+ * sirve de respaldo si el catálogo llegara vacío, para que el formulario no se
+ * quede sin opciones.
+ */
+export const TOOL_CATEGORIES_FALLBACK = [
   'Correo',
   'Suite Ofimática',
   'CRM',
@@ -17,6 +23,7 @@ export const TOOL_CATEGORIES = [
   'Comunicación',
   'Diseño',
   'Seguridad',
+  'ERP / Contabilidad',
   'Otro',
 ] as const;
 
@@ -34,6 +41,18 @@ export const TOOL_CONTRACT_STATUSES = [
 ] as const;
 
 export const TOOL_ASSIGNMENT_STATUSES = ['activa', 'pendiente_aprobacion', 'revocada'] as const;
+
+/**
+ * Estados de una licencia individual. 'pendiente_aprobacion' existe porque una
+ * herramienta puede marcarse con requires_approval: la licencia se captura,
+ * pero no cuenta como activa ni suma al costo hasta que alguien la aprueba.
+ */
+export const LICENSE_STATUSES = [
+  'activa',
+  'pendiente_aprobacion',
+  'suspendida',
+  'cancelada',
+] as const;
 
 /**
  * Cuántas veces al año se paga cada periodo. 'unico' es 0: un pago único no

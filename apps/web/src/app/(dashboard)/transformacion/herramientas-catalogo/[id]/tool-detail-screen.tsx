@@ -18,7 +18,6 @@ import {
   BILLING_PERIOD_LABEL,
   CONTRACT_STATUS_LABEL,
   CONTRACT_STATUS_STYLE,
-  COST_CENTER_LABEL,
   formatDate,
   formatMoney,
 } from '../constants';
@@ -108,14 +107,14 @@ export function ToolDetailScreen({ tool, employees, options }: ToolDetailScreenP
     if (!confirm(`¿Eliminar ${tool.toolCode} — ${tool.name}? Esta acción da de baja la herramienta.`))
       return;
     const ok = await run('delete', () => deleteToolRecordAction(tool.id));
-    if (ok) router.push('/transformacion/herramientas');
+    if (ok) router.push('/transformacion/herramientas-catalogo');
   }
 
   return (
     <div className="space-y-6">
       <div>
         <Link
-          href="/transformacion/herramientas"
+          href="/transformacion/herramientas-catalogo"
           className="text-sm text-slate-500 hover:text-navy hover:underline"
         >
           ← Catálogo de Herramientas
@@ -174,26 +173,9 @@ export function ToolDetailScreen({ tool, employees, options }: ToolDetailScreenP
               {BILLING_PERIOD_LABEL[tool.billingPeriod] ?? tool.billingPeriod}
               {tool.billingDay ? ` · día ${tool.billingDay}` : ''}
             </Field>
-            <Field label="Centro de costos">
-              {COST_CENTER_LABEL[tool.costCenter] ?? tool.costCenter}
-            </Field>
             <Field label="Contacto comercial">{tool.commercialContact ?? '—'}</Field>
             <Field label="Próxima renovación">{formatDate(tool.nextRenewalDate)}</Field>
             <Field label="Requiere aprobación">{tool.requiresApproval ? 'Sí' : 'No'}</Field>
-            <Field label="URL">
-              {tool.url ? (
-                <a
-                  href={tool.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-navy underline hover:opacity-80"
-                >
-                  {tool.url}
-                </a>
-              ) : (
-                '—'
-              )}
-            </Field>
             <div className="sm:col-span-2">
               <Field label="Descripción">{tool.description || '—'}</Field>
             </div>

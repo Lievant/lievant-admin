@@ -76,6 +76,7 @@ export function Sidebar({ user }: SidebarProps) {
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
+  const showLicencias = hasModule(user, 'transformacion', 'licencias', 'read');
   const showMedios = hasSection(user, 'medios');
   // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
@@ -271,11 +272,20 @@ export function Sidebar({ user }: SidebarProps) {
                 </NavSubLink>
                 {showHerramientasCatalogo && (
                   <NavSubLink
-                    href="/transformacion/herramientas"
-                    active={pathname.startsWith('/transformacion/herramientas')}
+                    href="/transformacion/herramientas-catalogo"
+                    active={pathname.startsWith('/transformacion/herramientas-catalogo')}
                   >
                     <LayersIcon className="h-4 w-4" />
                     Catálogo de Herramientas
+                  </NavSubLink>
+                )}
+                {showLicencias && (
+                  <NavSubLink
+                    href="/transformacion/licencias"
+                    active={pathname.startsWith('/transformacion/licencias')}
+                  >
+                    <LicenseIcon className="h-4 w-4" />
+                    Licencias
                   </NavSubLink>
                 )}
                 <NavSubLink

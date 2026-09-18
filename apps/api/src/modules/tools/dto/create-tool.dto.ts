@@ -8,16 +8,13 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUrl,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import {
   TOOL_BILLING_PERIODS,
-  TOOL_CATEGORIES,
   TOOL_CONTRACT_STATUSES,
-  TOOL_COST_CENTERS,
   TOOL_CURRENCIES,
 } from '../constants/tools.constants';
 
@@ -27,7 +24,11 @@ export class CreateToolDto {
   @MaxLength(200)
   name!: string;
 
-  @IsIn(TOOL_CATEGORIES as unknown as string[])
+  // Se valida contra catalogs.tool_categories en el servicio: la lista es
+  // editable desde /admin/catalogos y un @IsIn la volvería a congelar aquí.
+  @IsNotEmpty()
+  @IsString()
+  @MaxLength(100)
   category!: string;
 
   @IsNotEmpty()
@@ -38,11 +39,6 @@ export class CreateToolDto {
   @IsOptional()
   @IsString()
   description?: string;
-
-  @IsOptional()
-  @IsUrl({ require_tld: false })
-  @MaxLength(500)
-  url?: string;
 
   @IsOptional()
   @Type(() => Number)
@@ -63,10 +59,6 @@ export class CreateToolDto {
   @Min(1)
   @Max(31)
   billingDay?: number;
-
-  @IsOptional()
-  @IsIn(TOOL_COST_CENTERS as unknown as string[])
-  costCenter?: string;
 
   @IsOptional()
   @IsString()
