@@ -144,6 +144,16 @@ export class AssignmentsService {
     return toAssignmentDto(row);
   }
 
+  /**
+   * Asignaciones de un colaborador, activas primero. Alimenta la pestaña
+   * "Equipos y Licencias" del expediente de RRHH, que antes leía del Maestro
+   * de Licenciamientos.
+   */
+  async getByEmployee(employeeId: string) {
+    const result = await this.getAssignments({ employeeId, limit: MAX_LIMIT });
+    return result.data;
+  }
+
   // -------------------------------------------------------------------------
   // Escritura
   // -------------------------------------------------------------------------
