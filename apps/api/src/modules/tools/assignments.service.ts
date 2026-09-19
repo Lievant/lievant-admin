@@ -70,6 +70,7 @@ export class AssignmentsService {
     if (query.employeeId) conditions.push(`a.employee_id = $${params.push(query.employeeId)}`);
     if (query.assignedById) conditions.push(`a.assigned_by_id = $${params.push(query.assignedById)}`);
     if (query.status) conditions.push(`a.status = $${params.push(query.status)}`);
+    if (query.area) conditions.push(`e.area = $${params.push(query.area)}`);
     if (query.search) {
       const p = params.push(`%${query.search}%`);
       conditions.push(
@@ -142,6 +143,27 @@ export class AssignmentsService {
     const row = rows[0];
     if (!row) throw new NotFoundException(`Asignación ${id} no encontrada`);
     return toAssignmentDto(row);
+  }
+
+  /**
+   * Áreas que tienen al menos una asignación activa.
+   *
+   * Sale de las asignaciones y no del catálogo de áreas: el filtro solo debe
+   * ofrecer valores que devuelvan resultados, y un catálogo completo llenaría
+   * el select de opciones que no filtran nada.
+   */
+  async getAreas(): Promise<string[]> {
+    const rows = await this.assignmentsRepo.query(`
+      SELECT DISTINCT e.area
+      FROM tools.assignments a
+      JOIN employees.employee_records e ON e.id = a.employee_id
+      WHERE a.deleted_at IS NULL
+        AND a.status = 'activo'
+        AND e.area IS NOT NULL
+        AND e.area <> ''
+      ORDER BY e.area ASC
+    `);
+    return rows.map((r: { area: string }) => r.area);
   }
 
   /**

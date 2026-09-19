@@ -30,6 +30,7 @@ interface Filters {
   search: string;
   status: string;
   toolId: string;
+  area: string;
 }
 
 interface AssignmentsScreenProps {
@@ -37,6 +38,7 @@ interface AssignmentsScreenProps {
   stats: AssignmentStats;
   tools: ToolRecord[];
   assigners: AssignerRecord[];
+  areas: string[];
   filters: Filters;
   tab: TabKey;
   errorKind: ErrorKind | null;
@@ -57,6 +59,18 @@ function StatCard({ label, value, tone }: { label: string; value: string; tone?:
   );
 }
 
+function StatusBadge({ status }: { status: AssignmentRecord['status'] }) {
+  return (
+    <span
+      className={`rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
+        STATUS_STYLE[status] ?? 'bg-slate-100 text-slate-600 ring-slate-200'
+      }`}
+    >
+      {STATUS_LABEL[status] ?? status}
+    </span>
+  );
+}
+
 function UnusedBadge({ dias }: { dias: number | null }) {
   const { style, label } = unusedTone(dias);
   return (
@@ -71,6 +85,7 @@ export function AssignmentsScreen({
   stats,
   tools,
   assigners,
+  areas,
   filters,
   tab,
   errorKind,
@@ -85,6 +100,10 @@ export function AssignmentsScreen({
 
   const [revoking, setRevoking] = useState<AssignmentRecord | null>(null);
   const [revokeReason, setRevokeReason] = useState('');
+  // El último uso salió del grid: no hay forma de alimentarlo automáticamente
+  // desde la plataforma, así que vive en el detalle y se captura a mano.
+  const [detail, setDetail] = useState<AssignmentRecord | null>(null);
+  const [detailLastUsed, setDetailLastUsed] = useState('');
   const [newAssigner, setNewAssigner] = useState<EmployeePickerValue | null>(null);
 
   const isSuperAdmin = !user || user.roles.some((r) => r.name === 'SUPER_ADMIN');
@@ -106,6 +125,7 @@ export function AssignmentsScreen({
     if (merged.search) params.set('search', merged.search);
     if (merged.status) params.set('status', merged.status);
     if (merged.toolId) params.set('toolId', merged.toolId);
+    if (merged.area) params.set('area', merged.area);
     const qs = params.toString();
     router.push(`/transformacion/asignaciones${qs ? `?${qs}` : ''}`);
   }
@@ -134,17 +154,12 @@ export function AssignmentsScreen({
     }
   }
 
-  async function handleUpdateLastUsed(assignment: AssignmentRecord) {
-    const input = prompt(
-      `Último uso de ${assignment.tool.name} por ${assignment.employee.fullName} (YYYY-MM-DD):`,
-      assignment.lastUsedDate ?? todayISO(),
+  async function handleSaveLastUsed() {
+    if (!detail || !detailLastUsed) return;
+    const ok = await run(`lastused-${detail.id}`, () =>
+      updateLastUsedAction(detail.id, detailLastUsed),
     );
-    if (!input) return;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.trim())) {
-      setError('La fecha debe tener el formato YYYY-MM-DD.');
-      return;
-    }
-    await run(`lastused-${assignment.id}`, () => updateLastUsedAction(assignment.id, input.trim()));
+    if (ok) setDetail(null);
   }
 
   async function handleAddAssigner() {
@@ -350,6 +365,19 @@ export function AssignmentsScreen({
                 </option>
               ))}
             </select>
+
+            <select
+              value={filters.area}
+              onChange={(e) => pushParams({ area: e.target.value })}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-navy"
+            >
+              <option value="">Todas las áreas</option>
+              {areas.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
           </div>
 
           <ScrollableTable>
@@ -362,8 +390,6 @@ export function AssignmentsScreen({
                   <th className="px-4 py-3">Área</th>
                   <th className="px-4 py-3">Asignado por</th>
                   <th className="px-4 py-3">Fecha asignación</th>
-                  <th className="px-4 py-3">Último uso</th>
-                  <th className="px-4 py-3">Días sin uso</th>
                   <th className="px-4 py-3">Estado</th>
                   {canWrite && <th className="px-4 py-3 text-right">Acciones</th>}
                 </tr>
@@ -372,7 +398,7 @@ export function AssignmentsScreen({
                 {page.data.length === 0 && (
                   <tr>
                     <td
-                      colSpan={canWrite ? 10 : 9}
+                      colSpan={canWrite ? 8 : 7}
                       className="px-4 py-10 text-center text-slate-400"
                     >
                       No hay asignaciones que coincidan con los filtros.
@@ -397,40 +423,30 @@ export function AssignmentsScreen({
                     <td className="px-4 py-3 text-slate-600">{a.employee.area ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{a.assignedByName ?? '—'}</td>
                     <td className="px-4 py-3 text-slate-600">{formatDate(a.assignmentDate)}</td>
-                    <td className="px-4 py-3 text-slate-600">{formatDate(a.lastUsedDate)}</td>
                     <td className="px-4 py-3">
-                      {a.status === 'activo' ? <UnusedBadge dias={a.diasSinUso} /> : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded px-2 py-0.5 text-xs font-semibold ring-1 ring-inset ${
-                          STATUS_STYLE[a.status] ?? 'bg-slate-100 text-slate-600 ring-slate-200'
-                        }`}
-                      >
-                        {STATUS_LABEL[a.status] ?? a.status}
-                      </span>
+                      <StatusBadge status={a.status} />
                     </td>
                     {canWrite && (
                       <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setDetail(a);
+                            setDetailLastUsed(a.lastUsedDate ?? '');
+                          }}
+                          className="mr-2 rounded px-2 py-1 text-xs font-semibold text-navy hover:bg-slate-100"
+                        >
+                          Detalle
+                        </button>
                         {a.status === 'activo' && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateLastUsed(a)}
-                              disabled={busy === `lastused-${a.id}`}
-                              className="mr-2 rounded px-2 py-1 text-xs font-semibold text-navy hover:bg-slate-100 disabled:opacity-50"
-                            >
-                              Último uso
-                            </button>
-                            <button
-                              onClick={() => {
-                                setRevoking(a);
-                                setRevokeReason('');
-                              }}
-                              className="rounded px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
-                            >
-                              Revocar
-                            </button>
-                          </>
+                          <button
+                            onClick={() => {
+                              setRevoking(a);
+                              setRevokeReason('');
+                            }}
+                            className="rounded px-2 py-1 text-xs font-semibold text-red-600 hover:bg-red-50"
+                          >
+                            Revocar
+                          </button>
                         )}
                       </td>
                     )}
@@ -519,6 +535,103 @@ export function AssignmentsScreen({
           open={dialogOpen}
           onClose={() => setDialogOpen(false)}
         />
+      )}
+
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <p className="font-mono text-xs text-slate-400">{detail.assignmentCode}</p>
+            <h2 className="text-lg font-bold text-navy">{detail.tool.name}</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              {detail.employee.fullName}
+              {detail.employee.area ? ` · ${detail.employee.area}` : ''}
+            </p>
+
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Estado
+                </dt>
+                <dd className="mt-0.5">
+                  <StatusBadge status={detail.status} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Asignado por
+                </dt>
+                <dd className="mt-0.5 text-navy">{detail.assignedByName ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Fecha de asignación
+                </dt>
+                <dd className="mt-0.5 text-navy">{formatDate(detail.assignmentDate)}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Días sin uso
+                </dt>
+                <dd className="mt-0.5">
+                  {detail.status === 'activo' ? <UnusedBadge dias={detail.diasSinUso} /> : '—'}
+                </dd>
+              </div>
+              {detail.revocationDate && (
+                <div className="col-span-2">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Revocada el {formatDate(detail.revocationDate)}
+                  </dt>
+                  <dd className="mt-0.5 text-navy">{detail.revocationReason ?? 'Sin motivo'}</dd>
+                </div>
+              )}
+              {detail.notes && (
+                <div className="col-span-2">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Notas
+                  </dt>
+                  <dd className="mt-0.5 whitespace-pre-line text-navy">{detail.notes}</dd>
+                </div>
+              )}
+            </dl>
+
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Último uso conocido
+              </label>
+              <p className="mb-2 text-xs text-slate-400">
+                Se captura a mano: la plataforma no puede leerlo de las herramientas.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="date"
+                  value={detailLastUsed}
+                  max={todayISO()}
+                  onChange={(e) => setDetailLastUsed(e.target.value)}
+                  disabled={!canWrite}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-navy outline-none focus:border-navy disabled:bg-slate-50"
+                />
+                {canWrite && (
+                  <button
+                    onClick={handleSaveLastUsed}
+                    disabled={!detailLastUsed || busy === `lastused-${detail.id}`}
+                    className="whitespace-nowrap rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy === `lastused-${detail.id}` ? 'Guardando…' : 'Guardar'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setDetail(null)}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {revoking && (

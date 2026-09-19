@@ -2977,6 +2977,7 @@ export interface ListAssignmentsParams {
   employeeId?: string;
   assignedById?: string;
   status?: string;
+  area?: string;
   search?: string;
   cursor?: string;
   limit?: number;
@@ -2988,6 +2989,7 @@ export function listAssignments(params: ListAssignmentsParams = {}): Promise<Ass
   if (params.employeeId) q.set('employeeId', params.employeeId);
   if (params.assignedById) q.set('assignedById', params.assignedById);
   if (params.status) q.set('status', params.status);
+  if (params.area) q.set('area', params.area);
   if (params.search) q.set('search', params.search);
   if (params.cursor) q.set('cursor', params.cursor);
   if (params.limit) q.set('limit', String(params.limit));
@@ -3001,6 +3003,11 @@ export function getAssignment(id: string): Promise<AssignmentRecord> {
 
 export function getAssignmentStats(): Promise<AssignmentStats> {
   return apiFetchWithRetry<AssignmentStats>('/assignments/stats');
+}
+
+/** Áreas con al menos una asignación activa: alimenta el filtro del grid. */
+export function listAssignmentAreas(): Promise<string[]> {
+  return apiFetchWithRetry<string[]>('/assignments/areas');
 }
 
 export function listAssigners(): Promise<AssignerRecord[]> {

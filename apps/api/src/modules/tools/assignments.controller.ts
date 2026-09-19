@@ -36,6 +36,12 @@ export class AssignmentsController {
     return this.service.getStats();
   }
 
+  @Get('areas')
+  @RequirePermission('transformacion', 'asignaciones', 'read')
+  getAreas() {
+    return this.service.getAreas();
+  }
+
   @Get('assigners')
   @RequirePermission('transformacion', 'asignaciones', 'read')
   getAssigners() {
