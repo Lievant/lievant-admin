@@ -33,7 +33,6 @@ export function NewAssignmentDialog({
   const [toolId, setToolId] = useState('');
   const [assignedById, setAssignedById] = useState('');
   const [assignmentDate, setAssignmentDate] = useState(todayISO());
-  const [lastUsedDate, setLastUsedDate] = useState('');
   const [notes, setNotes] = useState('');
 
   // Búsqueda sobre el catálogo ya cargado: son decenas de herramientas, no
@@ -69,7 +68,6 @@ export function NewAssignmentDialog({
     const payload: CreateAssignmentPayload = { toolId, employeeId: employee.id };
     if (assignedById) payload.assignedById = assignedById;
     if (assignmentDate) payload.assignmentDate = assignmentDate;
-    if (lastUsedDate) payload.lastUsedDate = lastUsedDate;
     if (notes.trim()) payload.notes = notes.trim();
 
     setSaving(true);
@@ -128,7 +126,7 @@ export function NewAssignmentDialog({
             )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={LABEL}>Asignado por</label>
               <select
@@ -151,15 +149,6 @@ export function NewAssignmentDialog({
                 type="date"
                 value={assignmentDate}
                 onChange={(e) => setAssignmentDate(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={LABEL}>Último uso conocido</label>
-              <input
-                className={INPUT}
-                type="date"
-                value={lastUsedDate}
-                onChange={(e) => setLastUsedDate(e.target.value)}
               />
             </div>
           </div>

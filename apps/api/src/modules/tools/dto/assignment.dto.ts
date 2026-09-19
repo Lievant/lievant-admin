@@ -86,6 +86,11 @@ export class QueryAssignmentsDto {
   @IsIn(ASSIGNMENT_STATUSES as unknown as string[])
   status?: string;
 
+  /** Área del colaborador, tal como la devuelve GET /assignments/areas. */
+  @IsOptional()
+  @IsString()
+  area?: string;
+
   /** Nombre del colaborador o de la herramienta. */
   @IsOptional()
   @IsString()

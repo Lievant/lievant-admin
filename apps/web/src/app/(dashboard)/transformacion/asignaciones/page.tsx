@@ -2,6 +2,7 @@ import {
   errorKindOf,
   getAssignmentStats,
   listAssigners,
+  listAssignmentAreas,
   listAssignments,
   listTools,
   type AssignmentsPage,
@@ -42,20 +43,24 @@ export default async function AsignacionesPage({ searchParams }: AsignacionesPag
   const search = asString(params.search);
   const status = asString(params.status);
   const toolId = asString(params.toolId);
+  const area = asString(params.area);
   const cursor = asString(params.cursor);
 
   const query: ListAssignmentsParams = {};
   if (search) query.search = search;
   if (status) query.status = status;
   if (toolId) query.toolId = toolId;
+  if (area) query.area = area;
   if (cursor) query.cursor = cursor;
 
-  const [assignmentsResult, statsResult, toolsResult, assignersResult] = await Promise.all([
-    safe(listAssignments(query)),
-    safe(getAssignmentStats()),
-    safe(listTools()),
-    safe(listAssigners()),
-  ]);
+  const [assignmentsResult, statsResult, toolsResult, assignersResult, areasResult] =
+    await Promise.all([
+      safe(listAssignments(query)),
+      safe(getAssignmentStats()),
+      safe(listTools()),
+      safe(listAssigners()),
+      safe(listAssignmentAreas()),
+    ]);
 
   const emptyPage: AssignmentsPage = { data: [], nextCursor: null };
   const emptyStats: AssignmentStats = {
@@ -74,12 +79,14 @@ export default async function AsignacionesPage({ searchParams }: AsignacionesPag
         stats={statsResult.data ?? emptyStats}
         tools={toolsResult.data ?? []}
         assigners={assignersResult.data ?? []}
+        areas={areasResult.data ?? []}
         tab={tab}
         errorKind={assignmentsResult.errorKind}
         filters={{
           search: search ?? '',
           status: status ?? '',
           toolId: toolId ?? '',
+          area: area ?? '',
         }}
       />
     </div>
