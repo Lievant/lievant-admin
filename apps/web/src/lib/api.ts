@@ -2964,6 +2964,86 @@ export interface AssignmentStats {
   recentAssignments: AssignmentRecord[];
 }
 
+export interface CostReportSummary {
+  totalActiveLicenses: number;
+  totalMonthlyCostMXN: number;
+  totalMonthlyCostUSD: number;
+  totalAnnualCostMXN: number;
+  totalAnnualCostUSD: number;
+  costPerEmployeeMXN: number;
+  costPerEmployeeUSD: number;
+  totalEmployees: number;
+  totalTools: number;
+  totalAreas: number;
+}
+
+export interface CostReportTool {
+  toolCode: string;
+  toolName: string;
+  category: string;
+  provider: string;
+  activeAssignments: number;
+  unitCost: number;
+  currency: string;
+  billingPeriod: string;
+  /** Costo unitario normalizado a mensual según la periodicidad. */
+  monthlyCost: number;
+  totalCost: number;
+}
+
+export interface CostReportArea {
+  area: string;
+  activeAssignments: number;
+  employees: number;
+  totalMonthlyCostMXN: number;
+  totalMonthlyCostUSD: number;
+}
+
+export interface CostReportEmployee {
+  employeeId: string;
+  fullName: string;
+  area: string | null;
+  position: string | null;
+  activeAssignments: number;
+  totalMonthlyCostMXN: number;
+  totalMonthlyCostUSD: number;
+  tools: string[];
+}
+
+export interface CostReportMonth {
+  month: string;
+  newAssignments: number;
+  revocations: number;
+  netActive: number;
+}
+
+export interface CostReport {
+  summary: CostReportSummary;
+  byTool: CostReportTool[];
+  byArea: CostReportArea[];
+  byEmployee: CostReportEmployee[];
+  timeline: CostReportMonth[];
+}
+
+export interface CostReportParams {
+  dateFrom?: string;
+  dateTo?: string;
+  area?: string;
+  toolId?: string;
+  currency?: string;
+}
+
+export function getCostReport(params: CostReportParams = {}): Promise<CostReport> {
+  const q = new URLSearchParams();
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom);
+  if (params.dateTo) q.set('dateTo', params.dateTo);
+  if (params.area) q.set('area', params.area);
+  if (params.toolId) q.set('toolId', params.toolId);
+  if (params.currency) q.set('currency', params.currency);
+  const qs = q.toString();
+  return apiFetchWithRetry<CostReport>(`/assignments/cost-report${qs ? `?${qs}` : ''}`);
+}
+
 export interface AssignerRecord {
   id: string;
   userId: string;

@@ -10,7 +10,7 @@ import type {
   AssignerRecord,
   AssignmentRecord,
   AssignmentsPage,
-  AssignmentStats,
+  CostReport,
   ErrorKind,
   ToolRecord,
 } from '@/lib/api';
@@ -22,6 +22,7 @@ import {
   updateLastUsedAction,
 } from './actions';
 import { formatDate, STATUS_LABEL, STATUS_STYLE, todayISO, unusedTone } from './constants';
+import { CostReportTab } from './cost-report-tab';
 import { NewAssignmentDialog } from './new-assignment-dialog';
 
 type TabKey = 'resumen' | 'asignaciones' | 'configuracion';
@@ -35,7 +36,7 @@ interface Filters {
 
 interface AssignmentsScreenProps {
   page: AssignmentsPage;
-  stats: AssignmentStats;
+  costReport: CostReport;
   tools: ToolRecord[];
   assigners: AssignerRecord[];
   areas: string[];
@@ -49,15 +50,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'asignaciones', label: 'Asignaciones' },
   { key: 'configuracion', label: 'Configuración' },
 ];
-
-function StatCard({ label, value, tone }: { label: string; value: string; tone?: string | undefined }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold ${tone ?? 'text-navy'}`}>{value}</p>
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: AssignmentRecord['status'] }) {
   return (
@@ -82,7 +74,7 @@ function UnusedBadge({ dias }: { dias: number | null }) {
 
 export function AssignmentsScreen({
   page,
-  stats,
+  costReport,
   tools,
   assigners,
   areas,
@@ -217,113 +209,9 @@ export function AssignmentsScreen({
         </p>
       )}
 
-      {/* ── TAB 1 · Resumen ────────────────────────────────────────────── */}
+      {/* ── TAB 1 · Resumen · dashboard de costos ──────────────────────── */}
       {tab === 'resumen' && (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <StatCard label="Asignaciones activas" value={String(stats.totalActive)} />
-            <StatCard
-              label="Sin uso +60 días"
-              value={String(stats.unusedOver60Days)}
-              tone={stats.unusedOver60Days > 0 ? 'text-red-600' : undefined}
-            />
-            <StatCard label="Revocadas" value={String(stats.totalRevoked)} />
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
-            <div>
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-                Por herramienta
-              </h2>
-              <ScrollableTable>
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Herramienta</th>
-                      <th className="px-4 py-3">Código</th>
-                      <th className="px-4 py-3 text-right">Activas</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {stats.byTool.length === 0 && (
-                      <tr>
-                        <td colSpan={3} className="px-4 py-8 text-center text-slate-400">
-                          Todavía no hay asignaciones activas.
-                        </td>
-                      </tr>
-                    )}
-                    {stats.byTool.map((row) => (
-                      <tr key={row.toolCode} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-navy">{row.toolName}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-slate-400">
-                          {row.toolCode}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-navy">
-                          {row.activeCount}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ScrollableTable>
-            </div>
-
-            <div>
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-                Por área
-              </h2>
-              <ScrollableTable>
-                <table className="min-w-full text-sm">
-                  <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3">Área</th>
-                      <th className="px-4 py-3 text-right">Asignaciones activas</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {stats.byArea.length === 0 && (
-                      <tr>
-                        <td colSpan={2} className="px-4 py-8 text-center text-slate-400">
-                          Todavía no hay asignaciones activas.
-                        </td>
-                      </tr>
-                    )}
-                    {stats.byArea.map((row) => (
-                      <tr key={row.area} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 font-medium text-navy">{row.area}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-navy">
-                          {row.activeCount}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </ScrollableTable>
-            </div>
-          </div>
-
-          <div>
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-slate-500">
-              Últimas asignaciones
-            </h2>
-            <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white shadow-sm">
-              {stats.recentAssignments.length === 0 && (
-                <p className="px-4 py-8 text-center text-sm text-slate-400">
-                  Todavía no hay asignaciones.
-                </p>
-              )}
-              {stats.recentAssignments.map((a) => (
-                <div key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm">
-                  <span className="font-mono text-xs text-slate-400">{a.assignmentCode}</span>
-                  <span className="text-slate-500">{formatDate(a.assignmentDate)}</span>
-                  <span className="font-medium text-navy">{a.employee.fullName}</span>
-                  <span className="text-slate-400">·</span>
-                  <span className="text-navy">{a.tool.name}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <CostReportTab initialReport={costReport} tools={tools} areas={areas} />
       )}
 
       {/* ── TAB 2 · Asignaciones ───────────────────────────────────────── */}

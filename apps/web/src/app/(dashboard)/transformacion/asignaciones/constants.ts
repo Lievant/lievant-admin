@@ -49,6 +49,26 @@ export function formatDate(value: string | null): string {
   });
 }
 
+export function formatMoney(value: number, currency: string): string {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: currency || 'MXN',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+export const BILLING_PERIOD_LABEL: Record<string, string> = {
+  mensual: 'Mensual',
+  trimestral: 'Trimestral',
+  anual: 'Anual',
+  unico: 'Pago único',
+};
+
+/** Primer día del año en curso: rango por defecto del reporte. */
+export function yearStartISO(): string {
+  return `${new Date().getFullYear()}-01-01`;
+}
+
 export function todayISO(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
