@@ -263,13 +263,6 @@ export function Sidebar({ user }: SidebarProps) {
             </NavLink>
             {pathname.startsWith('/transformacion') && (
               <SubMenu>
-                <NavSubLink
-                  href="/transformacion/licenciamientos"
-                  active={pathname.startsWith('/transformacion/licenciamientos')}
-                >
-                  <LicenseIcon className="h-4 w-4" />
-                  Maestro de Licenciamientos
-                </NavSubLink>
                 {showHerramientasCatalogo && (
                   <NavSubLink
                     href="/transformacion/herramientas-catalogo"

@@ -26,7 +26,6 @@
     "seed:helpdesk": "ts-node -T src/database/seeds/004-helpdesk-historical.seed.ts",
     "seed:inventory": "ts-node -T src/database/seeds/005-inventory-equipment.seed.ts",
     "seed:projects": "ts-node -T src/database/seeds/006-projects-from-cor.seed.ts",
-    "seed:licenses": "ts-node -T src/database/seeds/007-licenses-from-csv.seed.ts",
     "seed:isobot": "ts-node -T src/database/seeds/008-isobot-documents.seed.ts"
   },
   "dependencies": {

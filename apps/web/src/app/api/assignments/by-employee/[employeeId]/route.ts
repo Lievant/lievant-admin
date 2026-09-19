@@ -9,7 +9,7 @@ export async function GET(
   const { employeeId } = await params;
   const accessToken = request.cookies.get('access_token')?.value;
 
-  const res = await fetch(`${API_URL}/licenses/employees/by-employee/${employeeId}`, {
+  const res = await fetch(`${API_URL}/assignments/by-employee/${employeeId}`, {
     headers: { ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
   });
 

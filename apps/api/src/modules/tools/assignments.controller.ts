@@ -54,6 +54,14 @@ export class AssignmentsController {
     return this.service.removeAssigner(id);
   }
 
+  // Sin permiso de asignaciones: lo consume la pestaña "Equipos y Licencias"
+  // del expediente, que tiene el suyo. Declarado antes de /:id por ruteo.
+  @Get('by-employee/:employeeId')
+  @RequirePermission('rrhh', 'empleados.licencias', 'read')
+  getByEmployee(@Param('employeeId', ParseUUIDPipe) employeeId: string) {
+    return this.service.getByEmployee(employeeId);
+  }
+
   @Get()
   @RequirePermission('transformacion', 'asignaciones', 'read')
   getAssignments(@Query() query: QueryAssignmentsDto) {
