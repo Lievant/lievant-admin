@@ -1,36 +1,121 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Retiro del Maestro de Licenciamientos.
+ * Retiro del Maestro de Licenciamientos, conservando los datos.
  *
  * El schema `licenses` (tool_catalog, employee_licenses, tool_assignments)
- * modelaba la matriz de acceso sí/no por colaborador. Queda sustituido por
- * `tools.assignments`, que registra lo mismo con folio, fechas y auditoría.
+ * modelaba la matriz de acceso sí/no por colaborador. Se renombra a
+ * `licenses_deprecated_20260919` en vez de borrarse: la UI ya se retiró, pero
+ * los 68 nombres de AD y las 82 responsivas que vivían ahí no tienen
+ * equivalente en el modelo nuevo y la auditoría ISO 27001 pide poder
+ * reconstruir quién tuvo acceso a qué.
  *
- * El DROP es CASCADE y destructivo: se lleva las tres tablas y sus datos, y
- * esta migración NO tiene down() que los recupere —solo puede recrear el
- * esqueleto vacío—. Es lo que se pidió explícitamente; el respaldo, si hace
- * falta, tiene que existir fuera de la base antes de correrla.
+ * Backfill: los accesos con has_access = true pasan a tools.assignments.
  *
- * Lo que se pierde y no tiene equivalente en el módulo nuevo:
- * `employee_licenses.active_directory_name` y `.responsiva`. El resto —qué
- * herramienta tiene cada persona— vive ahora en tools.assignments.
+ * El emparejamiento entre catálogos va por nombre, y al momento de escribir
+ * esto NINGUNO de los 10 nombres del catálogo viejo existía en tools.tools
+ * —que solo tenía 'M365 Basico'—, así que un backfill directo habría migrado
+ * 0 de 480 filas. Por eso el paso previo: toda herramienta del catálogo viejo
+ * que no exista por nombre en el nuevo se da de alta ahí, con los mismos
+ * nombres, para que el JOIN case por construcción y no por suerte.
  *
- * Se borran también dos juegos de permisos que quedan apuntando a endpoints
- * inexistentes: 'transformacion.licenciamientos' (de este maestro) y
- * 'transformacion.licencias' (de tools.licenses, depreciada en la migración
- * 23). Un permiso huérfano solo ensucia la pantalla de roles.
+ * Esas altas llevan datos comerciales en blanco (proveedor 'Por definir',
+ * costo 0, periodo mensual, categoría 'Otro'): la tabla vieja no los tenía y
+ * inventarlos sería peor que dejarlos pendientes de captura.
  *
- * 'rrhh.empleados.licencias' SÍ se conserva: la pestaña "Equipos y Licencias"
- * del expediente sigue existiendo, ahora alimentada por
- * GET /assignments/by-employee/:id.
+ * Ojo con 'MS Basic' (viejo) y 'M365 Basico' (nuevo): son nombres distintos,
+ * así que quedan como dos herramientas separadas. Si resultan ser la misma,
+ * la fusión es una decisión de negocio, no algo que esta migración deba
+ * adivinar con 78 accesos de por medio.
  */
 export class RemoveLicensesMaster1751000000024 implements MigrationInterface {
   name = 'RemoveLicensesMaster1751000000024';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP SCHEMA IF EXISTS licenses CASCADE`);
+    // ── 1. Baja del schema, conservando los datos ───────────────────────────
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'licenses')
+        THEN
+          ALTER SCHEMA licenses RENAME TO licenses_deprecated_20260919;
+        END IF;
+      END $$
+    `);
 
+    // ── 2. Altas en el catálogo nuevo para lo que no existe por nombre ──────
+    await queryRunner.query(`
+      INSERT INTO tools.tools (
+        tool_code, name, category, provider, billing_period,
+        unit_cost, currency, cost_center, contract_status, requires_approval
+      )
+      SELECT 'HTA-' || LPAD(nextval('tools.tool_number_seq')::text, 3, '0'),
+             tc.name,
+             'Otro',
+             'Por definir',
+             'mensual',
+             0, 'MXN', 'TI', 'activo', false
+      FROM licenses_deprecated_20260919.tool_catalog tc
+      WHERE NOT EXISTS (
+        SELECT 1 FROM tools.tools t
+        WHERE LOWER(t.name) = LOWER(tc.name) AND t.deleted_at IS NULL
+      )
+    `);
+
+    // ── 3. Backfill de los accesos vigentes ─────────────────────────────────
+    // El JOIN a employee_licenses va por employee_license_id, que es la FK real
+    // de la tabla vieja.
+    await queryRunner.query(`
+      INSERT INTO tools.assignments (
+        id, assignment_code, tool_id, employee_id,
+        assigned_by_id, assigned_by_name,
+        assignment_date, status, notes, created_at, updated_at
+      )
+      SELECT gen_random_uuid(),
+             'ASG-' || LPAD(nextval('tools.assignment_number_seq')::text, 6, '0'),
+             t.id,
+             e.id,
+             NULL,
+             'Migración automática',
+             COALESCE(la.granted_at::date, NOW()::date),
+             'activo',
+             'Migrada desde el Maestro de Licenciamientos el 2026-09-19',
+             NOW(), NOW()
+      FROM licenses_deprecated_20260919.tool_assignments la
+      JOIN licenses_deprecated_20260919.tool_catalog tc ON tc.id = la.tool_id
+      JOIN tools.tools t ON LOWER(t.name) = LOWER(tc.name) AND t.deleted_at IS NULL
+      JOIN licenses_deprecated_20260919.employee_licenses el ON el.id = la.employee_license_id
+      JOIN employees.employee_records e ON e.id = el.employee_id
+      WHERE la.has_access = true
+        AND e.deleted_at IS NULL
+      ON CONFLICT DO NOTHING
+    `);
+
+    // ── 4. Contadores del catálogo ──────────────────────────────────────────
+    // También el costo: AssignmentsService lo mantiene como unit_cost × activas,
+    // y dejarlo sin recalcular mostraría licencias con costo cero.
+    await queryRunner.query(`
+      UPDATE tools.tools t
+      SET active_assignments_count = agg.count,
+          total_cost_calculated = (t.unit_cost * agg.count)::numeric(14,2),
+          updated_at = NOW()
+      FROM (
+        SELECT t2.id,
+               COUNT(a.id) FILTER (
+                 WHERE a.status = 'activo' AND a.deleted_at IS NULL
+               )::int AS count
+        FROM tools.tools t2
+        LEFT JOIN tools.assignments a ON a.tool_id = t2.id
+        GROUP BY t2.id
+      ) AS agg
+      WHERE t.id = agg.id
+    `);
+
+    // ── 5. Permisos huérfanos ───────────────────────────────────────────────
+    // 'transformacion.licenciamientos' (este maestro) y 'transformacion.licencias'
+    // (de tools.licenses, depreciada en la migración 23) ya no tienen endpoint
+    // ni pantalla. 'rrhh.empleados.licencias' SÍ se conserva: la pestaña del
+    // expediente sigue, ahora sobre GET /assignments/by-employee/:id.
     await queryRunner.query(`
       DELETE FROM auth.role_permissions
       WHERE permission_id IN (
@@ -52,53 +137,36 @@ export class RemoveLicensesMaster1751000000024 implements MigrationInterface {
   }
 
   /**
-   * Reversión parcial: recrea el esqueleto vacío para que la base vuelva a ser
-   * estructuralmente válida, pero los datos del maestro no se recuperan desde
-   * aquí. No se restauran los permisos borrados porque no habría pantalla que
-   * los consumiera.
+   * Devuelve el schema a su nombre y retira lo que sembró el backfill. Las
+   * herramientas creadas en el paso 2 se borran solo si nadie las usó para algo
+   * más: si ya tienen asignaciones capturadas a mano, se quedan.
    */
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS licenses`);
-
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS licenses.tool_catalog (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(100) NOT NULL UNIQUE,
-        description TEXT,
-        category VARCHAR(50) DEFAULT 'software',
-        icon VARCHAR(50) DEFAULT 'ti-app',
-        color VARCHAR(20) DEFAULT '#666666',
-        is_active BOOLEAN DEFAULT true,
-        sort_order INT DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
+      DELETE FROM tools.assignments
+      WHERE assigned_by_name = 'Migración automática'
     `);
 
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS licenses.employee_licenses (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        employee_id UUID NOT NULL UNIQUE REFERENCES employees.employee_records(id),
-        active_directory_name VARCHAR(100),
-        responsiva VARCHAR(50),
-        notes TEXT,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        created_by UUID REFERENCES auth.users(id),
-        updated_by UUID REFERENCES auth.users(id)
-      )
+      DELETE FROM tools.tools t
+      WHERE t.provider = 'Por definir'
+        AND NOT EXISTS (SELECT 1 FROM tools.assignments a WHERE a.tool_id = t.id)
     `);
 
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS licenses.tool_assignments (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        employee_license_id UUID NOT NULL REFERENCES licenses.employee_licenses(id),
-        tool_id UUID NOT NULL REFERENCES licenses.tool_catalog(id),
-        has_access BOOLEAN DEFAULT false,
-        is_admin BOOLEAN DEFAULT false,
-        granted_at TIMESTAMPTZ,
-        revoked_at TIMESTAMPTZ,
-        notes TEXT
-      )
+      UPDATE tools.tools SET active_assignments_count = 0, total_cost_calculated = 0
+    `);
+
+    await queryRunner.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.schemata
+          WHERE schema_name = 'licenses_deprecated_20260919'
+        ) THEN
+          ALTER SCHEMA licenses_deprecated_20260919 RENAME TO licenses;
+        END IF;
+      END $$
     `);
   }
 }
