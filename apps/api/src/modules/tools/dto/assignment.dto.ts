@@ -69,6 +69,30 @@ export class CreateAssignerDto {
   displayName?: string;
 }
 
+export class QueryCostReportDto {
+  /** Filtra por assignment_date, que es la columna de alta de la asignación. */
+  @IsOptional()
+  @IsDateString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsDateString()
+  dateTo?: string;
+
+  @IsOptional()
+  @IsString()
+  area?: string;
+
+  @IsOptional()
+  @IsUUID()
+  toolId?: string;
+
+  /** 'MXN' | 'USD'; omitido = ambas. */
+  @IsOptional()
+  @IsIn(['MXN', 'USD'])
+  currency?: string;
+}
+
 export class QueryAssignmentsDto {
   @IsOptional()
   @IsUUID()
