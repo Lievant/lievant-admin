@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import type { EmployeeEquipmentItem, EmployeeLicenseDetail } from '@/lib/api';
+import type { AssignmentRecord, EmployeeEquipmentItem } from '@/lib/api';
 import { statusBadgeStyle, typeIcon } from '@/app/(dashboard)/transformacion/inventario/constants';
 import { NoPermissions } from '@/components/ui/no-permissions';
 
@@ -12,23 +12,16 @@ interface EquipmentLicensesTabProps {
   canViewLicencias: boolean;
 }
 
-function ToolBadge({ hasAccess, isAdmin }: { hasAccess: boolean; isAdmin: boolean }) {
-  if (!hasAccess) {
+function ToolBadge({ active }: { active: boolean }) {
+  if (!active) {
     return (
-      <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+      <span title="Revocada" className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-400">
         ✕
       </span>
     );
   }
-  if (isAdmin) {
-    return (
-      <span title="Admin / superadmin" className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-        👑
-      </span>
-    );
-  }
   return (
-    <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+    <span title="Activa" className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
       ✓
     </span>
   );
@@ -83,43 +76,39 @@ function EquipmentColumn({ employeeId }: { employeeId: string }) {
 }
 
 function LicensesColumn({ employeeId }: { employeeId: string }) {
-  const [license, setLicense] = useState<EmployeeLicenseDetail | null | undefined>(undefined);
+  const [assignments, setAssignments] = useState<AssignmentRecord[] | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/licenses/by-employee/${employeeId}`)
-      .then((res) => (res.ok ? (res.json() as Promise<EmployeeLicenseDetail>) : null))
-      .then((data) => { if (!cancelled) setLicense(data); })
-      .catch(() => { if (!cancelled) setLicense(null); });
+    // Lee del módulo de Asignaciones: el Maestro de Licenciamientos se retiró.
+    // El usuario de AD y la responsiva vivían solo en aquel schema y no tienen
+    // equivalente aquí, así que ya no se muestran.
+    fetch(`/api/assignments/by-employee/${employeeId}`)
+      .then((res) => (res.ok ? (res.json() as Promise<AssignmentRecord[]>) : null))
+      .then((data) => { if (!cancelled) setAssignments(data); })
+      .catch(() => { if (!cancelled) setAssignments(null); });
     return () => { cancelled = true; };
   }, [employeeId]);
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-slate-700">Licencias de software</h3>
-      {license === undefined ? (
+      <h3 className="text-sm font-semibold text-slate-700">Herramientas y licencias</h3>
+      {assignments === undefined ? (
         <p className="mt-3 text-sm text-slate-400">Cargando…</p>
-      ) : license === null ? (
-        <p className="mt-3 text-sm text-slate-400">Sin información de licencias.</p>
+      ) : assignments === null || assignments.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-400">Sin herramientas asignadas.</p>
       ) : (
-        <>
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">
-            {license.activeDirectoryName && (
-              <span>Usuario AD: <strong className="text-slate-700">{license.activeDirectoryName}</strong></span>
-            )}
-            {license.responsiva && (
-              <span>Responsiva: <strong className="text-slate-700">{license.responsiva}</strong></span>
-            )}
-          </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {license.tools.map((tool) => (
-              <div key={tool.toolId} className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2">
-                <ToolBadge hasAccess={tool.hasAccess} isAdmin={tool.isAdmin} />
-                <span className="text-sm text-slate-700">{tool.toolName}</span>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {assignments.map((a) => (
+            <div key={a.id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2">
+              <ToolBadge active={a.status === 'activo'} />
+              <div className="min-w-0">
+                <p className="truncate text-sm text-slate-700">{a.tool.name}</p>
+                <p className="font-mono text-[11px] text-slate-400">{a.assignmentCode}</p>
               </div>
-            ))}
-          </div>
-        </>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );

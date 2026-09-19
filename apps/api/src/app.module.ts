@@ -12,11 +12,11 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
-import { LicensesModule } from './modules/licenses/licenses.module';
 import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { ToolsModule } from './modules/tools/tools.module';
 import { RoomsModule } from './modules/rooms/rooms.module';
 import { VacationsModule } from './modules/vacations/vacations.module';
 import { VendorsModule } from './modules/vendors/vendors.module';
@@ -63,7 +63,6 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     HelpdeskModule,
     InventoryModule,
     ProjectsModule,
-    LicensesModule,
     IsobotModule,
     VacationsModule,
     MediaModule,
@@ -71,6 +70,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     ExpensesModule,
     CreditCardsModule,
     ReportsModule,
+    ToolsModule,
   ],
 })
 export class AppModule {}

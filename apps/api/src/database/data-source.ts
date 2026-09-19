@@ -18,6 +18,7 @@ import { CatalogLocation } from '../modules/catalogs/entities/catalog-location.e
 import { CatalogMaritalStatus } from '../modules/catalogs/entities/catalog-marital-status.entity';
 import { CatalogModality } from '../modules/catalogs/entities/catalog-modality.entity';
 import { CatalogOrgLevel } from '../modules/catalogs/entities/catalog-org-level.entity';
+import { CatalogToolCategory } from '../modules/catalogs/entities/catalog-tool-category.entity';
 import { Brand } from '../modules/clients/entities/brand.entity';
 import { ClientDocument } from '../modules/clients/entities/client-document.entity';
 import { ClientRecord } from '../modules/clients/entities/client-record.entity';
@@ -44,9 +45,9 @@ import { CatalogExpenseConcept } from '../modules/expenses/entities/catalog-expe
 import { CatalogExpenseType } from '../modules/expenses/entities/catalog-expense-type.entity';
 import { ExpenseLine } from '../modules/expenses/entities/expense-line.entity';
 import { ExpenseReport } from '../modules/expenses/entities/expense-report.entity';
-import { EmployeeLicense } from '../modules/licenses/entities/employee-license.entity';
-import { ToolAssignment } from '../modules/licenses/entities/tool-assignment.entity';
-import { ToolCatalog } from '../modules/licenses/entities/tool-catalog.entity';
+import { Assigner } from '../modules/tools/entities/assigner.entity';
+import { Assignment } from '../modules/tools/entities/assignment.entity';
+import { Tool } from '../modules/tools/entities/tool.entity';
 import { AdAccount } from '../modules/media/entities/ad-account.entity';
 import { ApiCredential } from '../modules/media/entities/api-credential.entity';
 import { MediaBudget } from '../modules/media/entities/budget.entity';
@@ -113,6 +114,7 @@ const AppDataSource = new DataSource({
     CatalogContractSchema,
     CatalogContractType,
     CatalogOrgLevel,
+    CatalogToolCategory,
     CatalogBloodType,
     CatalogMaritalStatus,
     CatalogIndustry,
@@ -129,9 +131,9 @@ const AppDataSource = new DataSource({
     ProjectBillingMilestone,
     ProjectDocument,
     ProjectHistory,
-    ToolCatalog,
-    EmployeeLicense,
-    ToolAssignment,
+    Tool,
+    Assignment,
+    Assigner,
     VacationBalance,
     VacationRequest,
     VacationMovement,

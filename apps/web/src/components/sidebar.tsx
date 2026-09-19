@@ -16,6 +16,7 @@ import {
   HomeIcon,
   IdCardIcon,
   LaptopIcon,
+  LayersIcon,
   LicenseIcon,
   ListIcon,
   LogoutIcon,
@@ -74,6 +75,8 @@ export function Sidebar({ user }: SidebarProps) {
   const showFinanzas = hasSection(user, 'finanzas');
   const showRrhh = hasSection(user, 'rrhh');
   const showTransformacion = hasSection(user, 'transformacion');
+  const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
+  const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
   const showMedios = hasSection(user, 'medios');
   // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
@@ -260,13 +263,24 @@ export function Sidebar({ user }: SidebarProps) {
             </NavLink>
             {pathname.startsWith('/transformacion') && (
               <SubMenu>
-                <NavSubLink
-                  href="/transformacion/licenciamientos"
-                  active={pathname.startsWith('/transformacion/licenciamientos')}
-                >
-                  <LicenseIcon className="h-4 w-4" />
-                  Maestro de Licenciamientos
-                </NavSubLink>
+                {showHerramientasCatalogo && (
+                  <NavSubLink
+                    href="/transformacion/herramientas-catalogo"
+                    active={pathname.startsWith('/transformacion/herramientas-catalogo')}
+                  >
+                    <LayersIcon className="h-4 w-4" />
+                    Catálogo de Herramientas
+                  </NavSubLink>
+                )}
+                {showAsignaciones && (
+                  <NavSubLink
+                    href="/transformacion/asignaciones"
+                    active={pathname.startsWith('/transformacion/asignaciones')}
+                  >
+                    <LicenseIcon className="h-4 w-4" />
+                    Asignaciones
+                  </NavSubLink>
+                )}
                 <NavSubLink
                   href="/transformacion/inventario"
                   // Excluye /colaboradores para que no queden los dos sub-items
