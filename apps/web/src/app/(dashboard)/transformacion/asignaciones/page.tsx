@@ -1,12 +1,12 @@
 import {
   errorKindOf,
-  getAssignmentStats,
+  getCostReport,
   listAssigners,
   listAssignmentAreas,
   listAssignments,
   listTools,
   type AssignmentsPage,
-  type AssignmentStats,
+  type CostReport,
   type ErrorKind,
   type ListAssignmentsParams,
 } from '@/lib/api';
@@ -53,30 +53,48 @@ export default async function AsignacionesPage({ searchParams }: AsignacionesPag
   if (area) query.area = area;
   if (cursor) query.cursor = cursor;
 
-  const [assignmentsResult, statsResult, toolsResult, assignersResult, areasResult] =
+  // El reporte del tab Resumen se precarga con el rango por defecto —del
+  // inicio del año a hoy— y el cliente lo vuelve a pedir al aplicar filtros.
+  const today = new Date();
+  const defaultRange = {
+    dateFrom: `${today.getFullYear()}-01-01`,
+    dateTo: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+  };
+
+  const [assignmentsResult, reportResult, toolsResult, assignersResult, areasResult] =
     await Promise.all([
       safe(listAssignments(query)),
-      safe(getAssignmentStats()),
+      safe(getCostReport(defaultRange)),
       safe(listTools()),
       safe(listAssigners()),
       safe(listAssignmentAreas()),
     ]);
 
   const emptyPage: AssignmentsPage = { data: [], nextCursor: null };
-  const emptyStats: AssignmentStats = {
-    totalActive: 0,
-    totalRevoked: 0,
-    unusedOver60Days: 0,
+  const emptyReport: CostReport = {
+    summary: {
+      totalActiveLicenses: 0,
+      totalMonthlyCostMXN: 0,
+      totalMonthlyCostUSD: 0,
+      totalAnnualCostMXN: 0,
+      totalAnnualCostUSD: 0,
+      costPerEmployeeMXN: 0,
+      costPerEmployeeUSD: 0,
+      totalEmployees: 0,
+      totalTools: 0,
+      totalAreas: 0,
+    },
     byTool: [],
     byArea: [],
-    recentAssignments: [],
+    byEmployee: [],
+    timeline: [],
   };
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
       <AssignmentsScreen
         page={assignmentsResult.data ?? emptyPage}
-        stats={statsResult.data ?? emptyStats}
+        costReport={reportResult.data ?? emptyReport}
         tools={toolsResult.data ?? []}
         assigners={assignersResult.data ?? []}
         areas={areasResult.data ?? []}

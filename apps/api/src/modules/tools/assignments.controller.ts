@@ -20,6 +20,7 @@ import {
   CreateAssignerDto,
   CreateAssignmentDto,
   QueryAssignmentsDto,
+  QueryCostReportDto,
   RevokeAssignmentDto,
   UpdateLastUsedDto,
 } from './dto/assignment.dto';
@@ -34,6 +35,12 @@ export class AssignmentsController {
   @RequirePermission('transformacion', 'asignaciones', 'read')
   getStats() {
     return this.service.getStats();
+  }
+
+  @Get('cost-report')
+  @RequirePermission('transformacion', 'asignaciones', 'read')
+  getCostReport(@Query() query: QueryCostReportDto) {
+    return this.service.getCostReport(query);
   }
 
   @Get('areas')

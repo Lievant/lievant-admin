@@ -8,6 +8,7 @@ import {
   CreateAssignerDto,
   CreateAssignmentDto,
   QueryAssignmentsDto,
+  QueryCostReportDto,
   RevokeAssignmentDto,
 } from './dto/assignment.dto';
 import { Assigner } from './entities/assigner.entity';
@@ -36,6 +37,17 @@ interface AssignmentRow {
   tool_code: string;
   tool_category: string;
 }
+
+/**
+ * Normaliza el costo de una herramienta a mensual según su periodicidad.
+ * 'unico' vale 0: un pago no recurrente no es gasto mensual.
+ */
+const MONTHLY_FACTOR_SQL = `CASE t.billing_period
+  WHEN 'mensual' THEN 1.0
+  WHEN 'trimestral' THEN (1.0/3.0)
+  WHEN 'anual' THEN (1.0/12.0)
+  ELSE 0.0
+END`;
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -352,6 +364,206 @@ export class AssignmentsService {
   }
 
   // -------------------------------------------------------------------------
+  // Reporte de costos
+  // -------------------------------------------------------------------------
+
+  /**
+   * Reporte de costos de licencias.
+   *
+   * El costo de cada asignación sale de la herramienta (tools.tools.unit_cost),
+   * no de la asignación: una asignación no tiene precio propio, hereda el del
+   * contrato. Se normaliza a mensual para poder sumar herramientas con
+   * periodicidades distintas —comparar un cargo anual con uno mensual sin
+   * normalizar da una cifra sin significado—.
+   *
+   * MXN y USD se reportan por separado en todos los cortes: convertirlos a una
+   * sola cifra exigiría un tipo de cambio que el módulo no tiene, y una cifra
+   * mezclada sería falsa.
+   *
+   * Los pagos únicos ('unico') se normalizan a 0: no forman parte del gasto
+   * recurrente y sumarlos inflaría el mensual cada mes que pase.
+   */
+  async getCostReport(query: QueryCostReportDto) {
+    const params: unknown[] = [];
+    const conditions = [`a.deleted_at IS NULL`, `a.status = 'activo'`, `t.deleted_at IS NULL`];
+
+    if (query.dateFrom) conditions.push(`a.assignment_date >= $${params.push(query.dateFrom)}`);
+    if (query.dateTo) conditions.push(`a.assignment_date <= $${params.push(query.dateTo)}`);
+    if (query.area) conditions.push(`e.area = $${params.push(query.area)}`);
+    if (query.toolId) conditions.push(`a.tool_id = $${params.push(query.toolId)}`);
+    if (query.currency) conditions.push(`t.currency = $${params.push(query.currency)}`);
+
+    const where = conditions.join(' AND ');
+    const from = `
+      FROM tools.assignments a
+      JOIN tools.tools t ON t.id = a.tool_id
+      JOIN employees.employee_records e ON e.id = a.employee_id
+      WHERE ${where}
+    `;
+
+    // Factor de normalización a mensual, aplicado en SQL para que todos los
+    // cortes usen exactamente la misma fórmula.
+    const monthly = `(t.unit_cost * ${MONTHLY_FACTOR_SQL})`;
+
+    const [summaryRow] = await this.assignmentsRepo.query(
+      `
+      SELECT COUNT(*)::int AS total_active,
+             COUNT(DISTINCT a.employee_id)::int AS empleados,
+             COUNT(DISTINCT a.tool_id)::int AS herramientas,
+             COUNT(DISTINCT e.area)::int AS areas,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'MXN'), 0)::float AS mensual_mxn,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'USD'), 0)::float AS mensual_usd
+      ${from}
+      `,
+      params,
+    );
+
+    const byTool = await this.assignmentsRepo.query(
+      `
+      SELECT t.tool_code, t.name, t.category, t.provider,
+             t.unit_cost::float AS unit_cost, t.currency, t.billing_period,
+             COUNT(*)::int AS asignaciones,
+             ${monthly}::float AS costo_mensual,
+             (${monthly} * COUNT(*))::float AS costo_total
+      ${from}
+      GROUP BY t.id, t.tool_code, t.name, t.category, t.provider,
+               t.unit_cost, t.currency, t.billing_period
+      ORDER BY costo_total DESC, t.name ASC
+      `,
+      params,
+    );
+
+    const byArea = await this.assignmentsRepo.query(
+      `
+      SELECT COALESCE(e.area, 'Sin área') AS area,
+             COUNT(*)::int AS asignaciones,
+             COUNT(DISTINCT a.employee_id)::int AS empleados,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'MXN'), 0)::float AS mensual_mxn,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'USD'), 0)::float AS mensual_usd
+      ${from}
+      GROUP BY COALESCE(e.area, 'Sin área')
+      ORDER BY mensual_mxn DESC, area ASC
+      `,
+      params,
+    );
+
+    const byEmployee = await this.assignmentsRepo.query(
+      `
+      SELECT e.id AS employee_id, e.full_name, e.area, e.position,
+             COUNT(*)::int AS asignaciones,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'MXN'), 0)::float AS mensual_mxn,
+             COALESCE(SUM(${monthly}) FILTER (WHERE t.currency = 'USD'), 0)::float AS mensual_usd,
+             ARRAY_AGG(t.name ORDER BY t.name) AS herramientas
+      ${from}
+      GROUP BY e.id, e.full_name, e.area, e.position
+      ORDER BY mensual_mxn DESC, e.full_name ASC
+      `,
+      params,
+    );
+
+    // La línea de tiempo no lleva el filtro de estado: cuenta altas y bajas del
+    // periodo, y una asignación revocada sigue siendo un alta de su mes.
+    const timelineParams: unknown[] = [];
+    const timelineConds = ['a.deleted_at IS NULL'];
+    if (query.dateFrom) {
+      timelineConds.push(`a.assignment_date >= $${timelineParams.push(query.dateFrom)}`);
+    }
+    if (query.dateTo) {
+      timelineConds.push(`a.assignment_date <= $${timelineParams.push(query.dateTo)}`);
+    }
+    if (query.area) timelineConds.push(`e.area = $${timelineParams.push(query.area)}`);
+    if (query.toolId) timelineConds.push(`a.tool_id = $${timelineParams.push(query.toolId)}`);
+    if (query.currency) timelineConds.push(`t.currency = $${timelineParams.push(query.currency)}`);
+
+    const timeline = await this.assignmentsRepo.query(
+      `
+      WITH eventos AS (
+        SELECT TO_CHAR(a.assignment_date, 'YYYY-MM') AS mes, 1 AS alta, 0 AS baja
+        FROM tools.assignments a
+        JOIN tools.tools t ON t.id = a.tool_id
+        JOIN employees.employee_records e ON e.id = a.employee_id
+        WHERE ${timelineConds.join(' AND ')}
+        UNION ALL
+        SELECT TO_CHAR(a.revocation_date, 'YYYY-MM') AS mes, 0 AS alta, 1 AS baja
+        FROM tools.assignments a
+        JOIN tools.tools t ON t.id = a.tool_id
+        JOIN employees.employee_records e ON e.id = a.employee_id
+        WHERE ${timelineConds.join(' AND ')} AND a.revocation_date IS NOT NULL
+      )
+      SELECT mes,
+             SUM(alta)::int AS altas,
+             SUM(baja)::int AS bajas
+      FROM eventos
+      WHERE mes IS NOT NULL
+      GROUP BY mes
+      ORDER BY mes ASC
+      `,
+      timelineParams,
+    );
+
+    const empleados = summaryRow?.empleados ?? 0;
+    const mensualMxn = round2(summaryRow?.mensual_mxn ?? 0);
+    const mensualUsd = round2(summaryRow?.mensual_usd ?? 0);
+
+    // netActive es acumulado: altas menos bajas hasta ese mes inclusive.
+    let acumulado = 0;
+    const timelineDto = timeline.map((r: Record<string, unknown>) => {
+      acumulado += (r.altas as number) - (r.bajas as number);
+      return {
+        month: r.mes as string,
+        newAssignments: r.altas as number,
+        revocations: r.bajas as number,
+        netActive: acumulado,
+      };
+    });
+
+    return {
+      summary: {
+        totalActiveLicenses: summaryRow?.total_active ?? 0,
+        totalMonthlyCostMXN: mensualMxn,
+        totalMonthlyCostUSD: mensualUsd,
+        totalAnnualCostMXN: round2(mensualMxn * 12),
+        totalAnnualCostUSD: round2(mensualUsd * 12),
+        costPerEmployeeMXN: empleados ? round2(mensualMxn / empleados) : 0,
+        costPerEmployeeUSD: empleados ? round2(mensualUsd / empleados) : 0,
+        totalEmployees: empleados,
+        totalTools: summaryRow?.herramientas ?? 0,
+        totalAreas: summaryRow?.areas ?? 0,
+      },
+      byTool: byTool.map((r: Record<string, unknown>) => ({
+        toolCode: r.tool_code as string,
+        toolName: r.name as string,
+        category: r.category as string,
+        provider: r.provider as string,
+        activeAssignments: r.asignaciones as number,
+        unitCost: round2(r.unit_cost as number),
+        currency: r.currency as string,
+        billingPeriod: r.billing_period as string,
+        monthlyCost: round2(r.costo_mensual as number),
+        totalCost: round2(r.costo_total as number),
+      })),
+      byArea: byArea.map((r: Record<string, unknown>) => ({
+        area: r.area as string,
+        activeAssignments: r.asignaciones as number,
+        employees: r.empleados as number,
+        totalMonthlyCostMXN: round2(r.mensual_mxn as number),
+        totalMonthlyCostUSD: round2(r.mensual_usd as number),
+      })),
+      byEmployee: byEmployee.map((r: Record<string, unknown>) => ({
+        employeeId: r.employee_id as string,
+        fullName: r.full_name as string,
+        area: (r.area as string) ?? null,
+        position: (r.position as string) ?? null,
+        activeAssignments: r.asignaciones as number,
+        totalMonthlyCostMXN: round2(r.mensual_mxn as number),
+        totalMonthlyCostUSD: round2(r.mensual_usd as number),
+        tools: (r.herramientas as string[]) ?? [],
+      })),
+      timeline: timelineDto,
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Catálogo de asignadores
   // -------------------------------------------------------------------------
 
@@ -498,6 +710,10 @@ function toDateString(value: unknown): string {
     return `${y}-${m}-${d}`;
   }
   return String(value).slice(0, 10);
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function todayISO(): string {
