@@ -141,6 +141,25 @@ export class InventoryController {
     return this.service.getReportByArea();
   }
 
+  // Selector de equipo del formulario de ticket. Sin @RequirePermission: es de
+  // autoservicio, igual que /equipment/my. Declarado antes de /:id.
+  @Get('equipment/search')
+  async searchEquipment(
+    @CurrentUser() user: User,
+    @Query('q') q?: string,
+    @Query('assignedTo') assignedTo?: string,
+  ) {
+    // 'me' se resuelve contra el expediente del usuario en sesión, para que el
+    // frontend no tenga que conocer su employeeId.
+    const employeeId =
+      assignedTo === 'me' ? await this.service.findEmployeeIdByEmail(user.email) : assignedTo;
+
+    // Pidió sus equipos y no tiene expediente: mejor vacío que la lista de todos.
+    if (assignedTo === 'me' && !employeeId) return [];
+
+    return this.service.searchEquipment(q, employeeId ?? undefined);
+  }
+
   // Declarado antes de /:id para que no sea interceptado como UUID
   @Get('equipment/my')
   getMyEquipment(@CurrentUser() user: User) {

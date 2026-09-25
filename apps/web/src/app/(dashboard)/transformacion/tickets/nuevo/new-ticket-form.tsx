@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import type { HelpdeskCategorySummary, HelpdeskSubcategorySummary, TicketAssignee, TicketImpact } from '@/lib/api';
+import { EquipmentPicker } from './equipment-picker';
 import { createTicketAction } from './actions';
 
 const CATEGORY_PLACEHOLDERS: Record<string, string> = {
@@ -350,20 +351,15 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
         </div>
       )}
 
-      {/* ID Equipo (siempre opcional) */}
+      {/* Equipo (siempre opcional) */}
       <div>
-        <label className="mb-1.5 block text-sm font-medium text-slate-700">
-          ID del equipo
-        </label>
-        <input
-          type="text"
+        <label className="mb-1.5 block text-sm font-medium text-slate-700">Equipo</label>
+        <EquipmentPicker
           value={form.equipmentId}
-          onChange={(e) => set('equipmentId', e.target.value)}
-          placeholder="Ej: M080, E009…"
-          className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-black focus:outline-none"
+          onChange={(legacyId) => set('equipmentId', legacyId)}
         />
         <p className="mt-1 text-xs text-slate-400">
-          Puedes encontrarlo en la etiqueta de tu equipo. Próximamente podrás seleccionarlo desde el inventario.
+          Tus equipos aparecen arriba; si el problema es de otro, búscalo por ID, marca o modelo.
         </p>
       </div>
 
