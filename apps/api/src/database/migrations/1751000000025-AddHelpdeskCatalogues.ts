@@ -57,30 +57,23 @@ export class AddHelpdeskCatalogues1751000000025 implements MigrationInterface {
       WHERE priority_base IS NULL OR priority_base = ''
     `);
 
-    // Un slug repetido rompería la resolución de prioridad y el árbol de
-    // subcategorías; el índice lo impide de aquí en adelante.
-    await queryRunner.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_helpdesk_categories_slug
-        ON helpdesk.categories(slug)
-    `);
-
     // Dos subcategorías con el mismo nombre dentro de la misma categoría son
-    // indistinguibles en el formulario de ticket.
+    // indistinguibles en el formulario de ticket. Este índice es además el que
+    // sirve los filtros por category_slug: al ser btree, su prefijo izquierdo
+    // cubre esa consulta sin necesidad de un segundo índice.
+    //
+    // No se crea índice único sobre categories(slug): la columna ya se declaró
+    // UNIQUE al crear la tabla y Postgres mantiene categories_slug_key. Uno
+    // nuevo sería un duplicado exacto, con su costo de escritura y cero
+    // beneficio.
     await queryRunner.query(`
       CREATE UNIQUE INDEX IF NOT EXISTS uq_helpdesk_subcategories_cat_name
         ON helpdesk.subcategories(category_slug, name)
     `);
-
-    await queryRunner.query(`
-      CREATE INDEX IF NOT EXISTS idx_helpdesk_subcategories_category
-        ON helpdesk.subcategories(category_slug)
-    `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS helpdesk.idx_helpdesk_subcategories_category`);
     await queryRunner.query(`DROP INDEX IF EXISTS helpdesk.uq_helpdesk_subcategories_cat_name`);
-    await queryRunner.query(`DROP INDEX IF EXISTS helpdesk.uq_helpdesk_categories_slug`);
 
     await queryRunner.query(`
       DELETE FROM auth.role_permissions
