@@ -397,7 +397,12 @@ export class InventoryService {
     const item = await this.equipmentRepo.findOne({ where: { id: equipmentId } });
     if (!item) throw new NotFoundException(`Equipo ${equipmentId} no encontrado`);
 
-    const keys = [item.legacyId, item.displayId].filter((v): v is string => Boolean(v));
+    // Claves normalizadas: la captura del ticket viene con espacios al inicio
+    // (' AD043') y en cualquier caja, así que se compara en minúsculas y sin
+    // bordes en los dos lados.
+    const keys = [item.legacyId, item.displayId]
+      .filter((v): v is string => Boolean(v))
+      .map((v) => v.trim().toLowerCase());
     if (keys.length === 0) return { legacyId: null, displayId: item.displayId, tickets: [] };
 
     const rows = await this.equipmentRepo.query(
@@ -417,10 +422,16 @@ export class InventoryService {
       FROM helpdesk.tickets t
       LEFT JOIN helpdesk.ticket_assignees a ON a.id = t.assignee_id
       WHERE t.deleted_at IS NULL
-        AND t.equipment_id = ANY($1::text[])
+        AND (
+          btrim(lower(t.equipment_id)) = ANY($1::text[])
+          -- Captura libre del tipo 'Pantalla Sharp — TEC-2025-102': se extrae
+          -- el folio embebido. substring() devuelve la primera coincidencia o
+          -- NULL; regexp_matches() no sirve aquí porque retorna un conjunto.
+          OR substring(upper(t.equipment_id) from 'TEC-[0-9]{4}-[0-9]+') = $2
+        )
       ORDER BY t.requested_at DESC
       `,
-      [keys],
+      [keys, item.displayId.toUpperCase()],
     );
 
     return {
@@ -583,6 +594,49 @@ export class InventoryService {
   // -------------------------------------------------------------------------
   // Equipos del usuario autenticado
   // -------------------------------------------------------------------------
+
+  /**
+   * Búsqueda de equipos para el selector del formulario de ticket.
+   *
+   * Sin permiso de inventario: cualquier colaborador necesita poder encontrar
+   * su propio equipo al levantar un ticket. Por eso también se limita a 10
+   * resultados y no expone costo, responsiva ni asignado.
+   */
+  async searchEquipment(q?: string, assignedToEmployeeId?: string) {
+    const qb = this.equipmentRepo
+      .createQueryBuilder('e')
+      .where('e.deleted_at IS NULL')
+      .orderBy('e.display_id', 'DESC')
+      .limit(10);
+
+    if (assignedToEmployeeId) {
+      qb.andWhere('e.assigned_to_employee_id = :emp', { emp: assignedToEmployeeId });
+    }
+
+    const term = q?.trim();
+    if (term) {
+      qb.andWhere(
+        '(e.legacy_id ILIKE :s OR e.display_id ILIKE :s OR e.brand ILIKE :s OR e.model ILIKE :s)',
+        { s: `%${term}%` },
+      );
+    }
+
+    const items = await qb.getMany();
+    return items.map((e) => ({
+      id: e.id,
+      displayId: e.displayId,
+      legacyId: e.legacyId,
+      brand: e.brand,
+      model: e.model,
+      type: e.equipmentType,
+    }));
+  }
+
+  /** Id de expediente del usuario en sesión; null si no tiene. */
+  async findEmployeeIdByEmail(email: string): Promise<string | null> {
+    const employee = await this.employeesRepo.findOne({ where: { corporateEmail: email } });
+    return employee?.id ?? null;
+  }
 
   async getMyEquipment(userEmail: string) {
     const employee = await this.employeesRepo.findOne({

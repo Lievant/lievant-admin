@@ -3174,6 +3174,30 @@ export function getEquipmentTickets(id: string): Promise<EquipmentTicketsRespons
   return apiFetchWithRetry<EquipmentTicketsResponse>(`/inventory/equipment/${id}/tickets`);
 }
 
+export interface EquipmentSearchItem {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  brand: string | null;
+  model: string | null;
+  type: string;
+}
+
+/**
+ * Buscador del selector de equipo del formulario de ticket. `assignedTo: 'me'`
+ * lo resuelve el API contra el expediente del usuario en sesión.
+ */
+export function searchEquipment(params: {
+  q?: string;
+  assignedTo?: string;
+}): Promise<EquipmentSearchItem[]> {
+  const qs = new URLSearchParams();
+  if (params.q) qs.set('q', params.q);
+  if (params.assignedTo) qs.set('assignedTo', params.assignedTo);
+  const s = qs.toString();
+  return apiFetchWithRetry<EquipmentSearchItem[]>(`/inventory/equipment/search${s ? `?${s}` : ''}`);
+}
+
 export interface EquipmentBrandItem {
   id: string;
   name: string;
