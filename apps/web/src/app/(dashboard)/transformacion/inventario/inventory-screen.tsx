@@ -37,6 +37,32 @@ interface InventoryScreenProps {
   catalogs: Catalogs;
 }
 
+const WARRANTY_STYLE: Record<string, string> = {
+  vigente: 'bg-emerald-100 text-emerald-700',
+  por_vencer: 'bg-amber-100 text-amber-700',
+  vencida: 'bg-red-100 text-red-700',
+};
+
+const WARRANTY_LABEL: Record<string, string> = {
+  vigente: 'Vigente',
+  por_vencer: 'Por vencer',
+  vencida: 'Vencida',
+};
+
+/**
+ * Solo se pinta si el equipo tiene fecha de vencimiento: la mayoría del
+ * inventario no registra garantía y una columna llena de "sin garantía" no
+ * comunica nada.
+ */
+function WarrantyBadge({ status }: { status?: string }) {
+  if (!status || status === 'sin_garantia') return <span className="text-slate-300">—</span>;
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${WARRANTY_STYLE[status] ?? ''}`}>
+      {WARRANTY_LABEL[status] ?? status}
+    </span>
+  );
+}
+
 function StatCard({ label, value, accent }: { label: string; value: number; accent?: string }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -86,6 +112,7 @@ export function InventoryScreen({
 }: InventoryScreenProps) {
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
+  const [warrantyFilter, setWarrantyFilter] = useState<string | null>(null);
 
   useEffect(() => { setSearch(filters.search); }, [filters.search]);
 
@@ -151,6 +178,15 @@ export function InventoryScreen({
   }
 
   const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
+
+  // Filtro de garantía en cliente: el badge ya viene en cada fila, así que no
+  // hace falta ir al servidor para acotar lo que se está viendo.
+  const warrantyNeedsAttention = page.data.filter(
+    (e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida',
+  ).length;
+  const visible = warrantyFilter
+    ? sorted.filter((e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida')
+    : sorted;
   // La primera página es exactamente la que no lleva cursor.
   const isFirstPage = !cursor;
 
@@ -188,6 +224,25 @@ export function InventoryScreen({
         <StatCard label="Asignados" value={stats.assigned} accent="text-blue-600" />
         <StatCard label="Disponibles" value={stats.available} accent="text-green-600" />
         <StatCard label="% Asignado" value={stats.assignedPercent} accent="text-black" />
+        {/* El conteo sale de la página cargada, no de un endpoint aparte: el
+            filtro que activa también opera sobre lo que ya está en pantalla. */}
+        <button
+          type="button"
+          onClick={() => setWarrantyFilter(warrantyFilter ? null : 'atencion')}
+          className={`rounded-xl border p-4 text-left transition ${
+            warrantyFilter
+              ? 'border-amber-300 bg-amber-50'
+              : 'border-slate-200 bg-white hover:border-amber-300'
+          }`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Garantías por vencer (30 días)
+          </p>
+          <p className="mt-1 text-2xl font-bold text-amber-600">{warrantyNeedsAttention}</p>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {warrantyFilter ? 'Mostrando solo estas · clic para quitar' : 'Clic para filtrar'}
+          </p>
+        </button>
       </div>
 
       {/* Filtros */}
@@ -262,18 +317,19 @@ export function InventoryScreen({
               <SortableHeader label="Área" sortKey="area" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Ubicación" sortKey="location" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Estatus" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              <th className="px-4 py-3">Garantía</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {sorted.length === 0 ? (
+            {visible.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
                   No se encontraron equipos con los filtros aplicados.
                 </td>
               </tr>
             ) : (
-              sorted.map((item) => (
+              visible.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <Link
@@ -318,6 +374,9 @@ export function InventoryScreen({
                     <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeStyle(item.status)}`}>
                       {item.status}
                     </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <WarrantyBadge status={item.warrantyStatus} />
                   </td>
                   <td className="px-4 py-3">
                     <Link

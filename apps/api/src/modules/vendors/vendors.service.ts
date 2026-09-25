@@ -78,6 +78,29 @@ export class VendorsService {
    * en un solo agregado, de modo que filtrar por docStatus va en el WHERE y no
    * obliga a materializar el catálogo completo.
    */
+  /**
+   * Buscador para selectores externos. Devuelve un máximo de 10 y solo los
+   * campos que el selector muestra: nombre y RFC.
+   */
+  async search(q?: string) {
+    const qb = this.vendorsRepository
+      .createQueryBuilder('v')
+      .select(['v.id', 'v.name', 'v.rfc'])
+      .where('v.deleted_at IS NULL')
+      .orderBy('v.name', 'ASC')
+      .limit(10);
+
+    const term = q?.trim();
+    if (term) {
+      qb.andWhere('(v.name ILIKE :s OR v.trade_name ILIKE :s OR v.rfc ILIKE :s)', {
+        s: `%${term}%`,
+      });
+    }
+
+    const rows = await qb.getMany();
+    return rows.map((v: Vendor) => ({ id: v.id, name: v.name, rfc: v.rfc }));
+  }
+
   async findAll(query: QueryVendorsDto): Promise<PaginatedVendors> {
     const limit = query.limit ?? DEFAULT_VENDORS_LIMIT;
 

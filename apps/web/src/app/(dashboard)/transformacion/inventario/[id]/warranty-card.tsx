@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { EquipmentDetail, WarrantyStatus } from '@/lib/api';
 
@@ -22,6 +23,16 @@ const STATUS_STYLE: Record<WarrantyStatus, string> = {
   vencida: 'bg-red-100 text-red-700',
   sin_garantia: 'bg-slate-100 text-slate-600',
 };
+
+/** Días que faltan para el vencimiento; negativo si ya pasó. */
+function daysUntil(value: string | null): number | null {
+  if (!value) return null;
+  const [y, m, d] = value.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(y, m - 1, d).getTime() - today.getTime()) / 86_400_000);
+}
 
 /** 'YYYY-MM-DD' partido a mano: new Date() lo leería en UTC y correría el día. */
 function formatDate(value: string | null): string {
@@ -51,6 +62,7 @@ export function WarrantyCard({ equipment, canWrite }: WarrantyCardProps) {
   const [error, setError] = useState<string | null>(null);
 
   const status = equipment.warrantyStatus ?? 'sin_garantia';
+  const days = daysUntil(equipment.warrantyExpiryDate);
 
   async function handleUpload(file: File) {
     setUploading(true);
@@ -88,9 +100,35 @@ export function WarrantyCard({ equipment, canWrite }: WarrantyCardProps) {
       </div>
 
       <dl className="mt-4 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-3">
-        <Field label="Proveedor" value={equipment.warrantyProviderName} />
-        <Field label="Vencimiento" value={formatDate(equipment.warrantyExpiryDate)} />
-        <Field label="Orden de compra" value={equipment.warrantyPurchaseOrder} />
+        <Field
+          label="Proveedor"
+          value={
+            equipment.warrantyProviderId && equipment.warrantyProviderName ? (
+              <Link
+                href={`/finanzas/proveedores/${equipment.warrantyProviderId}`}
+                className="text-navy underline hover:opacity-80"
+              >
+                {equipment.warrantyProviderName}
+              </Link>
+            ) : null
+          }
+        />
+        <Field
+          label="Vencimiento"
+          value={
+            equipment.warrantyExpiryDate ? (
+              <>
+                {formatDate(equipment.warrantyExpiryDate)}
+                {days !== null && (
+                  <span className="ml-2 text-xs text-slate-400">
+                    {days < 0 ? `hace ${Math.abs(days)} días` : `en ${days} días`}
+                  </span>
+                )}
+              </>
+            ) : null
+          }
+        />
+        <Field label="No. de OC" value={equipment.warrantyPurchaseOrder} />
         <div className="col-span-2 sm:col-span-3">
           <Field label="Notas" value={equipment.warrantyNotes} />
         </div>

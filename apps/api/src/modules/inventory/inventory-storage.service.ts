@@ -4,6 +4,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 /** Una factura de garantía es un PDF o el escaneo/foto del comprobante. */
+/** Tope de 20 MB: los escaneos de factura con varias hojas pesan. */
+export const MAX_WARRANTY_FILE_BYTES = 20 * 1024 * 1024;
+
 export const ALLOWED_WARRANTY_MIME_TYPES = [
   'application/pdf',
   'image/jpeg',
