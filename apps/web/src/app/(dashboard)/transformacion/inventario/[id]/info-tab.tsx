@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { EquipmentBrandCatalog, EquipmentDetail, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
+import { WarrantyCard } from './warranty-card';
 import { BrandSelect } from '../brand-select';
 import { formatCurrency, formatDate } from '../constants';
 
@@ -98,7 +99,8 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
 
   if (!editing) {
     return (
-      <div>
+      <div className="space-y-4">
+        <div>
         <div className="flex justify-end">
           <button
             onClick={() => setEditing(true)}
@@ -136,6 +138,8 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
             <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{equipment.notes}</dd>
           </div>
         )}
+        </div>
+        <WarrantyCard equipment={equipment} canWrite />
       </div>
     );
   }

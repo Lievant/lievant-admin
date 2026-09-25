@@ -7,10 +7,31 @@ import { CreateEquipmentDto } from './dto/create-equipment.dto';
 import { QueryEquipmentDto } from './dto/query-equipment.dto';
 import { UpdateEquipmentDto } from './dto/update-equipment.dto';
 import { EquipmentBrand } from './entities/equipment-brand.entity';
+import { InventoryStorageService } from './inventory-storage.service';
 import { EquipmentHistory } from './entities/equipment-history.entity';
 import { EquipmentStatus } from './entities/equipment-status.entity';
 import { EquipmentType } from './entities/equipment-type.entity';
 import { Equipment } from './entities/equipment.entity';
+
+/** Ventana de aviso previo al vencimiento de una garantía. */
+const WARRANTY_WARNING_DAYS = 30;
+
+export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+/**
+ * Las columnas DATE llegan como Date desde pg. Se formatea en local, no con
+ * toISOString(), que convierte a UTC y en México corre la fecha un día atrás.
+ */
+function toDateString(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) {
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return String(value).slice(0, 10);
+}
 
 @Injectable()
 export class InventoryService {
@@ -19,6 +40,7 @@ export class InventoryService {
     @InjectRepository(EquipmentHistory) private readonly historyRepo: Repository<EquipmentHistory>,
     @InjectRepository(EquipmentType) private readonly typesRepo: Repository<EquipmentType>,
     @InjectRepository(EquipmentBrand) private readonly brandsRepo: Repository<EquipmentBrand>,
+    private readonly storage: InventoryStorageService,
     @InjectRepository(EquipmentStatus) private readonly statusesRepo: Repository<EquipmentStatus>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
   ) {}
@@ -114,11 +136,15 @@ export class InventoryService {
         ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString('base64url')
         : null;
 
+    // El listado lleva el estado de garantía —es un cálculo en memoria— pero no
+    // la URL firmada de la factura: firmar una por fila serían 20 llamadas a S3
+    // por página para un dato que solo se usa en el detalle.
     const enriched = data.map((item) => ({
       ...item,
       assignedEmployeeName: item.assignedEmployee?.fullName ?? null,
       assignedEmployeeEmail: item.assignedEmployee?.corporateEmail ?? null,
       assignedEmployeePosition: item.assignedEmployee?.position ?? null,
+      warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
     }));
 
     return { data: enriched, nextCursor, total };
@@ -200,18 +226,123 @@ export class InventoryService {
   // Detalle por id
   // -------------------------------------------------------------------------
 
+  /**
+   * Estado de la garantía a partir de su vencimiento.
+   *
+   * La fecha se compara a medianoche local: una garantía que vence hoy sigue
+   * siendo reclamable hoy, y con new Date() a secas caería en 'vencida' desde
+   * el primer minuto del día.
+   */
+  private warrantyStatus(expiry: string | null): WarrantyStatus {
+    if (!expiry) return 'sin_garantia';
+
+    const [y, m, d] = expiry.slice(0, 10).split('-').map(Number);
+    if (!y || !m || !d) return 'sin_garantia';
+
+    const target = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+    if (days < 0) return 'vencida';
+    if (days <= WARRANTY_WARNING_DAYS) return 'por_vencer';
+    return 'vigente';
+  }
+
+  /**
+   * Añade a un equipo los datos derivados de garantía: nombre del proveedor,
+   * URL firmada de la factura y estado calculado.
+   */
+  private async withWarranty<T extends Equipment>(item: T) {
+    const [provider, invoiceUrl] = await Promise.all([
+      item.warrantyProviderId
+        ? this.equipmentRepo.query(`SELECT name FROM vendors.vendors WHERE id = $1`, [
+            item.warrantyProviderId,
+          ])
+        : Promise.resolve([]),
+      item.warrantyInvoiceS3Key
+        ? this.storage.getPresignedUrl(item.warrantyInvoiceS3Key)
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      ...item,
+      warrantyProviderName: (provider as { name: string }[])[0]?.name ?? null,
+      warrantyInvoiceUrl: invoiceUrl,
+      warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
+    };
+  }
+
   async findById(id: string) {
     const item = await this.equipmentRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException(`Equipo ${id} no encontrado`);
 
-    const [history, employee] = await Promise.all([
+    const [history, employee, enriched] = await Promise.all([
       this.historyRepo.find({ where: { equipmentId: id }, order: { createdAt: 'ASC' } }),
       item.assignedToEmployeeId
         ? this.employeesRepo.findOne({ where: { id: item.assignedToEmployeeId } })
         : Promise.resolve(null),
+      this.withWarranty(item),
     ]);
 
-    return { ...item, history, assignedEmployee: employee };
+    return { ...enriched, history, assignedEmployee: employee };
+  }
+
+  /**
+   * Equipos cuya garantía vence en los próximos 30 días. No incluye las ya
+   * vencidas: el reporte es para actuar a tiempo, y mezclarlas escondería lo
+   * que todavía se puede renovar.
+   */
+  async getWarrantyExpiring() {
+    const rows = await this.equipmentRepo.query(
+      `
+      SELECT e.id,
+             e.display_id,
+             e.legacy_id,
+             e.brand,
+             e.model,
+             e.equipment_type,
+             e.warranty_expiry_date,
+             (e.warranty_expiry_date - CURRENT_DATE)::int AS days_until_expiry,
+             emp.full_name AS assigned_to,
+             v.name AS provider_name
+      FROM inventory.equipment e
+      LEFT JOIN employees.employee_records emp ON emp.id = e.assigned_to_employee_id
+      LEFT JOIN vendors.vendors v ON v.id = e.warranty_provider_id
+      WHERE e.deleted_at IS NULL
+        AND e.warranty_expiry_date IS NOT NULL
+        AND e.warranty_expiry_date >= CURRENT_DATE
+        AND e.warranty_expiry_date <= CURRENT_DATE + $1::int
+      ORDER BY e.warranty_expiry_date ASC
+      `,
+      [WARRANTY_WARNING_DAYS],
+    );
+
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      displayId: r.display_id as string,
+      legacyId: (r.legacy_id as string) ?? null,
+      brand: (r.brand as string) ?? null,
+      model: (r.model as string) ?? null,
+      equipmentType: r.equipment_type as string,
+      assignedTo: (r.assigned_to as string) ?? null,
+      warrantyProviderName: (r.provider_name as string) ?? null,
+      warrantyExpiryDate: toDateString(r.warranty_expiry_date),
+      daysUntilExpiry: r.days_until_expiry as number,
+    }));
+  }
+
+  /** Guarda la factura subida y devuelve el equipo ya enriquecido. */
+  async saveWarrantyInvoice(id: string, file: Express.Multer.File) {
+    const item = await this.equipmentRepo.findOne({ where: { id } });
+    if (!item) throw new NotFoundException(`Equipo ${id} no encontrado`);
+
+    const key = await this.storage.uploadWarrantyInvoice(file, id);
+    item.warrantyInvoiceS3Key = key;
+    item.warrantyInvoiceOriginalName = file.originalname;
+    await this.equipmentRepo.save(item);
+
+    return this.withWarranty(item);
   }
 
   // -------------------------------------------------------------------------
@@ -284,6 +415,10 @@ export class InventoryService {
       status: dto.status ?? (dto.assignedToEmployeeId ? 'Asignado' : 'Disponible'),
       location: dto.location ?? null,
       area: dto.area ?? null,
+      warrantyProviderId: dto.warrantyProviderId ?? null,
+      warrantyExpiryDate: dto.warrantyExpiryDate ?? null,
+      warrantyPurchaseOrder: dto.warrantyPurchaseOrder ?? null,
+      warrantyNotes: dto.warrantyNotes ?? null,
       purchaseDate: dto.purchaseDate ?? null,
       purchaseValue: dto.purchaseValue ?? 0,
       notes: dto.notes ?? null,
@@ -348,6 +483,16 @@ export class InventoryService {
       ...(dto.responsiva !== undefined && { responsiva: dto.responsiva }),
       ...(dto.chargerIncluded !== undefined && { chargerIncluded: dto.chargerIncluded }),
       ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.warrantyProviderId !== undefined && {
+        warrantyProviderId: dto.warrantyProviderId ?? null,
+      }),
+      ...(dto.warrantyExpiryDate !== undefined && {
+        warrantyExpiryDate: dto.warrantyExpiryDate ?? null,
+      }),
+      ...(dto.warrantyPurchaseOrder !== undefined && {
+        warrantyPurchaseOrder: dto.warrantyPurchaseOrder ?? null,
+      }),
+      ...(dto.warrantyNotes !== undefined && { warrantyNotes: dto.warrantyNotes ?? null }),
       ...(dto.location !== undefined && { location: dto.location }),
       ...(dto.area !== undefined && { area: dto.area }),
       ...(dto.purchaseDate !== undefined && { purchaseDate: dto.purchaseDate }),
