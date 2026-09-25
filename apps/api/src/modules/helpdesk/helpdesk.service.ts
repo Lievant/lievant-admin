@@ -11,6 +11,7 @@ import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
+import { UpsertCategoryDto, UpsertSubcategoryDto } from './dto/helpdesk-catalog.dto';
 import { HelpdeskCategory } from './entities/category.entity';
 import { HelpdeskSubcategory } from './entities/subcategory.entity';
 import { Ticket } from './entities/ticket.entity';
@@ -18,17 +19,6 @@ import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
-
-const CATEGORY_PRIORITY: Record<string, string> = {
-  conectividad: 'P1',
-  infraestructura: 'P1',
-  seguridad: 'P1',
-  equipos: 'P2',
-  accesos: 'P3',
-  software: 'P3',
-  correo: 'P3',
-  mejora: 'P4',
-};
 
 // Seconds per SLA hour-limit (for inline CASE expression)
 const SLA_SECONDS: Record<string, number> = { P1: 14400, P2: 28800, P3: 86400, P4: 259200 };
@@ -233,7 +223,12 @@ export class HelpdeskService {
     const seq = last ? parseInt(last.displayId.split('-').at(2) ?? '0', 10) + 1 : 1;
     const displayId = `TIC-${year}-${String(seq).padStart(3, '0')}`;
 
-    const priority = CATEGORY_PRIORITY[dto.category] ?? 'P3';
+    // La prioridad sale de helpdesk.categories.priority_base, no de un
+    // diccionario en código: así editar la categoría desde /admin sí afecta a
+    // los tickets nuevos. El diccionario anterior además no contemplaba
+    // 'altas_bajas', que caía a P3 teniendo P2 en la tabla.
+    const categoryRow = await this.categoriesRepo.findOne({ where: { slug: dto.category } });
+    const priority = categoryRow?.priorityBase ?? 'P3';
     const requesterName = employee?.fullName ?? user.name;
     const requesterArea = employee?.area ?? employee?.division ?? null;
 
@@ -562,6 +557,143 @@ export class HelpdeskService {
       where: { categorySlug: slug, isActive: true },
       order: { sortOrder: 'ASC' },
     });
+  }
+
+  // -----------------------------------------------------------------------
+  // Administración del catálogo de categorías
+  // -----------------------------------------------------------------------
+
+  /** Incluye inactivas: la pantalla de administración las tiene que ver. */
+  findAllCategories() {
+    return this.categoriesRepo.find({ order: { sortOrder: 'ASC', name: 'ASC' } });
+  }
+
+  findAllSubcategories() {
+    return this.subcategoriesRepo.find({ order: { categorySlug: 'ASC', sortOrder: 'ASC' } });
+  }
+
+  /**
+   * Slug a partir del nombre: minúsculas, sin acentos y con guion bajo. Es la
+   * llave con la que se guardan los tickets, así que no se recalcula al
+   * renombrar una categoría —cambiarlo dejaría huérfano todo el histórico—.
+   */
+  private slugify(name: string): string {
+    return name
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 50);
+  }
+
+  async createCategory(dto: UpsertCategoryDto) {
+    const slug = dto.slug?.trim() || this.slugify(dto.name);
+    if (!slug) throw new BadRequestException('El nombre no produce un slug válido.');
+
+    const existing = await this.categoriesRepo.findOne({ where: { slug } });
+    if (existing) throw new BadRequestException(`Ya existe una categoría con el slug "${slug}".`);
+
+    const [{ max }] = await this.categoriesRepo.query(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max FROM helpdesk.categories`,
+    );
+
+    return this.categoriesRepo.save(
+      this.categoriesRepo.create({
+        slug,
+        name: dto.name.trim(),
+        priorityBase: dto.priorityBase ?? 'P3',
+        slaResponseHours: dto.slaResponseHours ?? null,
+        slaResolutionHours: dto.slaResolutionHours ?? null,
+        isActive: dto.isActive ?? true,
+        sortOrder: Number(max) + 1,
+      }),
+    );
+  }
+
+  async updateCategory(slug: string, dto: UpsertCategoryDto) {
+    const category = await this.categoriesRepo.findOne({ where: { slug } });
+    if (!category) throw new NotFoundException(`Categoría "${slug}" no encontrada`);
+
+    // El slug no se toca aunque cambie el nombre: es la llave del histórico.
+    Object.assign(category, {
+      ...(dto.name !== undefined && { name: dto.name.trim() }),
+      ...(dto.priorityBase !== undefined && { priorityBase: dto.priorityBase }),
+      ...(dto.slaResponseHours !== undefined && { slaResponseHours: dto.slaResponseHours }),
+      ...(dto.slaResolutionHours !== undefined && { slaResolutionHours: dto.slaResolutionHours }),
+      ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+    });
+
+    return this.categoriesRepo.save(category);
+  }
+
+  /**
+   * Baja lógica. No se borra: los tickets guardan el slug como texto y hay
+   * histórico que dejaría de poder leerse por su nombre. Al desactivar una
+   * categoría se desactivan sus subcategorías, para que el formulario no ofrezca
+   * hijas de una rama apagada.
+   */
+  async deactivateCategory(slug: string) {
+    const category = await this.categoriesRepo.findOne({ where: { slug } });
+    if (!category) throw new NotFoundException(`Categoría "${slug}" no encontrada`);
+
+    category.isActive = false;
+    await this.categoriesRepo.save(category);
+    await this.subcategoriesRepo.update({ categorySlug: slug }, { isActive: false });
+
+    return { slug, isActive: false };
+  }
+
+  async createSubcategory(slug: string, dto: UpsertSubcategoryDto) {
+    const category = await this.categoriesRepo.findOne({ where: { slug } });
+    if (!category) throw new NotFoundException(`Categoría "${slug}" no encontrada`);
+
+    const name = dto.name.trim();
+    const duplicate = await this.subcategoriesRepo.findOne({
+      where: { categorySlug: slug, name },
+    });
+    if (duplicate) {
+      throw new BadRequestException(`"${name}" ya existe en ${category.name}.`);
+    }
+
+    const [{ max }] = await this.subcategoriesRepo.query(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max FROM helpdesk.subcategories WHERE category_slug = $1`,
+      [slug],
+    );
+
+    return this.subcategoriesRepo.save(
+      this.subcategoriesRepo.create({
+        categorySlug: slug,
+        name,
+        isActive: dto.isActive ?? true,
+        sortOrder: Number(max) + 1,
+      }),
+    );
+  }
+
+  async updateSubcategory(id: string, dto: UpsertSubcategoryDto) {
+    const sub = await this.subcategoriesRepo.findOne({ where: { id } });
+    if (!sub) throw new NotFoundException(`Subcategoría ${id} no encontrada`);
+
+    if (dto.categorySlug !== undefined && dto.categorySlug !== sub.categorySlug) {
+      const parent = await this.categoriesRepo.findOne({ where: { slug: dto.categorySlug } });
+      if (!parent) throw new NotFoundException(`Categoría "${dto.categorySlug}" no encontrada`);
+      sub.categorySlug = dto.categorySlug;
+    }
+    if (dto.name !== undefined) sub.name = dto.name.trim();
+    if (dto.isActive !== undefined) sub.isActive = dto.isActive;
+
+    return this.subcategoriesRepo.save(sub);
+  }
+
+  async deactivateSubcategory(id: string) {
+    const sub = await this.subcategoriesRepo.findOne({ where: { id } });
+    if (!sub) throw new NotFoundException(`Subcategoría ${id} no encontrada`);
+
+    sub.isActive = false;
+    await this.subcategoriesRepo.save(sub);
+    return { id, isActive: false };
   }
 
   findAssignees() {

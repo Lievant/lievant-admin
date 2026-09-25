@@ -7,6 +7,7 @@ import { statusBadgeStyle, typeIcon } from '../constants';
 import { InfoTab } from './info-tab';
 import { AssignmentTab } from './assignment-tab';
 import { HistoryTab } from './history-tab';
+import { SupportTab } from './support-tab';
 
 interface Catalogs {
   types: EquipmentTypeCatalog[];
@@ -23,10 +24,11 @@ const TABS = [
   { key: 'info', label: 'Información' },
   { key: 'assignment', label: 'Asignación' },
   { key: 'history', label: 'Historial' },
+  { key: 'support', label: 'Soporte' },
 ];
 
 export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }: Props) {
-  const [tab, setTab] = useState<'info' | 'assignment' | 'history'>('info');
+  const [tab, setTab] = useState<'info' | 'assignment' | 'history' | 'support'>('info');
   const [equipment, setEquipment] = useState(initialEquipment);
 
   return (
@@ -95,6 +97,7 @@ export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }:
         {tab === 'history' && (
           <HistoryTab history={equipment.history} />
         )}
+        {tab === 'support' && <SupportTab equipmentId={equipment.id} />}
       </div>
     </div>
   );
