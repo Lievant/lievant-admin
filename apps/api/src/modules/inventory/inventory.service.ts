@@ -253,13 +253,19 @@ export class InventoryService {
    * Añade a un equipo los datos derivados de garantía: nombre del proveedor,
    * URL firmada de la factura y estado calculado.
    */
+  /** Nombre del proveedor, o null si no hay id o ya no existe en el padrón. */
+  private async vendorName(id: string | null): Promise<string | null> {
+    if (!id) return null;
+    const rows = await this.equipmentRepo.query(
+      `SELECT name FROM vendors.vendors WHERE id = $1`,
+      [id],
+    );
+    return (rows as { name: string }[])[0]?.name ?? null;
+  }
+
   private async withWarranty<T extends Equipment>(item: T) {
-    const [provider, invoiceUrl] = await Promise.all([
-      item.warrantyProviderId
-        ? this.equipmentRepo.query(`SELECT name FROM vendors.vendors WHERE id = $1`, [
-            item.warrantyProviderId,
-          ])
-        : Promise.resolve([]),
+    const [providerName, invoiceUrl] = await Promise.all([
+      this.vendorName(item.warrantyProviderId),
       item.warrantyInvoiceS3Key
         ? this.storage.getPresignedUrl(item.warrantyInvoiceS3Key)
         : Promise.resolve(null),
@@ -267,7 +273,7 @@ export class InventoryService {
 
     return {
       ...item,
-      warrantyProviderName: (provider as { name: string }[])[0]?.name ?? null,
+      warrantyProviderName: providerName,
       warrantyInvoiceUrl: invoiceUrl,
       warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
     };
@@ -471,6 +477,20 @@ export class InventoryService {
     trackField('notes', item.notes, dto.notes);
     trackField('specifications', item.specifications, dto.specifications);
 
+    // Garantía. El proveedor se audita por nombre y no por UUID: una bitácora
+    // que dice "2e5955ee-…  →  9f1c33ab-…" no le sirve a nadie. Solo se
+    // resuelven los nombres si el proveedor efectivamente cambió.
+    if (dto.warrantyProviderId !== undefined && dto.warrantyProviderId !== item.warrantyProviderId) {
+      const [oldName, newName] = await Promise.all([
+        this.vendorName(item.warrantyProviderId),
+        this.vendorName(dto.warrantyProviderId ?? null),
+      ]);
+      trackField('warrantyProviderId', oldName, newName ?? '');
+    }
+    trackField('warrantyExpiryDate', item.warrantyExpiryDate, dto.warrantyExpiryDate);
+    trackField('warrantyPurchaseOrder', item.warrantyPurchaseOrder, dto.warrantyPurchaseOrder);
+    trackField('warrantyNotes', item.warrantyNotes, dto.warrantyNotes);
+
     Object.assign(item, {
       ...(dto.equipmentType !== undefined && { equipmentType: dto.equipmentType }),
       ...(dto.legacyId !== undefined && { legacyId: dto.legacyId }),
@@ -520,7 +540,10 @@ export class InventoryService {
       );
     }
 
-    return saved;
+    // Enriquecido, no la entidad cruda: la pantalla reemplaza su estado con
+    // esta respuesta, y sin proveedor resuelto ni URL firmada la tarjeta de
+    // garantía se quedaba mostrando los valores anteriores.
+    return this.withWarranty(saved);
   }
 
   // -------------------------------------------------------------------------

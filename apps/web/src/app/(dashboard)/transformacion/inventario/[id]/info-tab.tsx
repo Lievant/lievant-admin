@@ -151,7 +151,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           </div>
         )}
         </div>
-        <WarrantyCard equipment={equipment} canWrite />
+        <WarrantyCard equipment={equipment} canWrite onUpdated={onUpdated} />
       </div>
     );
   }
