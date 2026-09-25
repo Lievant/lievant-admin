@@ -74,4 +74,22 @@ export class CreateEquipmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // ── Garantía (todos opcionales) ─────────────────────────────────────────
+  // La factura no va aquí: se sube por su propio endpoint multipart.
+  @IsOptional()
+  @IsUUID()
+  warrantyProviderId?: string;
+
+  @IsOptional()
+  @IsDateString()
+  warrantyExpiryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  warrantyPurchaseOrder?: string;
+
+  @IsOptional()
+  @IsString()
+  warrantyNotes?: string;
 }

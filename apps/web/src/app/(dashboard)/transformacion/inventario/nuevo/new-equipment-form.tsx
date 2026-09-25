@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { EquipmentBrandCatalog, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
 import { BrandSelect } from '../brand-select';
+import { VendorPicker } from '../vendor-picker';
 
 interface EmployeeSuggestion {
   id: string;
@@ -87,6 +88,8 @@ interface NewEquipmentFormProps {
 }
 
 export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormProps) {
+  // La garantía es opcional y va colapsada: la mayoría de las altas no la traen.
+  const [warrantyOpen, setWarrantyOpen] = useState(false);
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +112,10 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
     purchaseDate: '',
     purchaseValue: '',
     notes: '',
+    warrantyProviderId: '',
+    warrantyExpiryDate: '',
+    warrantyPurchaseOrder: '',
+    warrantyNotes: '',
     assignmentDate: '',
   });
 
@@ -150,6 +157,10 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         purchaseDate: form.purchaseDate || undefined,
         purchaseValue: form.purchaseValue ? parseFloat(form.purchaseValue) : undefined,
         notes: form.notes || undefined,
+        warrantyProviderId: form.warrantyProviderId || undefined,
+        warrantyExpiryDate: form.warrantyExpiryDate || undefined,
+        warrantyPurchaseOrder: form.warrantyPurchaseOrder || undefined,
+        warrantyNotes: form.warrantyNotes || undefined,
       };
       const res = await fetch('/api/inventory/equipment', {
         method: 'POST',
@@ -284,6 +295,66 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
             <input type="number" min="0" step="0.01" value={form.purchaseValue} onChange={(e) => set('purchaseValue', e.target.value)} className={inputClass} placeholder="0.00" />
           </div>
         </div>
+      </fieldset>
+
+      {/* Garantía — colapsable, al final */}
+      <fieldset className="rounded-xl border border-slate-200 bg-white p-5">
+        <button
+          type="button"
+          onClick={() => setWarrantyOpen(!warrantyOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-navy">Garantía</span>
+          <span className="text-xs text-slate-400">
+            {warrantyOpen ? 'Ocultar' : 'Mostrar'} · opcional
+          </span>
+        </button>
+
+        {warrantyOpen && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className={labelClass}>Proveedor de garantía</label>
+              <VendorPicker
+                value={form.warrantyProviderId}
+                onChange={(id) => set('warrantyProviderId', id)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>No. de OC / referencia</label>
+                <input
+                  type="text"
+                  value={form.warrantyPurchaseOrder}
+                  onChange={(e) => set('warrantyPurchaseOrder', e.target.value)}
+                  className={inputClass}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Vencimiento de garantía</label>
+                <input
+                  type="date"
+                  value={form.warrantyExpiryDate}
+                  onChange={(e) => set('warrantyExpiryDate', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Notas de garantía</label>
+              <textarea
+                value={form.warrantyNotes}
+                onChange={(e) => set('warrantyNotes', e.target.value)}
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              La factura se adjunta desde el detalle del equipo: la ruta en S3 lleva su id, que
+              todavía no existe mientras se captura el alta.
+            </p>
+          </div>
+        )}
       </fieldset>
 
       {/* Notas */}

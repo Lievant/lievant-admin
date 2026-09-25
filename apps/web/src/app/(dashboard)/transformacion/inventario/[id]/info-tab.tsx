@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import type { EquipmentBrandCatalog, EquipmentDetail, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
+import { VendorPicker } from '../vendor-picker';
+import { WarrantyCard } from './warranty-card';
 import { BrandSelect } from '../brand-select';
 import { formatCurrency, formatDate } from '../constants';
 
@@ -30,6 +32,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warrantyOpen, setWarrantyOpen] = useState(false);
 
   const [form, setForm] = useState({
     equipmentType: equipment.equipmentType,
@@ -48,6 +51,10 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
     notes: equipment.notes ?? '',
     legacyId: equipment.legacyId ?? '',
     responsiva: equipment.responsiva ?? '',
+    warrantyProviderId: equipment.warrantyProviderId ?? '',
+    warrantyExpiryDate: equipment.warrantyExpiryDate ?? '',
+    warrantyPurchaseOrder: equipment.warrantyPurchaseOrder ?? '',
+    warrantyNotes: equipment.warrantyNotes ?? '',
   });
 
   function set(field: string, value: string | boolean) {
@@ -78,6 +85,12 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           notes: form.notes || undefined,
           legacyId: form.legacyId || undefined,
           responsiva: form.responsiva || undefined,
+          // Cadena vacía se manda como null explícito: es como se desvincula un
+          // proveedor o se borra una fecha, y `undefined` dejaría el valor viejo.
+          warrantyProviderId: form.warrantyProviderId || null,
+          warrantyExpiryDate: form.warrantyExpiryDate || null,
+          warrantyPurchaseOrder: form.warrantyPurchaseOrder || null,
+          warrantyNotes: form.warrantyNotes || null,
         }),
       });
       if (!res.ok) {
@@ -98,7 +111,8 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
 
   if (!editing) {
     return (
-      <div>
+      <div className="space-y-4">
+        <div>
         <div className="flex justify-end">
           <button
             onClick={() => setEditing(true)}
@@ -136,6 +150,8 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
             <dd className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{equipment.notes}</dd>
           </div>
         )}
+        </div>
+        <WarrantyCard equipment={equipment} canWrite />
       </div>
     );
   }
@@ -220,6 +236,73 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notas TI</label>
         <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className={inputClass} />
       </div>
+
+      {/* Garantía — colapsable, al final */}
+      <div className="rounded-xl border border-slate-200 p-4">
+        <button
+          type="button"
+          onClick={() => setWarrantyOpen(!warrantyOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-navy">Garantía</span>
+          <span className="text-xs text-slate-400">{warrantyOpen ? 'Ocultar' : 'Mostrar'}</span>
+        </button>
+
+        {warrantyOpen && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Proveedor de garantía
+              </label>
+              <VendorPicker
+                value={form.warrantyProviderId}
+                initialName={equipment.warrantyProviderName}
+                onChange={(id) => set('warrantyProviderId', id)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  No. de OC / referencia
+                </label>
+                <input
+                  type="text"
+                  value={form.warrantyPurchaseOrder}
+                  onChange={(e) => set('warrantyPurchaseOrder', e.target.value)}
+                  className={inputClass}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Vencimiento
+                </label>
+                <input
+                  type="date"
+                  value={form.warrantyExpiryDate}
+                  onChange={(e) => set('warrantyExpiryDate', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Notas de garantía
+              </label>
+              <textarea
+                value={form.warrantyNotes}
+                onChange={(e) => set('warrantyNotes', e.target.value)}
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              La factura se adjunta desde la ficha, sin entrar en modo edición.
+            </p>
+          </div>
+        )}
+      </div>
+
       <div className="flex gap-3">
         <button onClick={handleSave} disabled={saving} className="rounded-md bg-black px-5 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50">
           {saving ? 'Guardando…' : 'Guardar cambios'}

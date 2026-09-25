@@ -2348,12 +2348,54 @@ export interface EquipmentSummary {
   area: string | null;
   purchaseDate: string | null;
   purchaseValue: string;
+  // ── Garantía ──────────────────────────────────────────────────────────────
+  warrantyProviderId: string | null;
+  warrantyExpiryDate: string | null;
+  warrantyPurchaseOrder: string | null;
+  warrantyNotes: string | null;
+  warrantyInvoiceOriginalName: string | null;
+  warrantyStatus: WarrantyStatus;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+export interface WarrantyExpiringItem {
+  id: string;
+  displayId: string;
+  legacyId: string | null;
+  brand: string | null;
+  model: string | null;
+  equipmentType: string;
+  assignedTo: string | null;
+  warrantyProviderName: string | null;
+  warrantyExpiryDate: string;
+  daysUntilExpiry: number;
+}
+
+export interface VendorSearchItem {
+  id: string;
+  name: string;
+  rfc: string;
+}
+
+/** Buscador del selector de proveedor de garantía: nombre + RFC, máximo 10. */
+export function searchVendors(q?: string): Promise<VendorSearchItem[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+  return apiFetchWithRetry<VendorSearchItem[]>(`/vendors/search${qs}`);
+}
+
+export function listWarrantyExpiring(): Promise<WarrantyExpiringItem[]> {
+  return apiFetchWithRetry<WarrantyExpiringItem[]>('/inventory/equipment/warranty-expiring');
+}
+
 export interface EquipmentDetail extends EquipmentSummary {
+  /** Nombre del proveedor de garantía, resuelto contra vendors.vendors. */
+  warrantyProviderName: string | null;
+  /** URL prefirmada de la factura; null si no hay archivo o falló la firma. */
+  warrantyInvoiceUrl: string | null;
   history: EquipmentHistoryEntry[];
   assignedEmployee: {
     id: string;
@@ -2424,6 +2466,10 @@ export interface CreateEquipmentPayload {
   area?: string;
   purchaseDate?: string;
   purchaseValue?: number;
+  warrantyProviderId?: string;
+  warrantyExpiryDate?: string;
+  warrantyPurchaseOrder?: string;
+  warrantyNotes?: string;
   notes?: string;
 }
 
