@@ -78,4 +78,12 @@ export class RegisterAdminDocumentDto extends UploadAdminDocumentDto {
   @IsInt()
   @Min(1)
   fileSize!: number;
+
+  // El helper compartido de uploads (lib/presigned-upload.ts) lo manda en el
+  // registro de todos los módulos. ISOBOT no lo usa —el tipo sale de la
+  // extensión—, pero sin declararlo forbidNonWhitelisted rechaza el registro.
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  fileType?: string;
 }
