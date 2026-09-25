@@ -2,12 +2,12 @@
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { EquipmentDetail, WarrantyStatus } from '@/lib/api';
 
 interface WarrantyCardProps {
   equipment: EquipmentDetail;
   canWrite: boolean;
+  onUpdated: (equipment: EquipmentDetail) => void;
 }
 
 const STATUS_LABEL: Record<WarrantyStatus, string> = {
@@ -55,8 +55,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function WarrantyCard({ equipment, canWrite }: WarrantyCardProps) {
-  const router = useRouter();
+export function WarrantyCard({ equipment, canWrite, onUpdated }: WarrantyCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +77,11 @@ export function WarrantyCard({ equipment, canWrite }: WarrantyCardProps) {
         const detail = (await res.json().catch(() => null)) as { message?: string } | null;
         throw new Error(detail?.message ?? 'No se pudo subir la factura.');
       }
-      // Recarga para traer la URL firmada nueva, que se genera en el servidor.
-      router.refresh();
+      // El endpoint devuelve el equipo ya enriquecido, con la URL firmada nueva.
+      // Se levanta al padre en vez de router.refresh(): la pantalla guarda el
+      // equipo en useState y un refresh del server component no reinicializa
+      // ese estado, así que la factura no aparecía hasta recargar a mano.
+      onUpdated((await res.json()) as EquipmentDetail);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir la factura.');
     } finally {

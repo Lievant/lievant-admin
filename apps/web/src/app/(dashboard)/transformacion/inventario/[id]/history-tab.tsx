@@ -24,6 +24,10 @@ const FIELD_LABELS: Record<string, string> = {
   notes: 'Notas',
   specifications: 'Especificaciones',
   assignedToEmployeeId: 'Asignado a',
+  warrantyProviderId: 'Proveedor de garantía',
+  warrantyExpiryDate: 'Vencimiento de garantía',
+  warrantyPurchaseOrder: 'OC de garantía',
+  warrantyNotes: 'Notas de garantía',
 };
 
 interface Props {
