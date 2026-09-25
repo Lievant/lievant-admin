@@ -115,7 +115,9 @@ export function Sidebar({ user }: SidebarProps) {
   const showPermisos = hasModule(user, 'admin', 'roles');
   const showCatalogos = hasModule(user, 'admin', 'catalogos');
   const showFlujos = hasModule(user, 'admin', 'configuracion', 'write');
-  const showAdmin = showUsuarios || showPermisos || showCatalogos || showFlujos;
+  const showCategoriasTickets = hasModule(user, 'admin', 'helpdesk-categorias', 'read');
+  const showAdmin =
+    showUsuarios || showPermisos || showCatalogos || showFlujos || showCategoriasTickets;
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-black text-white">
@@ -411,6 +413,15 @@ export function Sidebar({ user }: SidebarProps) {
               <NavLink href="/admin/catalogos" active={pathname.startsWith('/admin/catalogos')}>
                 <ListIcon className="h-5 w-5" />
                 Catálogos
+              </NavLink>
+            )}
+            {showCategoriasTickets && (
+              <NavLink
+                href="/admin/categorias-tickets"
+                active={pathname.startsWith('/admin/categorias-tickets')}
+              >
+                <TicketIcon className="h-5 w-5" />
+                Categorías de Tickets
               </NavLink>
             )}
             {showFlujos && (

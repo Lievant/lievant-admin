@@ -114,6 +114,13 @@ export class InventoryController {
     return this.service.findBrands();
   }
 
+  // Búsqueda incremental para el "¿Quisiste decir…?" del formulario.
+  @Get('brands')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  searchBrands(@Query('search') search?: string) {
+    return this.service.searchBrands(search);
+  }
+
   @Get('equipment-statuses')
   @RequirePermission('transformacion', 'inventario', 'read')
   getStatuses() {
@@ -194,6 +201,12 @@ export class InventoryController {
     @CurrentUser() user: User,
   ) {
     return this.service.unassignEmployee(id, user.id, user.name, body?.notes);
+  }
+
+  @Get('equipment/:id/tickets')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  getEquipmentTickets(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.getEquipmentTickets(id);
   }
 
   @Get('equipment/:id/employee-equipment')

@@ -218,14 +218,60 @@ export class InventoryService {
   // Crear equipo
   // -------------------------------------------------------------------------
 
+  /**
+   * Resuelve el nombre de marca contra el catálogo, dándola de alta si es nueva.
+   *
+   * `equipment.brand` es texto libre, no una FK, así que el catálogo era una
+   * sugerencia: hoy conviven 'Generico'/'GENERICO' y 'Sony'/'SONY', y 23 marcas
+   * en uso que nunca llegaron al catálogo. La comparación es case-insensitive y
+   * devuelve SIEMPRE el nombre tal como está guardado en el catálogo, de modo
+   * que capturar 'generico' reutiliza la fila existente en vez de crear otra
+   * variante.
+   */
+  private async resolveBrand(raw: string | null | undefined): Promise<string | null> {
+    const name = raw?.trim();
+    if (!name) return null;
+
+    const existing = await this.brandsRepo
+      .createQueryBuilder('b')
+      .where('LOWER(b.name) = LOWER(:name)', { name })
+      .getOne();
+    if (existing) return existing.name;
+
+    const [{ max }] = await this.brandsRepo.query(
+      `SELECT COALESCE(MAX(sort_order), 0) AS max FROM inventory.equipment_brands`,
+    );
+    const created = await this.brandsRepo.save(
+      this.brandsRepo.create({ name, isActive: true, sortOrder: Number(max) + 1 }),
+    );
+    return created.name;
+  }
+
+  /**
+   * Marcas que se parecen a lo tecleado. Alimenta el "¿Quisiste decir…?" del
+   * formulario, para no sembrar variantes de una marca que ya existe.
+   */
+  async searchBrands(search?: string) {
+    const term = search?.trim();
+    if (!term) return this.findBrands();
+    return this.brandsRepo
+      .createQueryBuilder('b')
+      .where('b.is_active = true')
+      .andWhere('b.name ILIKE :term', { term: `%${term}%` })
+      .orderBy('b.sort_order', 'ASC')
+      .limit(8)
+      .getMany();
+  }
+
   async create(dto: CreateEquipmentDto, userId: string, userName: string) {
     const displayId = await this.generateDisplayId(dto.purchaseDate);
+    const brand = await this.resolveBrand(dto.brand);
 
     const equipment = this.equipmentRepo.create({
       displayId,
       legacyId: dto.legacyId ?? null,
       equipmentType: dto.equipmentType,
-      brand: dto.brand ?? null,
+      brand,
       model: dto.model ?? null,
       serialNumber: dto.serialNumber ?? null,
       operatingSystem: dto.operatingSystem ?? null,
@@ -263,6 +309,10 @@ export class InventoryService {
   // -------------------------------------------------------------------------
 
   async update(id: string, dto: UpdateEquipmentDto, userId: string, userName: string) {
+    // Se resuelve antes del trackField para que la bitácora registre el nombre
+    // normalizado que realmente queda guardado, no lo que se tecleó.
+    const resolvedBrand =
+      dto.brand !== undefined ? await this.resolveBrand(dto.brand) : undefined;
     const item = await this.equipmentRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException(`Equipo ${id} no encontrado`);
 
@@ -274,7 +324,7 @@ export class InventoryService {
     };
 
     trackField('equipmentType', item.equipmentType, dto.equipmentType);
-    trackField('brand', item.brand, dto.brand);
+    trackField('brand', item.brand, resolvedBrand);
     trackField('model', item.model, dto.model);
     trackField('serialNumber', item.serialNumber, dto.serialNumber);
     trackField('operatingSystem', item.operatingSystem, dto.operatingSystem);
@@ -289,7 +339,7 @@ export class InventoryService {
     Object.assign(item, {
       ...(dto.equipmentType !== undefined && { equipmentType: dto.equipmentType }),
       ...(dto.legacyId !== undefined && { legacyId: dto.legacyId }),
-      ...(dto.brand !== undefined && { brand: dto.brand }),
+      ...(dto.brand !== undefined && { brand: resolvedBrand ?? null }),
       ...(dto.model !== undefined && { model: dto.model }),
       ...(dto.serialNumber !== undefined && { serialNumber: dto.serialNumber }),
       ...(dto.operatingSystem !== undefined && { operatingSystem: dto.operatingSystem }),
@@ -331,6 +381,70 @@ export class InventoryService {
   // -------------------------------------------------------------------------
   // Asignar empleado
   // -------------------------------------------------------------------------
+
+  /**
+   * Tickets de soporte asociados al equipo.
+   *
+   * El vínculo es por texto, no por FK: helpdesk.tickets.equipment_id es un
+   * varchar donde la gente escribe el ID de la etiqueta del equipo, que es el
+   * legacy_id (M080, AD053…), no el display_id (TEC-2019-003). Se buscan los
+   * dos por si alguien captura el nuevo.
+   *
+   * Los tickets no tienen columna de título: se arma con la subcategoría —o la
+   * categoría si no hay— que es lo que describe el asunto en una línea.
+   */
+  async getEquipmentTickets(equipmentId: string) {
+    const item = await this.equipmentRepo.findOne({ where: { id: equipmentId } });
+    if (!item) throw new NotFoundException(`Equipo ${equipmentId} no encontrado`);
+
+    const keys = [item.legacyId, item.displayId].filter((v): v is string => Boolean(v));
+    if (keys.length === 0) return { legacyId: null, displayId: item.displayId, tickets: [] };
+
+    const rows = await this.equipmentRepo.query(
+      `
+      SELECT t.id,
+             t.display_id AS ticket_code,
+             t.category,
+             t.subcategory,
+             t.priority,
+             t.status,
+             t.description,
+             t.requested_at,
+             t.resolved_at,
+             t.requester_name,
+             t.requester_area,
+             a.name AS assignee_name
+      FROM helpdesk.tickets t
+      LEFT JOIN helpdesk.ticket_assignees a ON a.id = t.assignee_id
+      WHERE t.deleted_at IS NULL
+        AND t.equipment_id = ANY($1::text[])
+      ORDER BY t.requested_at DESC
+      `,
+      [keys],
+    );
+
+    return {
+      legacyId: item.legacyId,
+      displayId: item.displayId,
+      tickets: rows.map((r: Record<string, unknown>) => ({
+        id: r.id as string,
+        ticketCode: r.ticket_code as string,
+        title: (r.subcategory as string) ?? (r.category as string),
+        description: r.description as string,
+        category: r.category as string,
+        subcategory: (r.subcategory as string) ?? null,
+        priority: (r.priority as string) ?? null,
+        status: r.status as string,
+        createdAt: r.requested_at as Date,
+        resolvedAt: (r.resolved_at as Date) ?? null,
+        requester: {
+          fullName: r.requester_name as string,
+          area: (r.requester_area as string) ?? null,
+        },
+        assignee: r.assignee_name ? { fullName: r.assignee_name as string } : null,
+      })),
+    };
+  }
 
   async getEquipmentByEmployee(employeeId: string) {
     const items = await this.equipmentRepo.find({

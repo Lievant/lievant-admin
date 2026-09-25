@@ -26,6 +26,7 @@ import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { ALLOWED_ATTACHMENT_MIME_TYPES } from './helpdesk-storage.service';
+import { UpsertCategoryDto, UpsertSubcategoryDto } from './dto/helpdesk-catalog.dto';
 import { HelpdeskService } from './helpdesk.service';
 
 function isTdUser(user: User): boolean {
@@ -54,6 +55,56 @@ export class HelpdeskController {
   @Get('categories/:slug/subcategories')
   getSubcategories(@Param('slug') slug: string) {
     return this.service.findSubcategories(slug);
+  }
+
+  // ── Administración del catálogo de categorías ───────────────────────────
+  // Rutas literales bajo /admin para no chocar con /categories/:slug.
+  @Get('admin/categories')
+  @RequirePermission('admin', 'helpdesk-categorias', 'read')
+  findAllCategories() {
+    return this.service.findAllCategories();
+  }
+
+  @Get('admin/subcategories')
+  @RequirePermission('admin', 'helpdesk-categorias', 'read')
+  findAllSubcategories() {
+    return this.service.findAllSubcategories();
+  }
+
+  @Post('admin/categories')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  createCategory(@Body() dto: UpsertCategoryDto) {
+    return this.service.createCategory(dto);
+  }
+
+  @Patch('admin/categories/:slug')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  updateCategory(@Param('slug') slug: string, @Body() dto: UpsertCategoryDto) {
+    return this.service.updateCategory(slug, dto);
+  }
+
+  @Delete('admin/categories/:slug')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  deactivateCategory(@Param('slug') slug: string) {
+    return this.service.deactivateCategory(slug);
+  }
+
+  @Post('admin/categories/:slug/subcategories')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  createSubcategory(@Param('slug') slug: string, @Body() dto: UpsertSubcategoryDto) {
+    return this.service.createSubcategory(slug, dto);
+  }
+
+  @Patch('admin/subcategories/:id')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  updateSubcategory(@Param('id', ParseUUIDPipe) id: string, @Body() dto: UpsertSubcategoryDto) {
+    return this.service.updateSubcategory(id, dto);
+  }
+
+  @Delete('admin/subcategories/:id')
+  @RequirePermission('admin', 'helpdesk-categorias', 'write')
+  deactivateSubcategory(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.deactivateSubcategory(id);
   }
 
   @Get('assignees')
