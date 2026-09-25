@@ -1039,7 +1039,8 @@ export type CatalogEntity =
   | 'ticket_assignees'
   | 'holidays'
   | 'equipment_brands'
-  | 'tool_categories';
+  | 'tool_categories'
+  | 'password_applications';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -1062,6 +1063,7 @@ export interface CatalogItem {
   divisionName?: string | null;
   email?: string | null;
   role?: string | null;
+  category?: string | null;
   appliesTo?: string | null;
   isRequired?: boolean;
   date?: string | null;
@@ -1081,6 +1083,7 @@ export interface CreateCatalogItemPayload {
   divisionName?: string;
   email?: string;
   role?: string;
+  category?: string;
   appliesTo?: string;
   isRequired?: boolean;
   date?: string;
@@ -4532,4 +4535,92 @@ export function getDocumentReportActivity(params: {
   if (params.page) q.set('page', String(params.page));
   if (params.limit) q.set('limit', String(params.limit));
   return apiFetchWithRetry<DocumentActivityPage>(`/reports/documents/activity?${q.toString()}`);
+}
+
+// ============================================================================
+// Administración de Contraseñas (TIC-RE-17)
+// ============================================================================
+
+export type AccountPasswordStatus = 'activa' | 'revocada' | 'vencida';
+
+export interface PasswordApplication {
+  id: string;
+  name: string;
+  category: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** Nunca trae la contraseña: esa solo sale de /passwords/:id/reveal. */
+export interface AccountPasswordItem {
+  id: string;
+  recordNumber: number;
+  application: { id: string; name: string; category: string | null };
+  employee: { id: string; fullName: string; area: string | null; position: string };
+  username: string;
+  assignedDate: string;
+  expiryDate: string | null;
+  status: AccountPasswordStatus;
+  notes: string | null;
+  managerId: string;
+  managerName: string | null;
+}
+
+export interface PasswordTeamEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  corporateEmail: string | null;
+}
+
+export interface AccountPasswordPayload {
+  applicationId: string;
+  employeeId: string;
+  username: string;
+  /** Al editar, omitirla deja la contraseña actual. */
+  password?: string;
+  assignedDate?: string;
+  expiryDate?: string | null;
+  notes?: string | null;
+}
+
+export function listAccountPasswords(): Promise<AccountPasswordItem[]> {
+  return apiFetchWithRetry<AccountPasswordItem[]>('/passwords');
+}
+
+export function listPasswordApplications(): Promise<PasswordApplication[]> {
+  return apiFetchWithRetry<PasswordApplication[]>('/passwords/applications');
+}
+
+export function listPasswordTeamEmployees(): Promise<PasswordTeamEmployee[]> {
+  return apiFetchWithRetry<PasswordTeamEmployee[]>('/passwords/team-employees');
+}
+
+export function createAccountPassword(payload: AccountPasswordPayload): Promise<AccountPasswordItem> {
+  return apiFetch<AccountPasswordItem>('/passwords', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateAccountPassword(
+  id: string,
+  payload: Partial<AccountPasswordPayload>,
+): Promise<AccountPasswordItem> {
+  return apiFetch<AccountPasswordItem>(`/passwords/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeAccountPassword(id: string): Promise<void> {
+  return apiFetch<void>(`/passwords/${id}`, { method: 'DELETE' });
+}
+
+export function createPasswordApplication(payload: {
+  name: string;
+  category?: string;
+}): Promise<PasswordApplication> {
+  return apiFetch<PasswordApplication>('/passwords/applications', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
