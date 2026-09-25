@@ -3145,6 +3145,143 @@ export function updateAssignmentLastUsed(id: string, date: string): Promise<Assi
 }
 
 // ---------------------------------------------------------------------------
+// Tickets de soporte asociados a un equipo
+// ---------------------------------------------------------------------------
+
+export interface EquipmentTicket {
+  id: string;
+  ticketCode: string;
+  title: string;
+  description: string;
+  category: string;
+  subcategory: string | null;
+  priority: string | null;
+  status: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  requester: { fullName: string; area: string | null };
+  assignee: { fullName: string } | null;
+}
+
+export interface EquipmentTicketsResponse {
+  /** ID de la etiqueta con el que se buscó; es lo que la gente captura. */
+  legacyId: string | null;
+  displayId: string;
+  tickets: EquipmentTicket[];
+}
+
+export function getEquipmentTickets(id: string): Promise<EquipmentTicketsResponse> {
+  return apiFetchWithRetry<EquipmentTicketsResponse>(`/inventory/equipment/${id}/tickets`);
+}
+
+export interface EquipmentBrandItem {
+  id: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export function searchEquipmentBrands(search?: string): Promise<EquipmentBrandItem[]> {
+  const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+  return apiFetchWithRetry<EquipmentBrandItem[]>(`/inventory/brands${qs}`);
+}
+
+// ---------------------------------------------------------------------------
+// Catálogo de categorías de tickets (admin)
+// ---------------------------------------------------------------------------
+
+export interface TicketCategory {
+  id: string;
+  slug: string;
+  name: string;
+  priorityBase: string | null;
+  slaResponseHours: number | null;
+  slaResolutionHours: number | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface TicketSubcategory {
+  id: string;
+  categorySlug: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+export interface UpsertCategoryPayload {
+  name: string;
+  slug?: string;
+  priorityBase?: string;
+  slaResponseHours?: number;
+  slaResolutionHours?: number;
+  isActive?: boolean;
+}
+
+export interface UpsertSubcategoryPayload {
+  name: string;
+  categorySlug?: string;
+  isActive?: boolean;
+}
+
+export function listTicketCategories(): Promise<TicketCategory[]> {
+  return apiFetchWithRetry<TicketCategory[]>('/helpdesk/admin/categories');
+}
+
+export function listTicketSubcategories(): Promise<TicketSubcategory[]> {
+  return apiFetchWithRetry<TicketSubcategory[]>('/helpdesk/admin/subcategories');
+}
+
+export function createTicketCategory(payload: UpsertCategoryPayload): Promise<TicketCategory> {
+  return apiFetchWithRetry<TicketCategory>('/helpdesk/admin/categories', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTicketCategory(
+  slug: string,
+  payload: UpsertCategoryPayload,
+): Promise<TicketCategory> {
+  return apiFetchWithRetry<TicketCategory>(`/helpdesk/admin/categories/${slug}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateTicketCategory(slug: string): Promise<{ slug: string }> {
+  return apiFetchWithRetry<{ slug: string }>(`/helpdesk/admin/categories/${slug}`, {
+    method: 'DELETE',
+  });
+}
+
+export function createTicketSubcategory(
+  slug: string,
+  payload: UpsertSubcategoryPayload,
+): Promise<TicketSubcategory> {
+  return apiFetchWithRetry<TicketSubcategory>(`/helpdesk/admin/categories/${slug}/subcategories`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateTicketSubcategory(
+  id: string,
+  payload: UpsertSubcategoryPayload,
+): Promise<TicketSubcategory> {
+  return apiFetchWithRetry<TicketSubcategory>(`/helpdesk/admin/subcategories/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deactivateTicketSubcategory(id: string): Promise<{ id: string }> {
+  return apiFetchWithRetry<{ id: string }>(`/helpdesk/admin/subcategories/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Vacaciones (Módulo)
 // ---------------------------------------------------------------------------
 
