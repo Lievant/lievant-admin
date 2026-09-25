@@ -14,6 +14,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PasswordsModule } from './modules/passwords/passwords.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ToolsModule } from './modules/tools/tools.module';
@@ -71,6 +72,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     CreditCardsModule,
     ReportsModule,
     ToolsModule,
+    PasswordsModule,
   ],
 })
 export class AppModule {}

@@ -6,6 +6,7 @@ import {
   DropletIcon,
   FactoryIcon,
   FileTextIcon,
+  KeyIcon,
   HeartIcon,
   LaptopIcon,
   LayersIcon,
@@ -27,7 +28,8 @@ export interface CatalogFieldDef {
     | 'email'
     | 'role'
     | 'date'
-    | 'isRecurring';
+    | 'isRecurring'
+    | 'category';
   label: string;
   type: 'text' | 'select' | 'checkbox' | 'date';
   options?: { value: string; label: string }[];
@@ -192,6 +194,13 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     itemLabel: 'categoría',
     icon: LayersIcon,
     fields: [],
+  },
+  {
+    entity: 'password_applications',
+    label: 'Aplicaciones (Contraseñas)',
+    itemLabel: 'aplicación',
+    icon: KeyIcon,
+    fields: [{ key: 'category', label: 'Categoría', type: 'text', placeholder: 'Marketing Digital' }],
   },
 ];
 

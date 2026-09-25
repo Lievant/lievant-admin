@@ -15,6 +15,7 @@ import {
   HeadsetIcon,
   HomeIcon,
   IdCardIcon,
+  KeyIcon,
   LaptopIcon,
   LayersIcon,
   LicenseIcon,
@@ -100,6 +101,9 @@ export function Sidebar({ user }: SidebarProps) {
   // cargo. Por eso entra también en showHerramientas —un jefe sin ningún otro
   // módulo de herramientas se quedaría sin la sección y sin el link.
   const showGestionVacaciones = isManager;
+  // Contraseñas (TIC-RE-17) exige las dos cosas: tener equipo y el permiso,
+  // que por defecto solo traen SUPER_ADMIN y DIRECTOR.
+  const showPasswords = isManager && hasModule(user, 'herramientas', 'passwords', 'read');
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||
@@ -108,7 +112,8 @@ export function Sidebar({ user }: SidebarProps) {
     showSoporte ||
     showIsobot ||
     showVacaciones ||
-    showGestionVacaciones;
+    showGestionVacaciones ||
+    showPasswords;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -389,6 +394,15 @@ export function Sidebar({ user }: SidebarProps) {
               >
                 <UsersGroupIcon className="h-5 w-5" />
                 Gestión de Vacaciones
+              </NavLink>
+            )}
+            {showPasswords && (
+              <NavLink
+                href="/herramientas/passwords"
+                active={pathname.startsWith('/herramientas/passwords')}
+              >
+                <KeyIcon className="h-5 w-5" />
+                Gestión de Contraseñas
               </NavLink>
             )}
           </>
