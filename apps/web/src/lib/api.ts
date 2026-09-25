@@ -2375,6 +2375,18 @@ export interface WarrantyExpiringItem {
   daysUntilExpiry: number;
 }
 
+export interface VendorSearchItem {
+  id: string;
+  name: string;
+  rfc: string;
+}
+
+/** Buscador del selector de proveedor de garantía: nombre + RFC, máximo 10. */
+export function searchVendors(q?: string): Promise<VendorSearchItem[]> {
+  const qs = q ? `?q=${encodeURIComponent(q)}` : '';
+  return apiFetchWithRetry<VendorSearchItem[]>(`/vendors/search${qs}`);
+}
+
 export function listWarrantyExpiring(): Promise<WarrantyExpiringItem[]> {
   return apiFetchWithRetry<WarrantyExpiringItem[]>('/inventory/equipment/warranty-expiring');
 }

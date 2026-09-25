@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { EquipmentBrandCatalog, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
 import { BrandSelect } from '../brand-select';
+import { VendorPicker } from '../vendor-picker';
 
 interface EmployeeSuggestion {
   id: string;
@@ -80,19 +81,15 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion | nul
   );
 }
 
-interface VendorOption {
-  id: string;
-  name: string;
-}
-
 interface NewEquipmentFormProps {
   types: EquipmentTypeCatalog[];
   brands: EquipmentBrandCatalog[];
   statuses: EquipmentStatusCatalog[];
-  vendors: VendorOption[];
 }
 
-export function NewEquipmentForm({ types, brands, statuses, vendors }: NewEquipmentFormProps) {
+export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormProps) {
+  // La garantía es opcional y va colapsada: la mayoría de las altas no la traen.
+  const [warrantyOpen, setWarrantyOpen] = useState(false);
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -300,57 +297,64 @@ export function NewEquipmentForm({ types, brands, statuses, vendors }: NewEquipm
         </div>
       </fieldset>
 
-      {/* Garantía */}
+      {/* Garantía — colapsable, al final */}
       <fieldset className="rounded-xl border border-slate-200 bg-white p-5">
-        <legend className="px-1 text-sm font-semibold text-navy">Garantía</legend>
-        <div className="mt-3 grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Proveedor de garantía</label>
-            <select
-              value={form.warrantyProviderId}
-              onChange={(e) => set('warrantyProviderId', e.target.value)}
-              className={inputClass}
-            >
-              <option value="">Sin proveedor</option>
-              {vendors.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
+        <button
+          type="button"
+          onClick={() => setWarrantyOpen(!warrantyOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-navy">Garantía</span>
+          <span className="text-xs text-slate-400">
+            {warrantyOpen ? 'Ocultar' : 'Mostrar'} · opcional
+          </span>
+        </button>
+
+        {warrantyOpen && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className={labelClass}>Proveedor de garantía</label>
+              <VendorPicker
+                value={form.warrantyProviderId}
+                onChange={(id) => set('warrantyProviderId', id)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>No. de OC / referencia</label>
+                <input
+                  type="text"
+                  value={form.warrantyPurchaseOrder}
+                  onChange={(e) => set('warrantyPurchaseOrder', e.target.value)}
+                  className={inputClass}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Vencimiento de garantía</label>
+                <input
+                  type="date"
+                  value={form.warrantyExpiryDate}
+                  onChange={(e) => set('warrantyExpiryDate', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <div>
+              <label className={labelClass}>Notas de garantía</label>
+              <textarea
+                value={form.warrantyNotes}
+                onChange={(e) => set('warrantyNotes', e.target.value)}
+                rows={2}
+                className={inputClass}
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              La factura se adjunta desde el detalle del equipo: la ruta en S3 lleva su id, que
+              todavía no existe mientras se captura el alta.
+            </p>
           </div>
-          <div>
-            <label className={labelClass}>Vencimiento de garantía</label>
-            <input
-              type="date"
-              value={form.warrantyExpiryDate}
-              onChange={(e) => set('warrantyExpiryDate', e.target.value)}
-              className={inputClass}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Orden de compra</label>
-            <input
-              type="text"
-              value={form.warrantyPurchaseOrder}
-              onChange={(e) => set('warrantyPurchaseOrder', e.target.value)}
-              className={inputClass}
-              maxLength={100}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Notas de garantía</label>
-            <input
-              type="text"
-              value={form.warrantyNotes}
-              onChange={(e) => set('warrantyNotes', e.target.value)}
-              className={inputClass}
-            />
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">
-          La factura se adjunta desde el detalle del equipo, una vez creado.
-        </p>
+        )}
       </fieldset>
 
       {/* Notas */}

@@ -236,7 +236,7 @@ export class InventoryController {
 
   @Post('equipment/:id/warranty-invoice')
   @RequirePermission('transformacion', 'inventario', 'write')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 20 * 1024 * 1024 } }))
   uploadWarrantyInvoice(
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFile() file: Express.Multer.File,

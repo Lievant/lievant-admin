@@ -46,6 +46,18 @@ export class VendorsController {
     return this.vendorsService.create(dto, user.id);
   }
 
+  /**
+   * Buscador ligero para selectores de otros módulos (garantía de equipos).
+   * Devuelve solo id, nombre y RFC: nada de saldos ni condiciones de pago.
+   * Queda bajo JwtAuthGuard como el resto de este controlador, que no monta
+   * PermissionsGuard; poner @RequirePermission aquí sería decorativo.
+   * Declarado antes de /:id para que no se parsee como UUID.
+   */
+  @Get('search')
+  search(@Query('q') q?: string) {
+    return this.vendorsService.search(q);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.vendorsService.findOne(id);
