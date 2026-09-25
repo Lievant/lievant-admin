@@ -76,6 +76,27 @@ export class Equipment {
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
 
+  // ── Garantía ──────────────────────────────────────────────────────────────
+  // El proveedor es FK a vendors.vendors; aquí solo vive el id para no arrastrar
+  // el padrón completo en cada consulta de inventario.
+  @Column({ name: 'warranty_provider_id', type: 'uuid', nullable: true })
+  warrantyProviderId!: string | null;
+
+  @Column({ name: 'warranty_invoice_s3_key', type: 'varchar', length: 500, nullable: true })
+  warrantyInvoiceS3Key!: string | null;
+
+  @Column({ name: 'warranty_invoice_original_name', type: 'varchar', length: 255, nullable: true })
+  warrantyInvoiceOriginalName!: string | null;
+
+  @Column({ name: 'warranty_expiry_date', type: 'date', nullable: true })
+  warrantyExpiryDate!: string | null;
+
+  @Column({ name: 'warranty_purchase_order', type: 'varchar', length: 100, nullable: true })
+  warrantyPurchaseOrder!: string | null;
+
+  @Column({ name: 'warranty_notes', type: 'text', nullable: true })
+  warrantyNotes!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

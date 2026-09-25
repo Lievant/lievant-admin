@@ -80,13 +80,19 @@ function EmployeeSearch({ onSelect }: { onSelect: (emp: EmployeeSuggestion | nul
   );
 }
 
+interface VendorOption {
+  id: string;
+  name: string;
+}
+
 interface NewEquipmentFormProps {
   types: EquipmentTypeCatalog[];
   brands: EquipmentBrandCatalog[];
   statuses: EquipmentStatusCatalog[];
+  vendors: VendorOption[];
 }
 
-export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormProps) {
+export function NewEquipmentForm({ types, brands, statuses, vendors }: NewEquipmentFormProps) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +115,10 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
     purchaseDate: '',
     purchaseValue: '',
     notes: '',
+    warrantyProviderId: '',
+    warrantyExpiryDate: '',
+    warrantyPurchaseOrder: '',
+    warrantyNotes: '',
     assignmentDate: '',
   });
 
@@ -150,6 +160,10 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         purchaseDate: form.purchaseDate || undefined,
         purchaseValue: form.purchaseValue ? parseFloat(form.purchaseValue) : undefined,
         notes: form.notes || undefined,
+        warrantyProviderId: form.warrantyProviderId || undefined,
+        warrantyExpiryDate: form.warrantyExpiryDate || undefined,
+        warrantyPurchaseOrder: form.warrantyPurchaseOrder || undefined,
+        warrantyNotes: form.warrantyNotes || undefined,
       };
       const res = await fetch('/api/inventory/equipment', {
         method: 'POST',
@@ -284,6 +298,59 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
             <input type="number" min="0" step="0.01" value={form.purchaseValue} onChange={(e) => set('purchaseValue', e.target.value)} className={inputClass} placeholder="0.00" />
           </div>
         </div>
+      </fieldset>
+
+      {/* Garantía */}
+      <fieldset className="rounded-xl border border-slate-200 bg-white p-5">
+        <legend className="px-1 text-sm font-semibold text-navy">Garantía</legend>
+        <div className="mt-3 grid grid-cols-2 gap-4">
+          <div>
+            <label className={labelClass}>Proveedor de garantía</label>
+            <select
+              value={form.warrantyProviderId}
+              onChange={(e) => set('warrantyProviderId', e.target.value)}
+              className={inputClass}
+            >
+              <option value="">Sin proveedor</option>
+              {vendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelClass}>Vencimiento de garantía</label>
+            <input
+              type="date"
+              value={form.warrantyExpiryDate}
+              onChange={(e) => set('warrantyExpiryDate', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Orden de compra</label>
+            <input
+              type="text"
+              value={form.warrantyPurchaseOrder}
+              onChange={(e) => set('warrantyPurchaseOrder', e.target.value)}
+              className={inputClass}
+              maxLength={100}
+            />
+          </div>
+          <div>
+            <label className={labelClass}>Notas de garantía</label>
+            <input
+              type="text"
+              value={form.warrantyNotes}
+              onChange={(e) => set('warrantyNotes', e.target.value)}
+              className={inputClass}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          La factura se adjunta desde el detalle del equipo, una vez creado.
+        </p>
       </fieldset>
 
       {/* Notas */}

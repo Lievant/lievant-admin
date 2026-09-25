@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -9,8 +10,11 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RequirePermission } from '../auth/decorators/permission.decorator';
@@ -23,6 +27,7 @@ import { QueryEquipmentDto } from './dto/query-equipment.dto';
 import { QueryEmployeesWithEquipmentDto } from './dto/query-employees.dto';
 import { UpdateEquipmentDto } from './dto/update-equipment.dto';
 import { InventoryResponsivasService } from './inventory-responsivas.service';
+import { ALLOWED_WARRANTY_MIME_TYPES } from './inventory-storage.service';
 import { InventoryService } from './inventory.service';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -135,6 +140,13 @@ export class InventoryController {
     return this.service.getStats();
   }
 
+  // Declarado antes de /:id para que no sea interceptado como UUID.
+  @Get('equipment/warranty-expiring')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  getWarrantyExpiring() {
+    return this.service.getWarrantyExpiring();
+  }
+
   @Get('equipment/report/by-area')
   @RequirePermission('transformacion', 'inventario', 'read')
   getReportByArea() {
@@ -220,6 +232,22 @@ export class InventoryController {
     @CurrentUser() user: User,
   ) {
     return this.service.unassignEmployee(id, user.id, user.name, body?.notes);
+  }
+
+  @Post('equipment/:id/warranty-invoice')
+  @RequirePermission('transformacion', 'inventario', 'write')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  uploadWarrantyInvoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No se recibió ningún archivo.');
+    if (!(ALLOWED_WARRANTY_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
+      throw new BadRequestException(
+        `Tipo de archivo no permitido: ${file.mimetype}. Se aceptan PDF, JPG y PNG.`,
+      );
+    }
+    return this.service.saveWarrantyInvoice(id, file);
   }
 
   @Get('equipment/:id/tickets')

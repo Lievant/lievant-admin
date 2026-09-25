@@ -1,4 +1,9 @@
-import { listEquipmentBrands, listEquipmentStatuses, listEquipmentTypes } from '@/lib/api';
+import {
+  listEquipmentBrands,
+  listEquipmentStatuses,
+  listEquipmentTypes,
+  listVendors,
+} from '@/lib/api';
 import { NewEquipmentForm } from './new-equipment-form';
 
 async function safe<T>(p: Promise<T>): Promise<T | null> {
@@ -6,10 +11,12 @@ async function safe<T>(p: Promise<T>): Promise<T | null> {
 }
 
 export default async function NuevoEquipoPage() {
-  const [types, brands, statuses] = await Promise.all([
+  const [types, brands, statuses, vendorsPage] = await Promise.all([
     safe(listEquipmentTypes()),
     safe(listEquipmentBrands()),
     safe(listEquipmentStatuses()),
+    // El selector de garantía necesita el padrón completo, no una página.
+    safe(listVendors({ limit: 200 })),
   ]);
 
   return (
@@ -19,6 +26,7 @@ export default async function NuevoEquipoPage() {
         types={types ?? []}
         brands={brands ?? []}
         statuses={statuses ?? []}
+        vendors={(vendorsPage?.data ?? []).map((v) => ({ id: v.id, name: v.name }))}
       />
     </div>
   );

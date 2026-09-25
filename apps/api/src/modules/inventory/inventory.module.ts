@@ -8,6 +8,7 @@ import { EquipmentStatus } from './entities/equipment-status.entity';
 import { EquipmentType } from './entities/equipment-type.entity';
 import { Equipment } from './entities/equipment.entity';
 import { InventoryResponsivasService } from './inventory-responsivas.service';
+import { InventoryStorageService } from './inventory-storage.service';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
 
@@ -24,7 +25,7 @@ import { InventoryService } from './inventory.service';
     ]),
   ],
   controllers: [InventoryController],
-  providers: [InventoryService, InventoryResponsivasService],
+  providers: [InventoryService, InventoryResponsivasService, InventoryStorageService],
   exports: [InventoryService, InventoryResponsivasService],
 })
 export class InventoryModule {}
