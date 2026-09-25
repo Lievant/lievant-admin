@@ -15,6 +15,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
+import { AuditService } from '../audit/audit.service';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -96,6 +97,7 @@ export class PasswordsService {
     private readonly applicationsRepo: Repository<PasswordApplication>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
     private readonly config: ConfigService,
+    private readonly auditService: AuditService,
     private readonly notifications: NotificationsService,
     private readonly flows: NotificationFlowsService,
   ) {}
@@ -373,6 +375,22 @@ export class PasswordsService {
          FROM passwords.account_passwords WHERE id = $1`,
         [id, key],
       )) as [{ password: string }];
+
+      // El módulo ya tenía su propia bitácora en passwords.reveal_log, que es
+      // la que impone el límite por hora. Este registro es distinto: alimenta
+      // el tab de Seguridad del log central, donde se revisa junto con los
+      // accesos denegados y los intentos de login.
+      await this.auditService.logSecurity({
+        eventType: 'password_reveal',
+        userId: user.id,
+        userEmail: user.email,
+        ipAddress,
+        severity: 'warning',
+        module: 'passwords',
+        resourceId: id,
+        details: { action, employeeId: row.employee_id },
+      });
+
       return { password: result.password };
     } catch (err) {
       // Llave equivocada o dato corrupto. No se reenvía el error de Postgres:

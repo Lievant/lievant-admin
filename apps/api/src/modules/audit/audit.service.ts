@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import {
@@ -130,10 +131,15 @@ export class AuditService {
         return;
       }
 
+      // El área se resuelve aquí y no en el llamador: auth no tiene acceso al
+      // padrón de RRHH y no vale la pena acoplarlo solo para esto.
+      const department =
+        input.department ?? (input.userEmail ? await this.departmentOf(input.userEmail) : null);
+
       await this.sessionsRepo.save(this.sessionsRepo.create({
         userId: input.userId,
         userEmail: input.userEmail ?? null,
-        department: input.department ?? null,
+        department,
         loginAt: new Date(),
         lastActivityAt: new Date(),
         ipAddress: normalizeIp(input.ipAddress),
@@ -143,6 +149,15 @@ export class AuditService {
     } catch (err) {
       this.logger.error(`No se pudo registrar la sesión: ${(err as Error).message}`);
     }
+  }
+
+  /** Área del colaborador según su correo corporativo; null si no tiene expediente. */
+  private async departmentOf(email: string): Promise<string | null> {
+    const rows = await this.sessionsRepo.query(
+      `SELECT area FROM employees.employee_records WHERE corporate_email = $1 LIMIT 1`,
+      [email],
+    );
+    return (rows as { area: string | null }[])[0]?.area ?? null;
   }
 
   /** Marca actividad en la sesión abierta y acumula el módulo visitado. */
@@ -380,6 +395,29 @@ export class AuditService {
         sessions: sessionsDeleted ?? 0,
       },
     };
+  }
+
+  /**
+   * Purga semanal, domingos a las 2:00. Se corre fuera de horario porque los
+   * DELETE masivos sobre las tablas de log compiten con las escrituras que el
+   * interceptor hace en cada request.
+   *
+   * De paso cierra las sesiones colgadas: si no, se acumulan abiertas para
+   * siempre y la duración promedio del analytics se vuelve inútil.
+   */
+  @Cron('0 2 * * 0', { timeZone: 'America/Mexico_City' })
+  async cleanupOldLogs(): Promise<void> {
+    try {
+      await this.closeIdleSessions();
+      const result = await this.cleanup();
+      const { activity, security, errors, sessions } = result.deleted;
+      this.logger.log(
+        `Purga de auditoría: ${activity} actividades, ${security} eventos, ` +
+          `${errors} errores y ${sessions} sesiones eliminados.`,
+      );
+    } catch (err) {
+      this.logger.error(`La purga de auditoría falló: ${(err as Error).message}`);
+    }
   }
 
   /**

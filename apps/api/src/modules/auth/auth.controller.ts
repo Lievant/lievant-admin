@@ -12,16 +12,28 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { AnnouncementsService } from './announcements.service';
 import { AuthService, AuthTokens, MeResponse, SsoLoginResult } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { SsoCallbackDto } from './dto/sso-callback.dto';
 import { SetUserPermissionDto } from './dto/set-user-permission.dto';
+
+/**
+ * IP y user-agent para el log de seguridad. Detrás del ALB la IP real viene en
+ * x-forwarded-for; req.ip devolvería la del balanceador.
+ */
+function authContext(req: Request) {
+  return {
+    ipAddress: (req.headers['x-forwarded-for'] as string) ?? req.ip ?? null,
+    userAgent: (req.headers['user-agent'] as string) ?? null,
+  };
+}
 import { Announcement } from './entities/announcement.entity';
 import { Permission } from './entities/permission.entity';
 import { Role } from './entities/role.entity';
@@ -70,8 +82,8 @@ export class AuthController {
 
   @Post('sso/callback')
   @HttpCode(HttpStatus.OK)
-  ssoCallback(@Body() dto: SsoCallbackDto): Promise<SsoLoginResult> {
-    return this.authService.loginWithSso(dto.code, dto.redirectUri);
+  ssoCallback(@Body() dto: SsoCallbackDto, @Req() req: Request): Promise<SsoLoginResult> {
+    return this.authService.loginWithSso(dto.code, dto.redirectUri, authContext(req));
   }
 
   @UseGuards(JwtAuthGuard)
@@ -89,8 +101,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Delete('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  logout(@CurrentUser() user: User): Promise<void> {
-    return this.authService.logout(user.id);
+  logout(@CurrentUser() user: User, @Req() req: Request): Promise<void> {
+    return this.authService.logout(user.id, user.email, authContext(req));
   }
 
   @UseGuards(JwtAuthGuard)
