@@ -1,6 +1,11 @@
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
+import { AuditModuleConfig } from '../modules/audit/entities/audit-module-config.entity';
+import { PlatformError } from '../modules/audit/entities/platform-error.entity';
+import { SecurityEvent } from '../modules/audit/entities/security-event.entity';
+import { UserActivity } from '../modules/audit/entities/user-activity.entity';
+import { UserSession } from '../modules/audit/entities/user-session.entity';
 import { Announcement } from '../modules/auth/entities/announcement.entity';
 import { Permission } from '../modules/auth/entities/permission.entity';
 import { Role } from '../modules/auth/entities/role.entity';
@@ -87,6 +92,11 @@ const AppDataSource = new DataSource({
   schema: process.env.DATABASE_SCHEMA ?? 'auth',
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   entities: [
+    SecurityEvent,
+    UserActivity,
+    PlatformError,
+    UserSession,
+    AuditModuleConfig,
     User,
     Role,
     Permission,

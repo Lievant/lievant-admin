@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
+import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
@@ -55,6 +56,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
         },
       }),
     }),
+    AuditModule,
     AuthModule,
     ClientsModule,
     EmployeesModule,
