@@ -20,6 +20,7 @@ import { CatalogEmployeeDocumentType } from './entities/catalog-employee-documen
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { Holiday } from '../vacations/entities/holiday.entity';
 import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
+import { PasswordApplication } from '../passwords/entities/password-application.entity';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
       Holiday,
       EquipmentBrand,
       CatalogToolCategory,
+      PasswordApplication,
     ]),
   ],
   controllers: [CatalogsController],

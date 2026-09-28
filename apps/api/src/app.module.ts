@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { HealthController } from './health.controller';
+import { AuditModule } from './modules/audit/audit.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { CatalogsModule } from './modules/catalogs/catalogs.module';
 import { ClientsModule } from './modules/clients/clients.module';
@@ -14,6 +15,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PasswordsModule } from './modules/passwords/passwords.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ToolsModule } from './modules/tools/tools.module';
@@ -54,6 +56,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
         },
       }),
     }),
+    AuditModule,
     AuthModule,
     ClientsModule,
     EmployeesModule,
@@ -71,6 +74,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     CreditCardsModule,
     ReportsModule,
     ToolsModule,
+    PasswordsModule,
   ],
 })
 export class AppModule {}

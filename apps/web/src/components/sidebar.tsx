@@ -15,6 +15,7 @@ import {
   HeadsetIcon,
   HomeIcon,
   IdCardIcon,
+  KeyIcon,
   LaptopIcon,
   LayersIcon,
   LicenseIcon,
@@ -100,6 +101,9 @@ export function Sidebar({ user }: SidebarProps) {
   // cargo. Por eso entra también en showHerramientas —un jefe sin ningún otro
   // módulo de herramientas se quedaría sin la sección y sin el link.
   const showGestionVacaciones = isManager;
+  // Contraseñas (TIC-RE-17) exige las dos cosas: tener equipo y el permiso,
+  // que por defecto solo traen SUPER_ADMIN y DIRECTOR.
+  const showPasswords = isManager && hasModule(user, 'herramientas', 'passwords', 'read');
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||
@@ -108,7 +112,8 @@ export function Sidebar({ user }: SidebarProps) {
     showSoporte ||
     showIsobot ||
     showVacaciones ||
-    showGestionVacaciones;
+    showGestionVacaciones ||
+    showPasswords;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -116,8 +121,16 @@ export function Sidebar({ user }: SidebarProps) {
   const showCatalogos = hasModule(user, 'admin', 'catalogos');
   const showFlujos = hasModule(user, 'admin', 'configuracion', 'write');
   const showCategoriasTickets = hasModule(user, 'admin', 'helpdesk-categorias', 'read');
+  const showLogs = hasModule(user, 'admin', 'audit', 'read');
+  const showAnalytics = hasModule(user, 'admin', 'analytics', 'read');
   const showAdmin =
-    showUsuarios || showPermisos || showCatalogos || showFlujos || showCategoriasTickets;
+    showUsuarios ||
+    showPermisos ||
+    showCatalogos ||
+    showFlujos ||
+    showCategoriasTickets ||
+    showLogs ||
+    showAnalytics;
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-black text-white">
@@ -391,6 +404,15 @@ export function Sidebar({ user }: SidebarProps) {
                 Gestión de Vacaciones
               </NavLink>
             )}
+            {showPasswords && (
+              <NavLink
+                href="/herramientas/passwords"
+                active={pathname.startsWith('/herramientas/passwords')}
+              >
+                <KeyIcon className="h-5 w-5" />
+                Gestión de Contraseñas
+              </NavLink>
+            )}
           </>
         )}
 
@@ -422,6 +444,18 @@ export function Sidebar({ user }: SidebarProps) {
               >
                 <TicketIcon className="h-5 w-5" />
                 Categorías de Tickets
+              </NavLink>
+            )}
+            {showLogs && (
+              <NavLink href="/admin/logs" active={pathname.startsWith('/admin/logs')}>
+                <ListIcon className="h-5 w-5" />
+                Logs y Auditoría
+              </NavLink>
+            )}
+            {showAnalytics && (
+              <NavLink href="/admin/analytics" active={pathname.startsWith('/admin/analytics')}>
+                <ChartDotsIcon className="h-5 w-5" />
+                Analytics de Uso
               </NavLink>
             )}
             {showFlujos && (

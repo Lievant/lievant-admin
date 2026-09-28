@@ -21,6 +21,7 @@ import { CatalogEmployeeDocumentType } from './entities/catalog-employee-documen
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { Holiday } from '../vacations/entities/holiday.entity';
 import { EquipmentBrand } from '../inventory/entities/equipment-brand.entity';
+import { PasswordApplication } from '../passwords/entities/password-application.entity';
 
 export interface CatalogRecord {
   id: string;
@@ -31,6 +32,8 @@ export interface CatalogRecord {
   divisionName?: string | null;
   email?: string | null;
   role?: string | null;
+  // Solo aplicaciones de contraseñas (passwords.applications)
+  category?: string | null;
   appliesTo?: string;
   isRequired?: boolean;
   // Solo festivos (catalogs.holidays)
@@ -65,6 +68,7 @@ export class CatalogsService {
     @InjectRepository(Holiday) holidays: Repository<Holiday>,
     @InjectRepository(EquipmentBrand) equipmentBrands: Repository<EquipmentBrand>,
     @InjectRepository(CatalogToolCategory) toolCategories: Repository<CatalogToolCategory>,
+    @InjectRepository(PasswordApplication) passwordApplications: Repository<PasswordApplication>,
   ) {
     this.repositories = {
       companies: companies as unknown as Repository<CatalogRecord>,
@@ -85,6 +89,7 @@ export class CatalogsService {
       holidays: holidays as unknown as Repository<CatalogRecord>,
       equipment_brands: equipmentBrands as unknown as Repository<CatalogRecord>,
       tool_categories: toolCategories as unknown as Repository<CatalogRecord>,
+      password_applications: passwordApplications as unknown as Repository<CatalogRecord>,
     };
   }
 
@@ -115,6 +120,7 @@ export class CatalogsService {
     if (dto.divisionName !== undefined) data.divisionName = dto.divisionName;
     if (dto.email !== undefined) data.email = dto.email;
     if (dto.role !== undefined) data.role = dto.role;
+    if (dto.category !== undefined) data.category = dto.category;
     if (dto.appliesTo !== undefined) data.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) data.isRequired = dto.isRequired;
     if (dto.date !== undefined) data.date = dto.date;
@@ -136,6 +142,7 @@ export class CatalogsService {
     if (dto.divisionName !== undefined) record.divisionName = dto.divisionName;
     if (dto.email !== undefined) record.email = dto.email;
     if (dto.role !== undefined) record.role = dto.role;
+    if (dto.category !== undefined) record.category = dto.category;
     if (dto.appliesTo !== undefined) record.appliesTo = dto.appliesTo;
     if (dto.isRequired !== undefined) record.isRequired = dto.isRequired;
     if (dto.date !== undefined) record.date = dto.date;

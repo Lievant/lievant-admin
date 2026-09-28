@@ -46,6 +46,11 @@ export class CreateCatalogItemDto {
   @IsString()
   role?: string;
 
+  // Solo para aplicaciones de contraseñas (passwords.applications)
+  @IsOptional()
+  @IsString()
+  category?: string;
+
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;

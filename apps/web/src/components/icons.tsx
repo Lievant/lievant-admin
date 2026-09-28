@@ -180,6 +180,36 @@ export function EyeIcon(props: IconProps) {
   );
 }
 
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M10.6 5.6A10.8 10.8 0 0 1 12 5.5C18.5 5.5 22 12 22 12a17.6 17.6 0 0 1-3.2 4.1M6.6 6.6C3.8 8.4 2 12 2 12s3.5 6.5 10 6.5a9.8 9.8 0 0 0 5.4-1.6" />
+      <path d="M9.9 9.9a2.75 2.75 0 0 0 4.2 4.2" />
+      <path d="m3 3 18 18" />
+    </Svg>
+  );
+}
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </Svg>
+  );
+}
+
+export function KeyIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="8" cy="15" r="4" />
+      <path d="m10.85 12.15 8.65-8.65" />
+      <path d="m18 5 2 2" />
+      <path d="m15 8 2 2" />
+    </Svg>
+  );
+}
+
 export function DownloadIcon(props: IconProps) {
   return (
     <Svg {...props}>

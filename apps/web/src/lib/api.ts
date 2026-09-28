@@ -1039,7 +1039,8 @@ export type CatalogEntity =
   | 'ticket_assignees'
   | 'holidays'
   | 'equipment_brands'
-  | 'tool_categories';
+  | 'tool_categories'
+  | 'password_applications';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -1062,6 +1063,7 @@ export interface CatalogItem {
   divisionName?: string | null;
   email?: string | null;
   role?: string | null;
+  category?: string | null;
   appliesTo?: string | null;
   isRequired?: boolean;
   date?: string | null;
@@ -1081,6 +1083,7 @@ export interface CreateCatalogItemPayload {
   divisionName?: string;
   email?: string;
   role?: string;
+  category?: string;
   appliesTo?: string;
   isRequired?: boolean;
   date?: string;
@@ -3352,6 +3355,214 @@ export function deactivateTicketSubcategory(id: string): Promise<{ id: string }>
 }
 
 // ---------------------------------------------------------------------------
+// Auditoría y analytics de uso
+// ---------------------------------------------------------------------------
+
+export type AuditSeverity = 'info' | 'warning' | 'critical';
+
+export interface SecurityEventRow {
+  id: string;
+  eventType: string;
+  userId: string | null;
+  userEmail: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  module: string | null;
+  resourceId: string | null;
+  details: Record<string, unknown> | null;
+  severity: AuditSeverity;
+  createdAt: string;
+}
+
+export interface UserActivityRow {
+  id: string;
+  userId: string | null;
+  userEmail: string | null;
+  userName: string | null;
+  department: string | null;
+  action: string;
+  module: string;
+  entityType: string | null;
+  entityId: string | null;
+  entityName: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+}
+
+export interface PlatformErrorRow {
+  id: string;
+  errorCode: string | null;
+  message: string;
+  stackTrace: string | null;
+  module: string | null;
+  endpoint: string | null;
+  httpMethod: string | null;
+  httpStatus: number | null;
+  userEmail: string | null;
+  durationMs: number | null;
+  resolved: boolean;
+  resolvedAt: string | null;
+  createdAt: string;
+}
+
+export interface UserSessionRow {
+  id: string;
+  userId: string | null;
+  userEmail: string | null;
+  department: string | null;
+  loginAt: string;
+  lastActivityAt: string;
+  logoutAt: string | null;
+  durationMinutes: number | null;
+  ipAddress: string | null;
+  modulesVisited: string[];
+}
+
+export interface AuditModuleConfigRow {
+  id: string;
+  module: string;
+  displayName: string;
+  auditEnabled: boolean;
+  logReads: boolean;
+  logWrites: boolean;
+  retentionDays: number;
+  updatedAt: string;
+}
+
+export interface AuditPage<T> {
+  data: T[];
+  nextCursor: string | null;
+}
+
+export interface AuditErrorsPage extends AuditPage<PlatformErrorRow> {
+  unresolvedCount: number;
+}
+
+export interface AuditLogParams {
+  dateFrom?: string;
+  dateTo?: string;
+  cursor?: string;
+  limit?: number;
+  eventType?: string;
+  severity?: string;
+  userId?: string;
+  module?: string;
+  action?: string;
+  department?: string;
+  httpStatus?: number;
+  resolved?: boolean;
+}
+
+function auditQs(params: AuditLogParams): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== '' && v !== null) q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : '';
+}
+
+export function listSecurityEvents(p: AuditLogParams = {}): Promise<AuditPage<SecurityEventRow>> {
+  return apiFetchWithRetry<AuditPage<SecurityEventRow>>(`/audit/security${auditQs(p)}`);
+}
+
+export function listUserActivity(p: AuditLogParams = {}): Promise<AuditPage<UserActivityRow>> {
+  return apiFetchWithRetry<AuditPage<UserActivityRow>>(`/audit/activity${auditQs(p)}`);
+}
+
+export function listPlatformErrors(p: AuditLogParams = {}): Promise<AuditErrorsPage> {
+  return apiFetchWithRetry<AuditErrorsPage>(`/audit/errors${auditQs(p)}`);
+}
+
+export function listUserSessions(p: AuditLogParams = {}): Promise<AuditPage<UserSessionRow>> {
+  return apiFetchWithRetry<AuditPage<UserSessionRow>>(`/audit/sessions${auditQs(p)}`);
+}
+
+export function listAuditConfig(): Promise<AuditModuleConfigRow[]> {
+  return apiFetchWithRetry<AuditModuleConfigRow[]>('/audit/config');
+}
+
+export function updateAuditConfig(
+  module: string,
+  payload: Partial<Pick<AuditModuleConfigRow, 'auditEnabled' | 'logReads' | 'logWrites' | 'retentionDays'>>,
+): Promise<AuditModuleConfigRow> {
+  return apiFetchWithRetry<AuditModuleConfigRow>(`/audit/config/${module}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resolvePlatformError(id: string): Promise<PlatformErrorRow> {
+  return apiFetchWithRetry<PlatformErrorRow>(`/audit/errors/${id}/resolve`, { method: 'PATCH' });
+}
+
+// ── Analytics ───────────────────────────────────────────────────────────────
+
+export interface AnalyticsTopUser {
+  userId: string;
+  userName: string;
+  department: string | null;
+  sessions: number;
+  actions: number;
+  lastActivity: string | null;
+}
+
+export interface AnalyticsModuleRow {
+  module: string;
+  displayName: string;
+  actions: number;
+  uniqueUsers: number;
+  topAction: string | null;
+}
+
+export interface AnalyticsDepartmentRow {
+  department: string;
+  users: number;
+  sessions: number;
+  actions: number;
+}
+
+export interface AnalyticsTimelineRow {
+  date: string;
+  sessions: number;
+  actions: number;
+  errors: number;
+}
+
+export interface AnalyticsSummary {
+  period: { from: string; to: string };
+  totalUsers: number;
+  activeUsers: number;
+  totalSessions: number;
+  avgSessionMinutes: number;
+  totalActions: number;
+  topUsers: AnalyticsTopUser[];
+  leastActiveUsers: AnalyticsTopUser[];
+  byModule: AnalyticsModuleRow[];
+  byDepartment: AnalyticsDepartmentRow[];
+  errorRate: {
+    total: number;
+    /** Errores por cada 100 acciones del período. */
+    percent: number;
+    byModule: { module: string; count: number; lastError: string }[];
+    criticalUnresolved: number;
+  };
+  activityTimeline: AnalyticsTimelineRow[];
+  moduleHeatmap: { hour: number; actions: number }[];
+}
+
+export function getAnalyticsSummary(params: {
+  dateFrom?: string;
+  dateTo?: string;
+} = {}): Promise<AnalyticsSummary> {
+  const q = new URLSearchParams();
+  if (params.dateFrom) q.set('dateFrom', params.dateFrom);
+  if (params.dateTo) q.set('dateTo', params.dateTo);
+  const s = q.toString();
+  return apiFetchWithRetry<AnalyticsSummary>(`/audit/analytics/summary${s ? `?${s}` : ''}`);
+}
+
+// ---------------------------------------------------------------------------
 // Vacaciones (Módulo)
 // ---------------------------------------------------------------------------
 
@@ -4532,4 +4743,92 @@ export function getDocumentReportActivity(params: {
   if (params.page) q.set('page', String(params.page));
   if (params.limit) q.set('limit', String(params.limit));
   return apiFetchWithRetry<DocumentActivityPage>(`/reports/documents/activity?${q.toString()}`);
+}
+
+// ============================================================================
+// Administración de Contraseñas (TIC-RE-17)
+// ============================================================================
+
+export type AccountPasswordStatus = 'activa' | 'revocada' | 'vencida';
+
+export interface PasswordApplication {
+  id: string;
+  name: string;
+  category: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
+/** Nunca trae la contraseña: esa solo sale de /passwords/:id/reveal. */
+export interface AccountPasswordItem {
+  id: string;
+  recordNumber: number;
+  application: { id: string; name: string; category: string | null };
+  employee: { id: string; fullName: string; area: string | null; position: string };
+  username: string;
+  assignedDate: string;
+  expiryDate: string | null;
+  status: AccountPasswordStatus;
+  notes: string | null;
+  managerId: string;
+  managerName: string | null;
+}
+
+export interface PasswordTeamEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  corporateEmail: string | null;
+}
+
+export interface AccountPasswordPayload {
+  applicationId: string;
+  employeeId: string;
+  username: string;
+  /** Al editar, omitirla deja la contraseña actual. */
+  password?: string;
+  assignedDate?: string;
+  expiryDate?: string | null;
+  notes?: string | null;
+}
+
+export function listAccountPasswords(): Promise<AccountPasswordItem[]> {
+  return apiFetchWithRetry<AccountPasswordItem[]>('/passwords');
+}
+
+export function listPasswordApplications(): Promise<PasswordApplication[]> {
+  return apiFetchWithRetry<PasswordApplication[]>('/passwords/applications');
+}
+
+export function listPasswordTeamEmployees(): Promise<PasswordTeamEmployee[]> {
+  return apiFetchWithRetry<PasswordTeamEmployee[]>('/passwords/team-employees');
+}
+
+export function createAccountPassword(payload: AccountPasswordPayload): Promise<AccountPasswordItem> {
+  return apiFetch<AccountPasswordItem>('/passwords', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export function updateAccountPassword(
+  id: string,
+  payload: Partial<AccountPasswordPayload>,
+): Promise<AccountPasswordItem> {
+  return apiFetch<AccountPasswordItem>(`/passwords/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function revokeAccountPassword(id: string): Promise<void> {
+  return apiFetch<void>(`/passwords/${id}`, { method: 'DELETE' });
+}
+
+export function createPasswordApplication(payload: {
+  name: string;
+  category?: string;
+}): Promise<PasswordApplication> {
+  return apiFetch<PasswordApplication>('/passwords/applications', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

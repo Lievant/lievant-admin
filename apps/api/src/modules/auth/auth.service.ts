@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { AuditService } from '../audit/audit.service';
 import { CognitoService } from './cognito.service';
 import { User } from './entities/user.entity';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -13,6 +14,12 @@ export interface AuthTokens {
 
 export interface SsoLoginResult extends AuthTokens {
   user: User;
+}
+
+/** Datos del request que el log de seguridad necesita y el servicio no ve. */
+export interface AuthContext {
+  ipAddress?: string | null;
+  userAgent?: string | null;
 }
 
 export interface MeResponse {
@@ -32,6 +39,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly cognitoService: CognitoService,
+    private readonly auditService: AuditService,
   ) {}
 
   async validateUser(userId: string): Promise<User> {
@@ -106,33 +114,85 @@ export class AuthService {
     return this.issueTokens(user);
   }
 
-  async logout(_userId: string): Promise<void> {
+  async logout(userId: string, email: string, ctx: AuthContext = {}): Promise<void> {
     // Stateless JWT: el cliente descarta los tokens. Si se agrega
     // almacenamiento de refresh tokens, aquí se invalidarían.
+    await this.auditService.closeSession(userId);
+    await this.auditService.logSecurity({
+      eventType: 'logout',
+      userId,
+      userEmail: email,
+      ipAddress: ctx.ipAddress ?? null,
+      userAgent: ctx.userAgent ?? null,
+      severity: 'info',
+      module: 'auth',
+    });
   }
 
-  async loginWithSso(code: string, redirectUri: string): Promise<SsoLoginResult> {
-    const { idToken } = await this.cognitoService.exchangeCodeForTokens(code, redirectUri);
-    const claims = await this.cognitoService.verifyIdToken(idToken);
+  async loginWithSso(
+    code: string,
+    redirectUri: string,
+    ctx: AuthContext = {},
+  ): Promise<SsoLoginResult> {
+    // El intercambio con Cognito puede fallar antes de saber de quién se trata;
+    // ahí no hay correo que registrar, así que el intento se anota sin usuario.
+    let email: string | null = null;
 
-    let user = await this.usersService.findByCognitoId(claims.sub);
+    try {
+      const { idToken } = await this.cognitoService.exchangeCodeForTokens(code, redirectUri);
+      const claims = await this.cognitoService.verifyIdToken(idToken);
+      email = claims.email ?? null;
 
-    if (!user) {
-      user = await this.usersService.linkCognitoIdByEmail(claims.email, claims.sub);
+      let user = await this.usersService.findByCognitoId(claims.sub);
+
+      if (!user) {
+        user = await this.usersService.linkCognitoIdByEmail(claims.email, claims.sub);
+      }
+
+      if (!user) {
+        throw new ForbiddenException(
+          'Tu cuenta no está registrada en el sistema. Contacta a un administrador.',
+        );
+      }
+
+      if (!user.isActive) {
+        throw new ForbiddenException('Usuario inactivo');
+      }
+
+      await this.usersService.recordLogin(user.id);
+
+      await this.auditService.logSecurity({
+        eventType: 'login_success',
+        userId: user.id,
+        userEmail: user.email,
+        ipAddress: ctx.ipAddress ?? null,
+        userAgent: ctx.userAgent ?? null,
+        severity: 'info',
+        module: 'auth',
+        details: { provider: 'microsoft_sso' },
+      });
+
+      await this.auditService.logSession({
+        userId: user.id,
+        userEmail: user.email,
+        ipAddress: ctx.ipAddress ?? null,
+        userAgent: ctx.userAgent ?? null,
+      });
+
+      return { ...this.issueTokens(user), user };
+    } catch (err) {
+      // Un intento fallido es justo lo que hay que poder auditar, así que se
+      // registra y el error se propaga intacto.
+      await this.auditService.logSecurity({
+        eventType: 'login_failed',
+        userEmail: email,
+        ipAddress: ctx.ipAddress ?? null,
+        userAgent: ctx.userAgent ?? null,
+        severity: 'warning',
+        module: 'auth',
+        details: { reason: (err as Error).message },
+      });
+      throw err;
     }
-
-    if (!user) {
-      throw new ForbiddenException(
-        'Tu cuenta no está registrada en el sistema. Contacta a un administrador.',
-      );
-    }
-
-    if (!user.isActive) {
-      throw new ForbiddenException('Usuario inactivo');
-    }
-
-    await this.usersService.recordLogin(user.id);
-
-    return { ...this.issueTokens(user), user };
   }
 }

@@ -816,6 +816,7 @@ export class EmployeesService {
       FROM employees.employee_records e
       INNER JOIN employees.personal_data pd ON pd.employee_id = e.id
       WHERE e.deleted_at IS NULL
+        AND e.status = 'active'
         AND pd.birth_date IS NOT NULL
         AND EXTRACT(MONTH FROM pd.birth_date) = $1
       ORDER BY ${orderClause}`,
