@@ -9,7 +9,11 @@ export async function GET(
   const { employeeId } = await params;
   const token = request.cookies.get('access_token')?.value;
 
-  const res = await fetch(`${API_URL}/inventory/employees/${employeeId}/responsiva/download`, {
+  // DD/MM/YYYY elegida en el modal; el backend la valida y sin ella usa hoy.
+  const fechaFirma = request.nextUrl.searchParams.get('fechaFirma');
+  const query = fechaFirma ? `?fechaFirma=${encodeURIComponent(fechaFirma)}` : '';
+
+  const res = await fetch(`${API_URL}/inventory/employees/${employeeId}/responsiva/download${query}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     cache: 'no-store',
   });
