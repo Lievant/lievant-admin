@@ -105,6 +105,13 @@ Prefijo global: `/api/v1`. Controller: `inventory.controller.ts`.
 | `PATCH` | `/inventory/equipment/:id/maintenance/:maintenanceId` | `transformacion` · `inventario` · `write` |
 | `DELETE` | `/inventory/equipment/:id/maintenance/:maintenanceId` | `transformacion` · `inventario` · `write` |
 
+**Semántica de `maintenance-due?days=N`:** devuelve los equipos cuyo próximo mantenimiento
+cae en `next_maintenance_date <= hoy + N`, es decir **los ya vencidos y los que vencen dentro
+de los próximos N días** (ordenados por próxima fecha ascendente). La pregunta operativa es
+"¿a qué equipos les toca?", y los vencidos también toca atenderlos, así que se incluyen. Los
+equipos **sin ningún preventivo** no aparecen: son `sin_mantenimiento`, no vencidos (D4). El
+campo `daysUntilDue` viene negativo para los vencidos.
+
 > ⚠️ **Trampa de ruteo:** `equipment/maintenance-due` tiene que declararse **antes** que `equipment/:id` en el controller. Si va después, Nest lo resuelve como `:id = "maintenance-due"` y truena buscando un uuid. El controller actual ya ordena así `equipment/stats` y `equipment/warranty-expiring`; hay que respetar ese orden.
 
 El selector de técnicos consume el endpoint genérico de catálogos que **ya existe**, no hace falta uno nuevo:
@@ -139,7 +146,7 @@ Esto es lo que define "terminado". Si algo de aquí no pasa, no está hecho.
 11. Si se da de baja del catálogo al técnico que hizo un mantenimiento, el registro histórico sigue mostrando su nombre.
 12. Alta, edición y borrado dejan rastro en el historial del equipo.
 13. Un usuario con permiso solo de lectura ve la pestaña pero no el botón de registrar, y el `POST` le responde 403.
-14. `GET /inventory/equipment/maintenance-due` devuelve los equipos cuyo próximo mantenimiento cae dentro de los N días.
+14. `GET /inventory/equipment/maintenance-due` devuelve los equipos cuyo próximo mantenimiento cae en `hoy + N` o antes, es decir **los ya vencidos y los que vencen dentro de los próximos N días** (los `sin_mantenimiento` no se incluyen).
 15. Un preventivo con fecha 2026-08-31 da próximo mantenimiento **2027-02-28** (tope a fin de mes, RN-8).
 
 ## 10. Archivos a tocar
