@@ -72,8 +72,10 @@ export class InventoryController {
   async downloadResponsiva(
     @Param('employeeId', ParseUUIDPipe) employeeId: string,
     @Res() res: Response,
+    // DD/MM/YYYY; sin ella el documento sale con la fecha de hoy.
+    @Query('fechaFirma') fechaFirma?: string,
   ) {
-    const { buffer, fileName } = await this.responsivas.buildResponsivaDocx(employeeId);
+    const { buffer, fileName } = await this.responsivas.buildResponsivaDocx(employeeId, fechaFirma);
     // El nombre lleva acentos y espacios: filename* en UTF-8 y un filename
     // ASCII de respaldo para los clientes que no entienden RFC 5987.
     const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
