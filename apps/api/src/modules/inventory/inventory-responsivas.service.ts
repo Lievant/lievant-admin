@@ -147,6 +147,42 @@ function formatearFecha(iso: string | null): string {
   return `${dia}/${mes}/${anio}`;
 }
 
+// Fecha de firma de la cláusula DÉCIMA TERCERA, completa en un solo <w:t>.
+const TEMPLATE_FECHA_FIRMA = 'dd de mm de AAAA';
+
+const MESES_LARGOS_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+/**
+ * DD/MM/YYYY → "5 de octubre de 2026". Sin fecha se usa hoy en hora de México:
+ * el contenedor corre en UTC y después de las 18:00 new Date() ya es mañana.
+ */
+function formatearFechaFirma(fechaFirma?: string): string {
+  let dia: number;
+  let mes: number;
+  let anio: number;
+
+  if (fechaFirma) {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(fechaFirma.trim());
+    if (!m) throw new BadRequestException('fechaFirma debe tener formato DD/MM/YYYY');
+    [dia, mes, anio] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    // Date normaliza 31/02 a 03/03; si no regresa lo mismo, la fecha no existe.
+    const d = new Date(Date.UTC(anio, mes - 1, dia));
+    if (d.getUTCFullYear() !== anio || d.getUTCMonth() !== mes - 1 || d.getUTCDate() !== dia) {
+      throw new BadRequestException(`fechaFirma ${fechaFirma} no es una fecha válida`);
+    }
+  } else {
+    const [a, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' })
+      .format(new Date())
+      .split('-');
+    [dia, mes, anio] = [Number(d), Number(m), Number(a)];
+  }
+
+  return `${dia} de ${MESES_LARGOS_ES[mes - 1]} de ${anio}`;
+}
+
 /** Escapa lo que se inyecta en el XML del .docx. */
 function escaparXml(texto: string): string {
   return texto
@@ -371,7 +407,10 @@ export class InventoryResponsivasService {
 
   async buildResponsivaDocx(
     employeeId: string,
+    fechaFirma?: string,
   ): Promise<{ buffer: Buffer; fileName: string; code: string }> {
+    // Se valida antes de tocar la base: una fecha mal formada es un 400 barato.
+    const fechaFirmaTexto = formatearFechaFirma(fechaFirma);
     const detalle = await this.getEmployeeDetail(employeeId);
     const responsiva = detalle.responsiva;
     if (!responsiva) {
@@ -400,6 +439,7 @@ export class InventoryResponsivasService {
       ['[fecha de ingreso]', formatearFecha(detalle.employee.hireDate)],
       ['[área/departamento]', detalle.employee.area ?? ''],
       ['[cargo]', detalle.employee.position ?? ''],
+      [TEMPLATE_FECHA_FIRMA, fechaFirmaTexto],
     ];
 
     for (const [buscado, valor] of sustituciones) {

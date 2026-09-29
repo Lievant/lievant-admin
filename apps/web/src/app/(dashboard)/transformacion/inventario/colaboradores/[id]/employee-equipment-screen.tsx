@@ -45,8 +45,18 @@ function formatFecha(iso: string | null): string {
  * el backend ya manda el Content-Disposition con el nombre correcto del archivo
  * y dejarlo al navegador evita duplicar esa lógica.
  */
-function descargar(employeeId: string) {
-  window.location.href = `/api/inventory/employees/${employeeId}/responsiva/download`;
+function descargar(employeeId: string, fechaIso: string) {
+  const [anio, mes, dia] = fechaIso.split('-');
+  const fechaFirma = encodeURIComponent(`${dia}/${mes}/${anio}`);
+  window.location.href = `/api/inventory/employees/${employeeId}/responsiva/download?fechaFirma=${fechaFirma}`;
+}
+
+/** YYYY-MM-DD local, el formato que espera <input type="date">. */
+function hoyIso(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
 }
 
 /** Bitácora TIC-RE-10, el anexo de equipos de la responsiva. */
@@ -60,6 +70,20 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
   const [error, setError] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [generando, setGenerando] = useState(false);
+  // Fecha de firma: toda descarga de la responsiva pasa por este modal.
+  const [pidiendoFecha, setPidiendoFecha] = useState(false);
+  const [fechaFirma, setFechaFirma] = useState(hoyIso);
+
+  function abrirFechaFirma() {
+    setFechaFirma(hoyIso());
+    setPidiendoFecha(true);
+  }
+
+  function confirmarFechaFirma() {
+    if (!fechaFirma) return;
+    setPidiendoFecha(false);
+    descargar(employeeId, fechaFirma);
+  }
 
   const cargar = useCallback(async () => {
     try {
@@ -102,11 +126,11 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
         setConfirmando(false);
         return;
       }
-      // Se recarga antes de descargar para que el badge ya muestre el folio
-      // aunque el navegador tarde en resolver la descarga.
+      // Se recarga antes de pedir la fecha para que el badge ya muestre el
+      // folio aunque se cancele la descarga.
       await cargar();
       setConfirmando(false);
-      descargar(employeeId);
+      abrirFechaFirma();
     } catch {
       setError('No se pudo generar la responsiva.');
       setConfirmando(false);
@@ -203,7 +227,7 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
               {responsiva ? (
                 <button
                   type="button"
-                  onClick={() => descargar(employeeId)}
+                  onClick={abrirFechaFirma}
                   className="inline-flex items-center gap-2 rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white hover:bg-navy/90"
                 >
                   <DownloadIcon className="h-4 w-4" />
@@ -321,8 +345,8 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
                 <span className="font-semibold text-navy">{employee.fullName}</span>?
               </p>
               <p className="mt-2 text-sm text-slate-500">
-                Se asignará el siguiente folio TIC-RE-02 disponible y el documento se descargará
-                automáticamente. El folio queda ligado al colaborador de forma permanente.
+                Se asignará el siguiente folio TIC-RE-02 disponible y después elegirás la fecha de
+                firma del documento. El folio queda ligado al colaborador de forma permanente.
               </p>
 
               <div className="flex justify-end gap-2 pt-4">
@@ -340,10 +364,64 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
                   disabled={generando}
                   className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {generando ? 'Generando…' : 'Generar y descargar'}
+                  {generando ? 'Generando…' : 'Generar folio'}
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {pidiendoFecha && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-xl bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+              <h2 className="font-bold text-navy">Fecha de firma de la responsiva</h2>
+              <button
+                type="button"
+                onClick={() => setPidiendoFecha(false)}
+                className="text-slate-400 hover:text-navy"
+              >
+                <CloseIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <form
+              className="px-5 py-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                confirmarFechaFirma();
+              }}
+            >
+              <label htmlFor="fecha-firma" className="text-sm text-slate-600">
+                Selecciona la fecha que aparecerá en el documento
+              </label>
+              <input
+                id="fecha-firma"
+                type="date"
+                lang="es-MX"
+                required
+                value={fechaFirma}
+                onChange={(e) => setFechaFirma(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-navy focus:outline-none"
+              />
+
+              <div className="flex justify-end gap-2 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setPidiendoFecha(false)}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!fechaFirma}
+                  className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  Generar documento
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
