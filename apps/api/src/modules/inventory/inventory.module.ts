@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { EquipmentBrand } from './entities/equipment-brand.entity';
 import { EquipmentHistory } from './entities/equipment-history.entity';
+import { EquipmentMaintenance } from './entities/equipment-maintenance.entity';
 import { EquipmentResponsiva } from './entities/equipment-responsiva.entity';
 import { EquipmentStatus } from './entities/equipment-status.entity';
 import { EquipmentType } from './entities/equipment-type.entity';
@@ -17,11 +19,14 @@ import { InventoryService } from './inventory.service';
     TypeOrmModule.forFeature([
       Equipment,
       EquipmentHistory,
+      EquipmentMaintenance,
       EquipmentType,
       EquipmentBrand,
       EquipmentStatus,
       EquipmentResponsiva,
       EmployeeRecord,
+      // Para validar/copiar el técnico (RN-4). Entidad plana: no arrastra HelpdeskModule.
+      TicketAssignee,
     ]),
   ],
   controllers: [InventoryController],
