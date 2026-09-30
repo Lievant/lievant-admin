@@ -2358,12 +2358,48 @@ export interface EquipmentSummary {
   warrantyNotes: string | null;
   warrantyInvoiceOriginalName: string | null;
   warrantyStatus: WarrantyStatus;
+  // ── Mantenimiento (derivado; el próximo se calcula desde el último preventivo) ──
+  maintenanceStatus: MaintenanceStatus;
+  nextMaintenanceDate: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+export type MaintenanceStatus = 'sin_mantenimiento' | 'vencido' | 'por_vencer' | 'al_dia';
+
+export type MaintenanceType = 'Preventivo' | 'Correctivo';
+
+export interface MaintenanceRecord {
+  id: string;
+  equipmentId: string;
+  maintenanceDate: string | null;
+  maintenanceType: MaintenanceType;
+  technicianId: string | null;
+  technicianName: string;
+  observations: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Respuesta de la bitácora de un equipo: registros + resumen del semáforo. */
+export interface MaintenanceListResponse {
+  data: MaintenanceRecord[];
+  lastMaintenanceDate: string | null;
+  nextMaintenanceDate: string | null;
+  maintenanceStatus: MaintenanceStatus;
+}
+
+/** Opción del selector de técnicos (catálogo ticket_assignees/active). */
+export interface TechnicianOption {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  isActive: boolean;
+}
 
 export interface WarrantyExpiringItem {
   id: string;
@@ -2399,6 +2435,8 @@ export interface EquipmentDetail extends EquipmentSummary {
   warrantyProviderName: string | null;
   /** URL prefirmada de la factura; null si no hay archivo o falló la firma. */
   warrantyInvoiceUrl: string | null;
+  /** Fecha del último mantenimiento preventivo; null si nunca se ha registrado uno. */
+  lastMaintenanceDate: string | null;
   history: EquipmentHistoryEntry[];
   assignedEmployee: {
     id: string;

@@ -10,7 +10,7 @@ import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
-import { statusBadgeStyle, typeIcon } from './constants';
+import { MAINTENANCE_STATUS_LABEL, MAINTENANCE_STATUS_STYLE, statusBadgeStyle, typeIcon } from './constants';
 
 interface Filters {
   search: string;
@@ -59,6 +59,17 @@ function WarrantyBadge({ status }: { status?: string }) {
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${WARRANTY_STYLE[status] ?? ''}`}>
       {WARRANTY_LABEL[status] ?? status}
+    </span>
+  );
+}
+
+/** Semáforo de mantenimiento del listado. Siempre se pinta (incluso "Sin mantenimiento",
+ *  que es información útil: es un equipo al que nunca se le ha dado servicio). */
+function MaintenanceBadge({ status }: { status?: string }) {
+  const s = status ?? 'sin_mantenimiento';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${MAINTENANCE_STATUS_STYLE[s] ?? ''}`}>
+      {MAINTENANCE_STATUS_LABEL[s] ?? s}
     </span>
   );
 }
@@ -318,13 +329,14 @@ export function InventoryScreen({
               <SortableHeader label="Ubicación" sortKey="location" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Estatus" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">Garantía</th>
+              <th className="px-4 py-3">Mantenimiento</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-slate-400">
                   No se encontraron equipos con los filtros aplicados.
                 </td>
               </tr>
@@ -377,6 +389,9 @@ export function InventoryScreen({
                   </td>
                   <td className="px-4 py-3">
                     <WarrantyBadge status={item.warrantyStatus} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <MaintenanceBadge status={item.maintenanceStatus} />
                   </td>
                   <td className="px-4 py-3">
                     <Link
