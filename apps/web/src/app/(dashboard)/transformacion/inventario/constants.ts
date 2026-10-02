@@ -40,6 +40,22 @@ export function typeIcon(type: string): string {
   return TYPE_ICONS[type] ?? 'ti-device-laptop';
 }
 
+// ── Semáforo de mantenimiento ────────────────────────────────────────────────
+
+export const MAINTENANCE_STATUS_LABEL: Record<string, string> = {
+  al_dia: 'Al día',
+  por_vencer: 'Por vencer',
+  vencido: 'Vencido',
+  sin_mantenimiento: 'Sin mantenimiento',
+};
+
+export const MAINTENANCE_STATUS_STYLE: Record<string, string> = {
+  al_dia: 'bg-emerald-100 text-emerald-700',
+  por_vencer: 'bg-amber-100 text-amber-700',
+  vencido: 'bg-red-100 text-red-700',
+  sin_mantenimiento: 'bg-slate-100 text-slate-600',
+};
+
 export function formatCurrency(value: string | number): string {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(n) || n === 0) return '—';

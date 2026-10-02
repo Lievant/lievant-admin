@@ -2,9 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  DefaultValuePipe,
+  Delete,
   Get,
   Header,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -23,9 +26,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AssignEmployeeDto } from './dto/assign-employee.dto';
 import { CreateEquipmentDto } from './dto/create-equipment.dto';
+import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { QueryEquipmentDto } from './dto/query-equipment.dto';
 import { QueryEmployeesWithEquipmentDto } from './dto/query-employees.dto';
 import { UpdateEquipmentDto } from './dto/update-equipment.dto';
+import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { InventoryResponsivasService } from './inventory-responsivas.service';
 import { ALLOWED_WARRANTY_MIME_TYPES } from './inventory-storage.service';
 import { InventoryService } from './inventory.service';
@@ -149,6 +154,14 @@ export class InventoryController {
     return this.service.getWarrantyExpiring();
   }
 
+  // Trampa de ruteo: DEBE ir antes de /:id, o Nest lo resuelve como
+  // :id = "maintenance-due" y truena buscando un uuid (igual que warranty-expiring).
+  @Get('equipment/maintenance-due')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  getMaintenanceDue(@Query('days', new DefaultValuePipe(30), ParseIntPipe) days: number) {
+    return this.service.getMaintenanceDue(days);
+  }
+
   @Get('equipment/report/by-area')
   @RequirePermission('transformacion', 'inventario', 'read')
   getReportByArea() {
@@ -262,5 +275,44 @@ export class InventoryController {
   @RequirePermission('transformacion', 'inventario', 'read')
   getEmployeeEquipment(@Param('id', ParseUUIDPipe) id: string) {
     return this.service.getEmployeeEquipmentFor(id);
+  }
+
+  // ── Mantenimientos ───────────────────────────────────────────────────────────
+
+  @Get('equipment/:id/maintenance')
+  @RequirePermission('transformacion', 'inventario', 'read')
+  listMaintenance(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.listMaintenanceByEquipment(id);
+  }
+
+  @Post('equipment/:id/maintenance')
+  @RequirePermission('transformacion', 'inventario', 'write')
+  createMaintenance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateMaintenanceDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.createMaintenance(id, dto, user.id, user.name);
+  }
+
+  @Patch('equipment/:id/maintenance/:maintenanceId')
+  @RequirePermission('transformacion', 'inventario', 'write')
+  updateMaintenance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('maintenanceId', ParseUUIDPipe) maintenanceId: string,
+    @Body() dto: UpdateMaintenanceDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.updateMaintenance(id, maintenanceId, dto, user.id, user.name);
+  }
+
+  @Delete('equipment/:id/maintenance/:maintenanceId')
+  @RequirePermission('transformacion', 'inventario', 'write')
+  deleteMaintenance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('maintenanceId', ParseUUIDPipe) maintenanceId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.deleteMaintenance(id, maintenanceId, user.id, user.name);
   }
 }

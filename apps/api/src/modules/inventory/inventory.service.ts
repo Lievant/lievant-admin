@@ -1,14 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
+import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { AssignEmployeeDto } from './dto/assign-employee.dto';
 import { CreateEquipmentDto } from './dto/create-equipment.dto';
+import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
 import { QueryEquipmentDto } from './dto/query-equipment.dto';
 import { UpdateEquipmentDto } from './dto/update-equipment.dto';
+import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { EquipmentBrand } from './entities/equipment-brand.entity';
 import { InventoryStorageService } from './inventory-storage.service';
 import { EquipmentHistory } from './entities/equipment-history.entity';
+import { EquipmentMaintenance } from './entities/equipment-maintenance.entity';
 import { EquipmentStatus } from './entities/equipment-status.entity';
 import { EquipmentType } from './entities/equipment-type.entity';
 import { Equipment } from './entities/equipment.entity';
@@ -17,6 +21,99 @@ import { Equipment } from './entities/equipment.entity';
 const WARRANTY_WARNING_DAYS = 30;
 
 export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+// ── Mantenimiento: constantes, tipos y cálculo derivado ─────────────────────────
+
+/** Cada cuántos meses toca mantenimiento (política interna). */
+export const MAINTENANCE_INTERVAL_MONTHS = 6;
+
+/** Mismo umbral de aviso que la garantía: faltan 30 días o menos → "por vencer". */
+export const MAINTENANCE_WARNING_DAYS = 30;
+
+export type MaintenanceStatus = 'sin_mantenimiento' | 'vencido' | 'por_vencer' | 'al_dia';
+
+export interface DerivedMaintenance {
+  lastMaintenanceDate: string | null;
+  nextMaintenanceDate: string | null;
+  maintenanceStatus: MaintenanceStatus;
+}
+
+/**
+ * Suma meses de calendario topando al último día del mes destino (RN-8).
+ *
+ * `Date.setMonth()` desborda: 2026-08-31 + 6 daría 2027-03-03 en vez de
+ * 2027-02-28. Aquí se calcula el mes destino y se recorta el día al último día
+ * real de ese mes. En SQL el `+ interval '6 months'` de Postgres ya hace esto solo.
+ */
+export function addMonthsClamped(dateStr: string, months: number): string {
+  const parts = dateStr.slice(0, 10).split('-').map(Number);
+  const y = parts[0] ?? 0;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  const monthIndex = m - 1 + months;
+  const targetYear = y + Math.floor(monthIndex / 12);
+  const targetMonth = ((monthIndex % 12) + 12) % 12; // 0-based, seguro ante negativos
+  // Día 0 del mes siguiente = último día del mes destino.
+  const lastDay = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const day = Math.min(d, lastDay);
+  const mm = String(targetMonth + 1).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  return `${targetYear}-${mm}-${dd}`;
+}
+
+/**
+ * Estado del semáforo a partir de la fecha del próximo mantenimiento.
+ *
+ * Se compara a medianoche local, igual que `warrantyStatus()`: un mantenimiento
+ * que vence hoy sigue estando "por vencer" hoy, no "vencido" desde el primer
+ * minuto del día.
+ */
+function maintenanceStatusFromNext(next: string, now: Date): MaintenanceStatus {
+  const parts = next.slice(0, 10).split('-').map(Number);
+  const y = parts[0] ?? 0;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  const target = new Date(y, m - 1, d);
+  const today = new Date(now.getTime());
+  today.setHours(0, 0, 0, 0);
+
+  const days = Math.round((target.getTime() - today.getTime()) / 86_400_000);
+  if (days < 0) return 'vencido';
+  if (days <= MAINTENANCE_WARNING_DAYS) return 'por_vencer';
+  return 'al_dia';
+}
+
+/**
+ * Punto único de las decisiones D2 y D4 (spec §3), a propósito en una sola
+ * función para que confirmarlas o cambiarlas con Paulo cueste una línea:
+ *
+ *  - D2: solo los **Preventivos** cuentan para el reloj de 6 meses; un Correctivo
+ *        aparece en la bitácora pero no mueve la fecha del próximo.
+ *  - D4: un equipo **sin ningún preventivo** sale como `sin_mantenimiento`, nunca
+ *        `vencido` (si no, todo el parque nacería en rojo).
+ */
+export function deriveMaintenance(
+  records: { maintenanceDate: string; maintenanceType: string }[],
+  now: Date = new Date(),
+): DerivedMaintenance {
+  const preventiveDates = records
+    .filter((r) => r.maintenanceType === 'Preventivo') // D2
+    .map((r) => r.maintenanceDate.slice(0, 10))
+    .sort(); // orden lexicográfico == cronológico para 'YYYY-MM-DD'
+
+  if (preventiveDates.length === 0) {
+    // D4
+    return { lastMaintenanceDate: null, nextMaintenanceDate: null, maintenanceStatus: 'sin_mantenimiento' };
+  }
+
+  const last = preventiveDates[preventiveDates.length - 1]!;
+  const next = addMonthsClamped(last, MAINTENANCE_INTERVAL_MONTHS);
+  return {
+    lastMaintenanceDate: last,
+    nextMaintenanceDate: next,
+    maintenanceStatus: maintenanceStatusFromNext(next, now),
+  };
+}
 
 /**
  * Las columnas DATE llegan como Date desde pg. Se formatea en local, no con
@@ -43,6 +140,10 @@ export class InventoryService {
     private readonly storage: InventoryStorageService,
     @InjectRepository(EquipmentStatus) private readonly statusesRepo: Repository<EquipmentStatus>,
     @InjectRepository(EmployeeRecord) private readonly employeesRepo: Repository<EmployeeRecord>,
+    @InjectRepository(EquipmentMaintenance)
+    private readonly maintenanceRepo: Repository<EquipmentMaintenance>,
+    @InjectRepository(TicketAssignee)
+    private readonly ticketAssigneesRepo: Repository<TicketAssignee>,
   ) {}
 
   /**
@@ -139,13 +240,24 @@ export class InventoryService {
     // El listado lleva el estado de garantía —es un cálculo en memoria— pero no
     // la URL firmada de la factura: firmar una por fila serían 20 llamadas a S3
     // por página para un dato que solo se usa en el detalle.
-    const enriched = data.map((item) => ({
-      ...item,
-      assignedEmployeeName: item.assignedEmployee?.fullName ?? null,
-      assignedEmployeeEmail: item.assignedEmployee?.corporateEmail ?? null,
-      assignedEmployeePosition: item.assignedEmployee?.position ?? null,
-      warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
-    }));
+    // El semáforo de mantenimiento se calcula para toda la página en una sola
+    // consulta (el último preventivo por equipo), no una por fila.
+    const maintByEquipment = await this.deriveMaintenanceForEquipmentIds(data.map((d) => d.id));
+
+    const enriched = data.map((item) => {
+      const maint =
+        maintByEquipment.get(item.id) ??
+        ({ lastMaintenanceDate: null, nextMaintenanceDate: null, maintenanceStatus: 'sin_mantenimiento' } as DerivedMaintenance);
+      return {
+        ...item,
+        assignedEmployeeName: item.assignedEmployee?.fullName ?? null,
+        assignedEmployeeEmail: item.assignedEmployee?.corporateEmail ?? null,
+        assignedEmployeePosition: item.assignedEmployee?.position ?? null,
+        warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
+        maintenanceStatus: maint.maintenanceStatus,
+        nextMaintenanceDate: maint.nextMaintenanceDate,
+      };
+    });
 
     return { data: enriched, nextCursor, total };
   }
@@ -283,15 +395,20 @@ export class InventoryService {
     const item = await this.equipmentRepo.findOne({ where: { id } });
     if (!item) throw new NotFoundException(`Equipo ${id} no encontrado`);
 
-    const [history, employee, enriched] = await Promise.all([
+    const [history, employee, enriched, maintByEquipment] = await Promise.all([
       this.historyRepo.find({ where: { equipmentId: id }, order: { createdAt: 'ASC' } }),
       item.assignedToEmployeeId
         ? this.employeesRepo.findOne({ where: { id: item.assignedToEmployeeId } })
         : Promise.resolve(null),
       this.withWarranty(item),
+      this.deriveMaintenanceForEquipmentIds([id]),
     ]);
 
-    return { ...enriched, history, assignedEmployee: employee };
+    const maint =
+      maintByEquipment.get(id) ??
+      ({ lastMaintenanceDate: null, nextMaintenanceDate: null, maintenanceStatus: 'sin_mantenimiento' } as DerivedMaintenance);
+
+    return { ...enriched, history, assignedEmployee: employee, ...maint };
   }
 
   /**
@@ -839,5 +956,262 @@ export class InventoryService {
     );
     const nextId = parseInt(result[0].next_id, 10);
     return `TEC-${year}-${String(nextId).padStart(3, '0')}`;
+  }
+
+  // -------------------------------------------------------------------------
+  // Mantenimientos
+  // -------------------------------------------------------------------------
+
+  /** Existencia del equipo o 404, para no registrar mantenimientos huérfanos. */
+  private async ensureEquipment(equipmentId: string): Promise<Equipment> {
+    const item = await this.equipmentRepo.findOne({ where: { id: equipmentId } });
+    if (!item) throw new NotFoundException(`Equipo ${equipmentId} no encontrado`);
+    return item;
+  }
+
+  /**
+   * El técnico debe existir y estar activo al registrar (RN-4). Uno inactivo
+   * puede seguir apareciendo en registros viejos, pero no elegirse en uno nuevo.
+   */
+  private async assertActiveTechnician(technicianId: string): Promise<TicketAssignee> {
+    const tech = await this.ticketAssigneesRepo.findOne({ where: { id: technicianId } });
+    if (!tech) throw new NotFoundException(`Técnico ${technicianId} no encontrado`);
+    if (!tech.isActive) {
+      throw new BadRequestException(
+        `El técnico ${tech.name} está inactivo; no puede registrarse en un mantenimiento nuevo`,
+      );
+    }
+    return tech;
+  }
+
+  /**
+   * Último preventivo por equipo + estado derivado, en una sola consulta para el
+   * conjunto de ids que se pida (listado o detalle). Los equipos sin preventivo
+   * simplemente no aparecen en el mapa → el llamador asume `sin_mantenimiento`.
+   */
+  private async deriveMaintenanceForEquipmentIds(
+    ids: string[],
+  ): Promise<Map<string, DerivedMaintenance>> {
+    const map = new Map<string, DerivedMaintenance>();
+    if (ids.length === 0) return map;
+
+    const rows = await this.maintenanceRepo.query(
+      `
+      SELECT equipment_id, MAX(maintenance_date) AS last_date
+      FROM inventory.equipment_maintenance
+      WHERE maintenance_type = 'Preventivo'
+        AND deleted_at IS NULL
+        AND equipment_id = ANY($1::uuid[])
+      GROUP BY equipment_id
+      `,
+      [ids],
+    );
+
+    for (const r of rows as { equipment_id: string; last_date: unknown }[]) {
+      const last = toDateString(r.last_date);
+      if (!last) continue;
+      map.set(r.equipment_id, deriveMaintenance([{ maintenanceDate: last, maintenanceType: 'Preventivo' }]));
+    }
+    return map;
+  }
+
+  /** Cada alta/edición/borrado de mantenimiento deja rastro en el historial (RN-6). */
+  private async writeMaintenanceHistory(
+    equipmentId: string,
+    userId: string,
+    userName: string,
+    action: string,
+    notes: string,
+  ): Promise<void> {
+    await this.historyRepo.save(
+      this.historyRepo.create({ equipmentId, changedById: userId, changedByName: userName, action, notes }),
+    );
+  }
+
+  private toMaintenanceView(record: EquipmentMaintenance) {
+    return {
+      id: record.id,
+      equipmentId: record.equipmentId,
+      maintenanceDate: toDateString(record.maintenanceDate),
+      maintenanceType: record.maintenanceType,
+      technicianId: record.technicianId,
+      technicianName: record.technicianName,
+      observations: record.observations,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt,
+    };
+  }
+
+  /** Bitácora del equipo (más reciente primero) + resumen derivado del semáforo. */
+  async listMaintenanceByEquipment(equipmentId: string) {
+    await this.ensureEquipment(equipmentId);
+
+    const records = await this.maintenanceRepo.find({
+      where: { equipmentId, deletedAt: IsNull() },
+      order: { maintenanceDate: 'DESC', createdAt: 'DESC' },
+    });
+
+    const derived = deriveMaintenance(
+      records.map((r) => ({ maintenanceDate: r.maintenanceDate, maintenanceType: r.maintenanceType })),
+    );
+
+    return { data: records.map((r) => this.toMaintenanceView(r)), ...derived };
+  }
+
+  async createMaintenance(
+    equipmentId: string,
+    dto: CreateMaintenanceDto,
+    userId: string,
+    userName: string,
+  ) {
+    await this.ensureEquipment(equipmentId);
+    const tech = await this.assertActiveTechnician(dto.technicianId);
+    const type = dto.maintenanceType ?? 'Preventivo';
+
+    await this.maintenanceRepo.save(
+      this.maintenanceRepo.create({
+        equipmentId,
+        maintenanceDate: dto.maintenanceDate,
+        maintenanceType: type,
+        technicianId: tech.id,
+        technicianName: tech.name, // copia del nombre al momento de registrar
+        observations: dto.observations ?? null,
+      }),
+    );
+
+    await this.writeMaintenanceHistory(
+      equipmentId,
+      userId,
+      userName,
+      'MANTENIMIENTO_CREADO',
+      `${type} registrado (${dto.maintenanceDate}) por ${tech.name}`,
+    );
+
+    return this.listMaintenanceByEquipment(equipmentId);
+  }
+
+  async updateMaintenance(
+    equipmentId: string,
+    maintenanceId: string,
+    dto: UpdateMaintenanceDto,
+    userId: string,
+    userName: string,
+  ) {
+    const record = await this.maintenanceRepo.findOne({
+      where: { id: maintenanceId, equipmentId, deletedAt: IsNull() },
+    });
+    if (!record) throw new NotFoundException(`Mantenimiento ${maintenanceId} no encontrado`);
+
+    const changes: string[] = [];
+
+    if (dto.maintenanceDate !== undefined && dto.maintenanceDate !== record.maintenanceDate) {
+      changes.push(`fecha: ${record.maintenanceDate} → ${dto.maintenanceDate}`);
+      record.maintenanceDate = dto.maintenanceDate;
+    }
+    if (dto.maintenanceType !== undefined && dto.maintenanceType !== record.maintenanceType) {
+      changes.push(`tipo: ${record.maintenanceType} → ${dto.maintenanceType}`);
+      record.maintenanceType = dto.maintenanceType;
+    }
+    if (dto.technicianId !== undefined && dto.technicianId !== record.technicianId) {
+      const tech = await this.assertActiveTechnician(dto.technicianId);
+      changes.push(`técnico: ${record.technicianName} → ${tech.name}`);
+      record.technicianId = tech.id;
+      record.technicianName = tech.name;
+    }
+    if (dto.observations !== undefined && (dto.observations ?? '') !== (record.observations ?? '')) {
+      changes.push('observaciones actualizadas');
+      record.observations = dto.observations ?? null;
+    }
+
+    await this.maintenanceRepo.save(record);
+
+    if (changes.length > 0) {
+      await this.writeMaintenanceHistory(
+        equipmentId,
+        userId,
+        userName,
+        'MANTENIMIENTO_EDITADO',
+        changes.join('; '),
+      );
+    }
+
+    return this.listMaintenanceByEquipment(equipmentId);
+  }
+
+  /** Borrado lógico (RN-5). Al recalcular, si era el último preventivo el semáforo se mueve solo. */
+  async deleteMaintenance(
+    equipmentId: string,
+    maintenanceId: string,
+    userId: string,
+    userName: string,
+  ) {
+    const record = await this.maintenanceRepo.findOne({
+      where: { id: maintenanceId, equipmentId, deletedAt: IsNull() },
+    });
+    if (!record) throw new NotFoundException(`Mantenimiento ${maintenanceId} no encontrado`);
+
+    record.deletedBy = userId;
+    await this.maintenanceRepo.save(record);
+    await this.maintenanceRepo.softDelete(maintenanceId);
+
+    await this.writeMaintenanceHistory(
+      equipmentId,
+      userId,
+      userName,
+      'MANTENIMIENTO_ELIMINADO',
+      `${record.maintenanceType} del ${record.maintenanceDate} eliminado`,
+    );
+
+    return this.listMaintenanceByEquipment(equipmentId);
+  }
+
+  /**
+   * Equipos cuyo próximo mantenimiento cae dentro de los próximos N días (o ya
+   * pasó): sirve para "¿a qué equipos les toca este mes?". El `+ interval '6
+   * months'` de Postgres hace el tope a fin de mes solo (RN-8). Los equipos sin
+   * ningún preventivo no aparecen: son `sin_mantenimiento`, no vencidos (D4).
+   */
+  async getMaintenanceDue(days = MAINTENANCE_WARNING_DAYS) {
+    const rows = await this.maintenanceRepo.query(
+      `
+      SELECT e.id,
+             e.display_id,
+             e.legacy_id,
+             e.brand,
+             e.model,
+             e.equipment_type,
+             emp.full_name AS assigned_to,
+             last.last_date,
+             (last.last_date + interval '6 months')::date AS next_date,
+             ((last.last_date + interval '6 months')::date - CURRENT_DATE)::int AS days_until_due
+      FROM inventory.equipment e
+      JOIN LATERAL (
+        SELECT MAX(m.maintenance_date) AS last_date
+        FROM inventory.equipment_maintenance m
+        WHERE m.equipment_id = e.id
+          AND m.maintenance_type = 'Preventivo'
+          AND m.deleted_at IS NULL
+      ) last ON TRUE
+      LEFT JOIN employees.employee_records emp ON emp.id = e.assigned_to_employee_id
+      WHERE e.deleted_at IS NULL
+        AND last.last_date IS NOT NULL
+        AND (last.last_date + interval '6 months')::date <= CURRENT_DATE + $1::int
+      ORDER BY next_date ASC
+      `,
+      [days],
+    );
+
+    return rows.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      displayId: r.display_id as string,
+      legacyId: (r.legacy_id as string) ?? null,
+      brand: (r.brand as string) ?? null,
+      model: (r.model as string) ?? null,
+      equipmentType: r.equipment_type as string,
+      assignedTo: (r.assigned_to as string) ?? null,
+      lastMaintenanceDate: toDateString(r.last_date),
+      nextMaintenanceDate: toDateString(r.next_date),
+      daysUntilDue: r.days_until_due as number,
+    }));
   }
 }
