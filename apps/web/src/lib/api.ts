@@ -2358,12 +2358,48 @@ export interface EquipmentSummary {
   warrantyNotes: string | null;
   warrantyInvoiceOriginalName: string | null;
   warrantyStatus: WarrantyStatus;
+  // ── Mantenimiento (derivado; el próximo se calcula desde el último preventivo) ──
+  maintenanceStatus: MaintenanceStatus;
+  nextMaintenanceDate: string | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+export type MaintenanceStatus = 'sin_mantenimiento' | 'vencido' | 'por_vencer' | 'al_dia';
+
+export type MaintenanceType = 'Preventivo' | 'Correctivo';
+
+export interface MaintenanceRecord {
+  id: string;
+  equipmentId: string;
+  maintenanceDate: string | null;
+  maintenanceType: MaintenanceType;
+  technicianId: string | null;
+  technicianName: string;
+  observations: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Respuesta de la bitácora de un equipo: registros + resumen del semáforo. */
+export interface MaintenanceListResponse {
+  data: MaintenanceRecord[];
+  lastMaintenanceDate: string | null;
+  nextMaintenanceDate: string | null;
+  maintenanceStatus: MaintenanceStatus;
+}
+
+/** Opción del selector de técnicos (catálogo ticket_assignees/active). */
+export interface TechnicianOption {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string | null;
+  isActive: boolean;
+}
 
 export interface WarrantyExpiringItem {
   id: string;
@@ -2399,6 +2435,8 @@ export interface EquipmentDetail extends EquipmentSummary {
   warrantyProviderName: string | null;
   /** URL prefirmada de la factura; null si no hay archivo o falló la firma. */
   warrantyInvoiceUrl: string | null;
+  /** Fecha del último mantenimiento preventivo; null si nunca se ha registrado uno. */
+  lastMaintenanceDate: string | null;
   history: EquipmentHistoryEntry[];
   assignedEmployee: {
     id: string;
@@ -3808,6 +3846,59 @@ export function getVacationMasterReport(params: {
   if (params.anniversaryWithin) q.set('anniversary_within', params.anniversaryWithin);
   const qs = q.toString();
   return apiFetchWithRetry<VacationMasterRow[]>(`/vacations/report/master${qs ? `?${qs}` : ''}`);
+}
+
+// --- Reporte de Headcount (rrhh.headcount.read, confidencial) ---
+
+export type HeadcountStatusFilter = 'true' | 'false' | 'todos';
+
+export interface HeadcountColumnInfo {
+  key: string;
+  label: string;
+  sensitive: boolean;
+  kind: 'text' | 'date' | 'money';
+}
+
+export type HeadcountRow = { employeeId: string } & Record<string, string | number | null>;
+
+export interface HeadcountReport {
+  generatedAt: string;
+  total: number;
+  filters: {
+    empresa: string[];
+    activo: HeadcountStatusFilter;
+    division: string | null;
+    ubicacion: string | null;
+  };
+  columns: HeadcountColumnInfo[];
+  availableColumns: HeadcountColumnInfo[];
+  canViewSensitive: boolean;
+  rows: HeadcountRow[];
+  options: { companies: string[]; divisions: string[]; locations: string[] };
+}
+
+export interface HeadcountQuery {
+  empresa?: string[] | undefined;
+  activo?: HeadcountStatusFilter | undefined;
+  division?: string | undefined;
+  ubicacion?: string | undefined;
+  columns?: string[] | undefined;
+}
+
+/** Query string compartido por la tabla (server) y la descarga del Excel (cliente). */
+export function headcountQueryString(params: HeadcountQuery): string {
+  const q = new URLSearchParams();
+  if (params.empresa?.length) q.set('empresa', params.empresa.join(','));
+  if (params.activo) q.set('activo', params.activo);
+  if (params.division) q.set('division', params.division);
+  if (params.ubicacion) q.set('ubicacion', params.ubicacion);
+  if (params.columns?.length) q.set('columns', params.columns.join(','));
+  return q.toString();
+}
+
+export function getHeadcountReport(params: HeadcountQuery = {}): Promise<HeadcountReport> {
+  const qs = headcountQueryString(params);
+  return apiFetchWithRetry<HeadcountReport>(`/employees/headcount${qs ? `?${qs}` : ''}`);
 }
 
 // --- Gestión manual de vacaciones (rrhh.vacaciones.manage) ---

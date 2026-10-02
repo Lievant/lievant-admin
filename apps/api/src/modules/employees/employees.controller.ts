@@ -39,8 +39,10 @@ import { UpdateTerminationDto } from './dto/termination.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { GetBirthdayReportDto } from './dto/get-birthday-report.dto';
 import { GetExpiringContractsDto } from './dto/get-expiring-contracts.dto';
+import { GetHeadcountDto } from './dto/get-headcount.dto';
 import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
+import { HeadcountService } from './headcount.service';
 import { DocumentsService, DocumentType } from './documents.service';
 
 const VALID_DOCUMENT_TYPES: DocumentType[] = [
@@ -59,6 +61,7 @@ export class EmployeesController {
     private readonly employeesService: EmployeesService,
     private readonly documentsService: DocumentsService,
     private readonly photosService: EmployeePhotosService,
+    private readonly headcountService: HeadcountService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -101,6 +104,28 @@ export class EmployeesController {
   @Get('reports/expiring-contracts')
   getExpiringContracts(@Query() dto: GetExpiringContractsDto) {
     return this.employeesService.getExpiringContracts(dto.days ?? 30);
+  }
+
+  /**
+   * Reporte de Headcount (confidencial). Mismo endpoint para la tabla y para el
+   * Excel: `format=xlsx` devuelve el archivo con los mismos filtros y columnas.
+   * Debe ir antes de GET :id para que "headcount" no se tome como UUID.
+   */
+  @Get('headcount')
+  @RequirePermission('rrhh', 'headcount', 'read')
+  async getHeadcount(
+    @Query() dto: GetHeadcountDto,
+    @CurrentUser() user: User,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    if (dto.format !== 'xlsx') {
+      return this.headcountService.getHeadcount(dto, user);
+    }
+    const { buffer, fileName } = await this.headcountService.getHeadcountExcel(dto, user);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+    return undefined;
   }
 
   @Get(':id')

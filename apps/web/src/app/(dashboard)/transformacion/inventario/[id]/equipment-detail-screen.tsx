@@ -3,11 +3,19 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { EquipmentBrandCatalog, EquipmentDetail, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
-import { statusBadgeStyle, typeIcon } from '../constants';
+import { useCurrentUser } from '@/components/user-provider';
+import {
+  MAINTENANCE_STATUS_LABEL,
+  MAINTENANCE_STATUS_STYLE,
+  formatDate,
+  statusBadgeStyle,
+  typeIcon,
+} from '../constants';
 import { InfoTab } from './info-tab';
 import { AssignmentTab } from './assignment-tab';
 import { HistoryTab } from './history-tab';
 import { SupportTab } from './support-tab';
+import { MaintenanceTab, type MaintenanceSummary } from './maintenance-tab';
 
 interface Catalogs {
   types: EquipmentTypeCatalog[];
@@ -25,11 +33,28 @@ const TABS = [
   { key: 'assignment', label: 'Asignación' },
   { key: 'history', label: 'Historial' },
   { key: 'support', label: 'Soporte' },
+  { key: 'maintenance', label: 'Mantenimientos' },
 ];
 
 export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }: Props) {
-  const [tab, setTab] = useState<'info' | 'assignment' | 'history' | 'support'>('info');
+  const [tab, setTab] = useState<'info' | 'assignment' | 'history' | 'support' | 'maintenance'>('info');
   const [equipment, setEquipment] = useState(initialEquipment);
+
+  const user = useCurrentUser();
+  // Mismo criterio que el resto del inventario: SUPER_ADMIN o permiso de escritura;
+  // sin usuario resuelto se asume que puede, para no esconder el botón por un fallo de /auth/me.
+  const canWrite =
+    !user ||
+    user.roles.some((r) => r.name === 'SUPER_ADMIN') ||
+    user.permissions.some(
+      (p) => p.section === 'transformacion' && p.module === 'inventario' && p.action === 'write',
+    );
+
+  function applyMaintenanceSummary(summary: MaintenanceSummary) {
+    setEquipment((prev) => ({ ...prev, ...summary }));
+  }
+
+  const maintenanceStatus = equipment.maintenanceStatus ?? 'sin_mantenimiento';
 
   return (
     <div>
@@ -49,6 +74,21 @@ export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }:
                 )}
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadgeStyle(equipment.status)}`}>
                   {equipment.status}
+                </span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${MAINTENANCE_STATUS_STYLE[maintenanceStatus] ?? ''}`}
+                  title={
+                    equipment.nextMaintenanceDate
+                      ? `Próximo mantenimiento: ${formatDate(equipment.nextMaintenanceDate)}`
+                      : 'Sin mantenimiento preventivo registrado'
+                  }
+                >
+                  {MAINTENANCE_STATUS_LABEL[maintenanceStatus] ?? maintenanceStatus}
+                  {equipment.nextMaintenanceDate && (
+                    <span className="ml-1 font-normal opacity-80">
+                      · {formatDate(equipment.nextMaintenanceDate)}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -98,6 +138,13 @@ export function EquipmentDetailScreen({ equipment: initialEquipment, catalogs }:
           <HistoryTab history={equipment.history} />
         )}
         {tab === 'support' && <SupportTab equipmentId={equipment.id} />}
+        {tab === 'maintenance' && (
+          <MaintenanceTab
+            equipmentId={equipment.id}
+            canWrite={canWrite}
+            onSummaryChange={applyMaintenanceSummary}
+          />
+        )}
       </div>
     </div>
   );

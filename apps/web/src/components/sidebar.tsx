@@ -75,6 +75,8 @@ export function Sidebar({ user }: SidebarProps) {
   const isManager = useIsTeamManager();
   const showFinanzas = hasSection(user, 'finanzas');
   const showRrhh = hasSection(user, 'rrhh');
+  // Headcount es confidencial: solo SUPER_ADMIN y overrides individuales.
+  const showHeadcount = hasModule(user, 'rrhh', 'headcount', 'read');
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
@@ -205,10 +207,22 @@ export function Sidebar({ user }: SidebarProps) {
                   <IdCardIcon className="h-4 w-4" />
                   Empleados
                 </NavSubLink>
-                <NavSubLink href="/rrhh/reportes" active={pathname.startsWith('/rrhh/reportes')}>
+                <NavSubLink
+                  href="/rrhh/reportes"
+                  active={pathname.startsWith('/rrhh/reportes') && !pathname.startsWith('/rrhh/reportes/headcount')}
+                >
                   <TableIcon className="h-4 w-4" />
                   Reportes
                 </NavSubLink>
+                {showHeadcount && (
+                  <NavSubLink
+                    href="/rrhh/reportes/headcount"
+                    active={pathname.startsWith('/rrhh/reportes/headcount')}
+                  >
+                    <UsersGroupIcon className="h-4 w-4" />
+                    Headcount
+                  </NavSubLink>
+                )}
               </SubMenu>
             )}
           </>
