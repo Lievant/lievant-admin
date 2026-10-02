@@ -3848,6 +3848,59 @@ export function getVacationMasterReport(params: {
   return apiFetchWithRetry<VacationMasterRow[]>(`/vacations/report/master${qs ? `?${qs}` : ''}`);
 }
 
+// --- Reporte de Headcount (rrhh.headcount.read, confidencial) ---
+
+export type HeadcountStatusFilter = 'true' | 'false' | 'todos';
+
+export interface HeadcountColumnInfo {
+  key: string;
+  label: string;
+  sensitive: boolean;
+  kind: 'text' | 'date' | 'money';
+}
+
+export type HeadcountRow = { employeeId: string } & Record<string, string | number | null>;
+
+export interface HeadcountReport {
+  generatedAt: string;
+  total: number;
+  filters: {
+    empresa: string[];
+    activo: HeadcountStatusFilter;
+    division: string | null;
+    ubicacion: string | null;
+  };
+  columns: HeadcountColumnInfo[];
+  availableColumns: HeadcountColumnInfo[];
+  canViewSensitive: boolean;
+  rows: HeadcountRow[];
+  options: { companies: string[]; divisions: string[]; locations: string[] };
+}
+
+export interface HeadcountQuery {
+  empresa?: string[] | undefined;
+  activo?: HeadcountStatusFilter | undefined;
+  division?: string | undefined;
+  ubicacion?: string | undefined;
+  columns?: string[] | undefined;
+}
+
+/** Query string compartido por la tabla (server) y la descarga del Excel (cliente). */
+export function headcountQueryString(params: HeadcountQuery): string {
+  const q = new URLSearchParams();
+  if (params.empresa?.length) q.set('empresa', params.empresa.join(','));
+  if (params.activo) q.set('activo', params.activo);
+  if (params.division) q.set('division', params.division);
+  if (params.ubicacion) q.set('ubicacion', params.ubicacion);
+  if (params.columns?.length) q.set('columns', params.columns.join(','));
+  return q.toString();
+}
+
+export function getHeadcountReport(params: HeadcountQuery = {}): Promise<HeadcountReport> {
+  const qs = headcountQueryString(params);
+  return apiFetchWithRetry<HeadcountReport>(`/employees/headcount${qs ? `?${qs}` : ''}`);
+}
+
 // --- Gestión manual de vacaciones (rrhh.vacaciones.manage) ---
 
 export interface AdminCreateVacationRequestPayload {
