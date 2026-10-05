@@ -166,8 +166,10 @@ export class CreateCardReportDto {
 export class UpdateCardReportDto extends CreateCardReportDto {}
 
 export class ProcessCardReportDto {
+  /** Opcional: sin ella se usa la fecha de hoy en hora de México. */
+  @IsOptional()
   @IsDateString()
-  paymentDate!: string;
+  paymentDate?: string;
 
   @IsOptional()
   @IsString()

@@ -3,7 +3,9 @@ import { CreditCardsService, linesWithoutInvoice } from './credit-cards.service'
 
 const TYPE_ID = '11111111-1111-1111-1111-111111111111';
 
-function buildService(opts: { activeTypeIds?: string[]; lines?: unknown[] } = {}) {
+function buildService(
+  opts: { activeTypeIds?: string[]; lines?: unknown[]; status?: string } = {},
+) {
   const saved: any[] = [];
   const linesRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -34,7 +36,7 @@ function buildService(opts: { activeTypeIds?: string[]; lines?: unknown[] } = {}
     findOne: jest.fn(async () => ({
       id: 'r1',
       creatorId: 'u1',
-      status: 'draft',
+      status: opts.status ?? 'draft',
       lines: opts.lines ?? [],
     })),
     save: jest.fn(),
@@ -52,7 +54,10 @@ function buildService(opts: { activeTypeIds?: string[]; lines?: unknown[] } = {}
     flows as any,
   );
   jest.spyOn(service as any, 'notifySubmitted').mockResolvedValue(undefined);
-  return { service, mgr, saved, reportsRepo };
+  const notifyProcessed = jest
+    .spyOn(service as any, 'notifyProcessed')
+    .mockResolvedValue(undefined);
+  return { service, mgr, saved, reportsRepo, notifyProcessed };
 }
 
 const baseLine = { lineDate: '2026-10-01', vendor: 'Prov', expenseTypeId: TYPE_ID };
@@ -104,5 +109,42 @@ describe('CreditCardsService.submitReport (factura por línea)', () => {
 
   it('hasInvoice sin archivo en S3 no cuenta como factura', () => {
     expect(linesWithoutInvoice([{ ...withInvoice, invoiceS3Key: null }])).toHaveLength(1);
+  });
+});
+
+describe('CreditCardsService.processReport (fecha de pago y nota)', () => {
+  const user = { id: 'fin1' } as any;
+
+  afterEach(() => jest.useRealTimers());
+
+  it('sin paymentDate usa hoy en hora de México, incluso cerca de medianoche UTC', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-10-06T02:30:00Z')); // 20:30 del día 5 en CDMX
+    const { service, reportsRepo, notifyProcessed } = buildService({ status: 'submitted' });
+    await service.processReport('r1', user, {});
+    expect(reportsRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'processed', paymentDate: '2026-10-05' }),
+    );
+    expect(notifyProcessed).toHaveBeenCalledWith(expect.anything(), user, '2026-10-05');
+  });
+
+  it('sin note guarda null', async () => {
+    const { service, reportsRepo } = buildService({ status: 'submitted' });
+    await service.processReport('r1', user, {});
+    expect(reportsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ paymentNote: null }));
+  });
+
+  it('con paymentDate y note explícitos los respeta', async () => {
+    const { service, reportsRepo, notifyProcessed } = buildService({ status: 'submitted' });
+    await service.processReport('r1', user, { paymentDate: '2026-11-01', note: ' Pagado ' });
+    expect(reportsRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentDate: '2026-11-01', paymentNote: 'Pagado' }),
+    );
+    expect(notifyProcessed).toHaveBeenCalledWith(expect.anything(), user, '2026-11-01');
+  });
+
+  it.each(['draft', 'processed'])('rechaza un reporte en estado %s', async (status) => {
+    const { service, reportsRepo } = buildService({ status });
+    await expect(service.processReport('r1', user, {})).rejects.toThrow(BadRequestException);
+    expect(reportsRepo.save).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { todayInMexico } from '../../common/business-date';
 import {
   aNumero,
   buildExpenseReportWorkbook,
@@ -318,11 +319,12 @@ export class CreditCardsService {
     report.status = 'processed';
     report.processedBy = user.id;
     report.processedAt = new Date();
-    report.paymentDate = dto.paymentDate;
+    const paymentDate = dto.paymentDate ?? todayInMexico();
+    report.paymentDate = paymentDate;
     report.paymentNote = dto.note?.trim() || null;
     await this.reportsRepo.save(report);
 
-    await this.notifyProcessed(report, user, dto.paymentDate);
+    await this.notifyProcessed(report, user, paymentDate);
     return this.getReportOrFail(id);
   }
 
