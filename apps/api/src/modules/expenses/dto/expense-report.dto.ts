@@ -29,9 +29,8 @@ export class ExpenseLineDto {
   @IsUUID()
   conceptId?: string;
 
-  @IsOptional()
-  @IsUUID()
-  expenseTypeId?: string;
+  @IsUUID(undefined, { message: 'El tipo de gasto es obligatorio.' })
+  expenseTypeId!: string;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -48,8 +47,10 @@ export class ExpenseLineDto {
   @Min(0)
   extras?: number;
 
+  /** Detalle del gasto: texto libre opcional. */
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 
   @IsOptional()
