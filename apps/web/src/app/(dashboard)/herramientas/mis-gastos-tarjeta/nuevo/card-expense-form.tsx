@@ -27,6 +27,7 @@ interface DraftLine {
   vendor: string;
   conceptId: string;
   expenseTypeId: string;
+  detail: string;
   subtotal: string;
   tip: string;
   extras: string;
@@ -51,6 +52,7 @@ function emptyLine(): DraftLine {
     vendor: '',
     conceptId: '',
     expenseTypeId: '',
+    detail: '',
     subtotal: '',
     tip: '',
     extras: '',
@@ -92,6 +94,7 @@ export function CardExpenseForm({ report }: Props) {
           vendor: l.vendor,
           conceptId: l.conceptId ?? '',
           expenseTypeId: l.expenseTypeId ?? '',
+          detail: l.detail ?? '',
           subtotal: String(Number(l.subtotal)),
           tip: String(Number(l.tip)),
           extras: String(Number(l.extras)),
@@ -119,6 +122,11 @@ export function CardExpenseForm({ report }: Props) {
       }
     })();
   }, []);
+
+  // El tipo de gasto es obligatorio: sin opción vacía, la primera del catálogo
+  // (orden del catálogo: "Viáticos cliente") es el valor por defecto.
+  const defaultTypeId = catalogs?.types[0]?.id ?? '';
+  const typeOf = (l: DraftLine) => l.expenseTypeId || defaultTypeId;
 
   const selectedCard = cards.find((c) => c.id === creditCardId) ?? report?.creditCard ?? null;
 
@@ -154,6 +162,10 @@ export function CardExpenseForm({ report }: Props) {
       setError('La fecha de término no puede ser anterior a la de inicio.');
       return null;
     }
+    if (lines.some((l) => !typeOf(l))) {
+      setError('El tipo de gasto es obligatorio; espera a que cargue el catálogo.');
+      return null;
+    }
     if (lines.some((l) => !l.lineDate || !l.vendor.trim())) {
       setError('Cada línea necesita al menos fecha y proveedor. Elimina las líneas vacías.');
       return null;
@@ -175,7 +187,8 @@ export function CardExpenseForm({ report }: Props) {
         ...(l.motive.trim() ? { motive: l.motive.trim() } : {}),
         vendor: l.vendor.trim(),
         ...(l.conceptId ? { conceptId: l.conceptId } : {}),
-        ...(l.expenseTypeId ? { expenseTypeId: l.expenseTypeId } : {}),
+        expenseTypeId: typeOf(l),
+        ...(l.detail.trim() ? { detail: l.detail.trim() } : {}),
         subtotal: toNumber(l.subtotal),
         tip: toNumber(l.tip),
         extras: toNumber(l.extras),
@@ -198,6 +211,18 @@ export function CardExpenseForm({ report }: Props) {
     }
     return res.id ?? report?.id ?? null;
   }
+
+  // Sin factura en cada línea el backend rechaza el envío; aquí se anticipa.
+  const missingInvoice = lines
+    .map((l, i) => ({ l, n: i + 1 }))
+    .filter(({ l }) => !l.hasInvoice)
+    .map(({ n }) => n);
+  const canSubmit = missingInvoice.length === 0;
+  const missingMessage = canSubmit
+    ? null
+    : `${missingInvoice.length} línea${missingInvoice.length === 1 ? '' : 's'} sin factura (${missingInvoice
+        .map((n) => `#${n}`)
+        .join(', ')}). Guarda el borrador y adjunta la factura de cada una para poder enviar.`;
 
   function handleSaveDraft() {
     startTransition(async () => {
@@ -349,6 +374,15 @@ export function CardExpenseForm({ report }: Props) {
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
+                <th className="px-3 py-3 text-left">
+                  Detalle
+                  <Hint text="Costo operativo: el gasto lo asume el área operativa.
+Costo de venta / temas comerciales: gasto de venta o comercial.
+Costo de Marketing: temas de marketing.
+Viáticos cliente: el gasto lo asume directamente el cliente.
+
+Con esta asignación el gasto se envía al departamento que le corresponda." />
+                </th>
                 <th className="px-3 py-3 text-center">
                   Factura
                   <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
@@ -422,17 +456,26 @@ export function CardExpenseForm({ report }: Props) {
                     <td className="px-3 py-2 text-right font-semibold text-navy">{money(total)}</td>
                     <td className="px-3 py-2">
                       <select
-                        value={line.expenseTypeId}
+                        value={typeOf(line)}
                         onChange={(e) => patchLine(line.key, { expenseTypeId: e.target.value })}
                         className={inputClass}
+                        required
                       >
-                        <option value="">—</option>
                         {catalogs?.types.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={line.detail}
+                        onChange={(e) => patchLine(line.key, { detail: e.target.value })}
+                        className={inputClass}
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <InvoiceCell
@@ -467,7 +510,7 @@ export function CardExpenseForm({ report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={3} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>
@@ -501,6 +544,11 @@ export function CardExpenseForm({ report }: Props) {
         />
       </section>
 
+      {missingMessage && (
+        <p className="text-right text-sm text-amber-700" role="status">
+          {missingMessage}
+        </p>
+      )}
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
@@ -513,7 +561,8 @@ export function CardExpenseForm({ report }: Props) {
         <button
           type="button"
           onClick={() => setConfirmSubmit(true)}
-          disabled={isPending}
+          disabled={isPending || !canSubmit}
+          title={missingMessage ?? undefined}
           className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
         >
           Enviar a Finanzas

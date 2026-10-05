@@ -4544,6 +4544,7 @@ export interface CardExpenseLineItem {
   conceptName: string | null;
   expenseTypeId: string | null;
   expenseTypeName: string | null;
+  detail: string | null;
   subtotal: string;
   tip: string;
   extras: string;
@@ -4599,7 +4600,8 @@ export interface CardExpenseLinePayload {
   motive?: string;
   vendor: string;
   conceptId?: string;
-  expenseTypeId?: string;
+  expenseTypeId: string;
+  detail?: string;
   subtotal?: number;
   tip?: number;
   extras?: number;
