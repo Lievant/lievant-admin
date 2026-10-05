@@ -8,10 +8,10 @@ export { DocumentHeader, Hint, formatDate, formatDateTime, money } from '../mis-
 
 /** Texto de la celda "Información" por tipo de gasto (nombres del catálogo). Única fuente para todas las vistas. */
 const EXPENSE_TYPE_INFO: Record<string, string> = {
-  'Viáticos cliente': 'Lo asume directamente el cliente.',
-  'Costo operativo': 'Lo asume el área operativa (Costo de operación).',
-  'Costo de venta / temas comerciales': 'Lo asume el área de venta/comercial (área de la división).',
-  'Costo de Marketing': 'Temas de marketing (Marketing de la División).',
+  'Viáticos cliente': 'Lo asume directamente el cliente',
+  'Costo operativo': 'Costo de operación',
+  'Costo de venta / temas comerciales': 'Área de la división',
+  'Costo de Marketing': 'Marketing de la división',
 };
 
 /** Tipo fuera del mapa: texto vacío. */
