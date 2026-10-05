@@ -2,10 +2,10 @@ import { Hint } from '@/app/(dashboard)/herramientas/mis-reembolsos/expense-shar
 
 /** Compartido por Mis Gastos de Tarjeta y Mis Reembolsos. Texto de la celda "Información" por tipo de gasto (nombres del catálogo). Única fuente para todas las vistas. */
 const EXPENSE_TYPE_INFO: Record<string, string> = {
-  'Viáticos cliente': 'Lo asume directamente el cliente',
-  'Costo operativo': 'Costo de operación',
+  'Viáticos cliente': 'Este costo lo asume directamente el cliente',
+  'Costo operativo': 'Este gasto lo asume el área operativa',
   'Costo de venta / temas comerciales': 'Área de la división',
-  'Costo de Marketing': 'Marketing de la división',
+  'Costo de Marketing': 'Costos relacionados al tema de marketing',
 };
 
 /** Tipo fuera del mapa: texto vacío. */
