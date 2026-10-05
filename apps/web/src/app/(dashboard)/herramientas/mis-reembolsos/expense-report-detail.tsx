@@ -12,7 +12,7 @@ import {
   submitExpenseReportAction,
 } from './actions';
 import { describeMissingAttachment } from '@/components/missing-attachment';
-import { ExpenseTypeInfoCell, ExpenseTypeInfoHeader } from '@/components/expense-type-info';
+import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
 import { DocumentHeader, formatDate, money, StatusBadge, StatusTimeline } from './expense-shared';
 
 interface Props {
@@ -182,16 +182,18 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[155px] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="min-w-[255px] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
                   <td className="px-3 py-2 align-top">
-                    <ExpenseTypeInfoCell typeName={line.expenseTypeName} />
+                    <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
+                      {expenseTypeInfo(line.expenseTypeName)}
+                    </span>
                   </td>
-                  <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.notes ?? ''}>
+                  <td className="min-w-[160px] max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.notes ?? ''}>
                     {line.notes ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-center">

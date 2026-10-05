@@ -16,7 +16,7 @@ import {
   updateExpenseReportAction,
 } from './actions';
 import { describeMissingAttachment } from '@/components/missing-attachment';
-import { ExpenseTypeInfoCell, ExpenseTypeInfoHeader } from '@/components/expense-type-info';
+import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
 /** Línea en edición. `persistedId` solo existe si ya está guardada en la BD. */
@@ -390,7 +390,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         type="date"
                         value={line.lineDate}
                         onChange={(e) => patchLine(line.key, { lineDate: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[125px]`}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -398,14 +398,14 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         type="text"
                         value={line.vendor}
                         onChange={(e) => patchLine(line.key, { vendor: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[120px]`}
                       />
                     </td>
                     <td className="px-3 py-2">
                       <select
                         value={line.conceptId}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[155px]`}
                       >
                         <option value="">—</option>
                         {catalogs?.concepts.map((c) => (
@@ -423,7 +423,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                           step="0.01"
                           value={line[field]}
                           onChange={(e) => patchLine(line.key, { [field]: e.target.value })}
-                          className={`${inputClass} text-right`}
+                          className={`${inputClass} min-w-[78px] text-right`}
                         />
                       </td>
                     ))}
@@ -432,7 +432,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                       <select
                         value={typeOf(line)}
                         onChange={(e) => patchLine(line.key, { expenseTypeId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[255px]`}
                         required
                       >
                         {catalogs?.types.map((t) => (
@@ -443,9 +443,9 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                       </select>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <ExpenseTypeInfoCell
-                        typeName={catalogs?.types.find((t) => t.id === typeOf(line))?.name}
-                      />
+                      <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
+                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <input
@@ -453,7 +453,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         maxLength={500}
                         value={line.notes}
                         onChange={(e) => patchLine(line.key, { notes: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[160px]`}
                       />
                     </td>
                     <td className="px-3 py-2 text-center">
