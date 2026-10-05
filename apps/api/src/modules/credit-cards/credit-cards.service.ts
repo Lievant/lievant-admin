@@ -62,6 +62,23 @@ function money(value: string | number): string {
   return Number(value).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 
+export interface LineWithoutInvoice {
+  position: number;
+  vendor: string;
+  lineDate: string;
+}
+
+/** Una línea tiene factura si está marcada y existe el archivo en S3. */
+export function linesWithoutInvoice(
+  lines: Pick<CardExpenseLine, 'hasInvoice' | 'invoiceS3Key' | 'vendor' | 'lineDate' | 'sortOrder'>[],
+): LineWithoutInvoice[] {
+  return [...lines]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .map((l, i) => ({ l, position: i + 1 }))
+    .filter(({ l }) => !(l.hasInvoice && l.invoiceS3Key))
+    .map(({ l, position }) => ({ position, vendor: l.vendor, lineDate: l.lineDate }));
+}
+
 export interface PaginatedCardReports {
   items: CardExpenseReport[];
   total: number;
@@ -260,6 +277,19 @@ export class CreditCardsService {
     }
     if (report.lines.length === 0) {
       throw new BadRequestException('Agrega al menos una línea de gasto antes de enviar.');
+    }
+
+    const faltantes = linesWithoutInvoice(report.lines);
+    if (faltantes.length > 0) {
+      const detalle = faltantes
+        .map((l) => `#${l.position} (${l.vendor}, ${l.lineDate})`)
+        .join('; ');
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: `No se puede enviar: ${faltantes.length} línea(s) sin factura adjunta: ${detalle}.`,
+        linesWithoutInvoice: faltantes,
+      });
     }
 
     report.status = 'submitted';
@@ -523,6 +553,7 @@ export class CreditCardsService {
         { header: 'EXTRAS', width: 12, kind: 'money', totalKey: 'extras' },
         { header: 'TOTAL', width: 14, kind: 'money', totalKey: 'total' },
         { header: 'TIPO DE GASTO', width: 24 },
+        { header: 'DETALLE', width: 30 },
         { header: 'FACTURA', width: 10 },
       ],
       rows: lines.map((l) => [
@@ -536,6 +567,7 @@ export class CreditCardsService {
         aNumero(l.extras),
         aNumero(l.total),
         l.expenseTypeName ?? '',
+        l.detail ?? '',
         l.hasInvoice ? 'Sí' : 'No',
       ]),
       totals: {
@@ -625,6 +657,20 @@ export class CreditCardsService {
   ): Promise<void> {
     const linesRepo = mgr.getRepository(CardExpenseLine);
 
+    // El tipo de gasto es obligatorio y debe existir y estar activo en el catálogo.
+    const requestedTypeIds = [...new Set(lines.map((l) => l.expenseTypeId))];
+    if (lines.some((l) => !l.expenseTypeId)) {
+      throw new BadRequestException('El tipo de gasto es obligatorio en cada línea.');
+    }
+    if (requestedTypeIds.length > 0) {
+      const found = await mgr
+        .getRepository(CatalogExpenseType)
+        .find({ where: { id: In(requestedTypeIds), isActive: true } });
+      if (found.length !== requestedTypeIds.length) {
+        throw new BadRequestException('Algún tipo de gasto no existe o está inactivo.');
+      }
+    }
+
     const existing = await linesRepo.find({ where: { reportId } });
     const existingById = new Map(existing.map((l) => [l.id, l]));
 
@@ -675,8 +721,9 @@ export class CreditCardsService {
           vendor: line.vendor,
           conceptId: line.conceptId ?? null,
           conceptName: line.conceptId ? (conceptName.get(line.conceptId) ?? null) : null,
-          expenseTypeId: line.expenseTypeId ?? null,
-          expenseTypeName: line.expenseTypeId ? (typeName.get(line.expenseTypeId) ?? null) : null,
+          expenseTypeId: line.expenseTypeId,
+          expenseTypeName: typeName.get(line.expenseTypeId) ?? null,
+          detail: line.detail?.trim() || null,
           subtotal: (line.subtotal ?? 0).toFixed(2),
           tip: (line.tip ?? 0).toFixed(2),
           extras: (line.extras ?? 0).toFixed(2),
