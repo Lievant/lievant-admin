@@ -77,9 +77,6 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentDate, setPaymentDate] = useState('');
-  const [paymentNote, setPaymentNote] = useState('');
 
   const puedeEnviar = viewer.isCreator && report.status === 'draft';
   const sinFactura = (report.lines ?? [])
@@ -99,7 +96,6 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
     startTransition(async () => {
       const res = await fn();
       if (res.success) {
-        setShowPayment(false);
         router.refresh();
       } else {
         setError(res.error ?? fallback);
@@ -261,75 +257,16 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
           {puedeProcesar && (
             <button
               type="button"
-              onClick={() => setShowPayment(true)}
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              disabled={isPending}
+              onClick={() =>
+                run(() => processCardReportAction(report.id), 'No se pudo registrar el pago.')
+              }
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
             >
               Registrar procesado
             </button>
           )}
         </section>
-      )}
-
-      {showPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-navy">Registrar procesado</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              {report.reportNumber} — {money(report.totalAmount)}
-            </p>
-
-            <div className="mt-4 space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="fecha-pago">
-                  Fecha de pago
-                </label>
-                <input
-                  id="fecha-pago"
-                  type="date"
-                  value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="nota-pago">
-                  Nota (opcional)
-                </label>
-                <textarea
-                  id="nota-pago"
-                  rows={2}
-                  value={paymentNote}
-                  onChange={(e) => setPaymentNote(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPayment(false)}
-                disabled={isPending}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isPending || !paymentDate}
-                onClick={() =>
-                  run(
-                    () => processCardReportAction(report.id, paymentDate, paymentNote),
-                    'No se pudo registrar el pago.',
-                  )
-                }
-                className="rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
-              >
-                {isPending ? 'Guardando…' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

@@ -4731,7 +4731,7 @@ export function submitCardReport(id: string): Promise<CardExpenseReportItem> {
 
 export function processCardReport(
   id: string,
-  payload: { paymentDate: string; note?: string },
+  payload: { paymentDate?: string; note?: string } = {},
 ): Promise<CardExpenseReportItem> {
   return apiFetch<CardExpenseReportItem>(`/credit-cards/reports/${id}/process`, {
     method: 'PATCH',
