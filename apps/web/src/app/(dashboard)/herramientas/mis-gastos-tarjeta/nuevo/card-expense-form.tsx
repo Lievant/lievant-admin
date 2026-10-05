@@ -16,7 +16,8 @@ import {
   submitCardReportAction,
   updateCardReportAction,
 } from '../actions';
-import { DocumentHeader, ExpenseTypeInfoCell, ExpenseTypeInfoHeader, Hint, describeCard, money } from '../card-shared';
+import { expenseTypeInfo } from '@/components/expense-type-info';
+import { DocumentHeader, ExpenseTypeInfoHeader, Hint, describeCard, money } from '../card-shared';
 
 interface DraftLine {
   key: string;
@@ -403,7 +404,7 @@ export function CardExpenseForm({ report }: Props) {
                         type="text"
                         value={line.collaborator}
                         onChange={(e) => patchLine(line.key, { collaborator: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[7rem]`}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -411,7 +412,7 @@ export function CardExpenseForm({ report }: Props) {
                         type="text"
                         value={line.motive}
                         onChange={(e) => patchLine(line.key, { motive: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[8rem]`}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -419,14 +420,14 @@ export function CardExpenseForm({ report }: Props) {
                         type="text"
                         value={line.vendor}
                         onChange={(e) => patchLine(line.key, { vendor: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[7rem]`}
                       />
                     </td>
                     <td className="px-3 py-2">
                       <select
                         value={line.conceptId}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[10rem]`}
                       >
                         <option value="">—</option>
                         {catalogs?.concepts.map((c) => (
@@ -449,11 +450,11 @@ export function CardExpenseForm({ report }: Props) {
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-navy">{money(total)}</td>
-                    <td className="px-3 py-2">
+                    <td className="min-w-[16rem] px-3 py-2">
                       <select
                         value={typeOf(line)}
                         onChange={(e) => patchLine(line.key, { expenseTypeId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[16rem]`}
                         required
                       >
                         {catalogs?.types.map((t) => (
@@ -464,9 +465,9 @@ export function CardExpenseForm({ report }: Props) {
                       </select>
                     </td>
                     <td className="px-3 py-2 align-top">
-                      <ExpenseTypeInfoCell
-                        typeName={catalogs?.types.find((t) => t.id === typeOf(line))?.name}
-                      />
+                      <span className="block w-[13rem] whitespace-normal text-xs text-slate-500">
+                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
+                      </span>
                     </td>
                     <td className="px-3 py-2">
                       <input
@@ -474,7 +475,7 @@ export function CardExpenseForm({ report }: Props) {
                         maxLength={500}
                         value={line.detail}
                         onChange={(e) => patchLine(line.key, { detail: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[11.5rem]`}
                       />
                     </td>
                     <td className="px-3 py-2 text-center">

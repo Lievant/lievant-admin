@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { DownloadIcon, EyeIcon } from '@/components/icons';
+import { expenseTypeInfo } from '@/components/expense-type-info';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CardExpenseLineItem, CardExpenseReportItem } from '@/lib/api';
 import { processCardReportAction, submitCardReportAction } from './actions';
 import {
   CardStatusBadge,
   DocumentHeader,
-  ExpenseTypeInfoCell,
   ExpenseTypeInfoHeader,
   describeCard,
   formatDate,
@@ -186,21 +186,23 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.collaborator ?? '—'}</td>
+                  <td className="min-w-[7rem] px-3 py-2 text-slate-600">{line.collaborator ?? '—'}</td>
                   <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.motive ?? ''}>
                     {line.motive ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[10rem] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="min-w-[16rem] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
                   <td className="px-3 py-2 align-top">
-                    <ExpenseTypeInfoCell typeName={line.expenseTypeName} />
+                    <span className="block w-[13rem] whitespace-normal text-xs text-slate-500">
+                      {expenseTypeInfo(line.expenseTypeName)}
+                    </span>
                   </td>
-                  <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
+                  <td className="min-w-[11.5rem] max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
                     {line.detail ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-center">
