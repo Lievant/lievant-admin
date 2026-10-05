@@ -16,7 +16,7 @@ import {
   submitCardReportAction,
   updateCardReportAction,
 } from '../actions';
-import { DocumentHeader, Hint, describeCard, money } from '../card-shared';
+import { DocumentHeader, ExpenseTypeInfo, Hint, describeCard, money } from '../card-shared';
 
 interface DraftLine {
   key: string;
@@ -374,15 +374,8 @@ export function CardExpenseForm({ report }: Props) {
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
-                <th className="px-3 py-3 text-left">
-                  Detalle
-                  <Hint text="Costo operativo: el gasto lo asume el área operativa.
-Costo de venta / temas comerciales: gasto de venta o comercial.
-Costo de Marketing: temas de marketing.
-Viáticos cliente: el gasto lo asume directamente el cliente.
-
-Con esta asignación el gasto se envía al departamento que le corresponda." />
-                </th>
+                <th className="px-3 py-3 text-center">Información</th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
                   <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
@@ -468,6 +461,11 @@ Con esta asignación el gasto se envía al departamento que le corresponda." />
                         ))}
                       </select>
                     </td>
+                    <td className="px-3 py-2 text-center">
+                      <ExpenseTypeInfo
+                        typeName={catalogs?.types.find((t) => t.id === typeOf(line))?.name}
+                      />
+                    </td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
@@ -510,7 +508,7 @@ Con esta asignación el gasto se envía al departamento que le corresponda." />
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={4} />
+                <td colSpan={5} />
               </tr>
             </tfoot>
           </table>

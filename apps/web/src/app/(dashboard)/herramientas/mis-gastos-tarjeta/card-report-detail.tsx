@@ -10,7 +10,7 @@ import { processCardReportAction, submitCardReportAction } from './actions';
 import {
   CardStatusBadge,
   DocumentHeader,
-  Hint,
+  ExpenseTypeInfo,
   describeCard,
   formatDate,
   formatDateTime,
@@ -178,15 +178,8 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                 <th className="px-3 py-3 text-right">Extras</th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
-                <th className="px-3 py-3 text-left">
-                  Detalle
-                  <Hint text="Costo operativo: el gasto lo asume el área operativa.
-Costo de venta / temas comerciales: gasto de venta o comercial.
-Costo de Marketing: temas de marketing.
-Viáticos cliente: el gasto lo asume directamente el cliente.
-
-Con esta asignación el gasto se envía al departamento que le corresponda." />
-                </th>
+                <th className="px-3 py-3 text-center">Información</th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">Factura</th>
               </tr>
             </thead>
@@ -205,6 +198,9 @@ Con esta asignación el gasto se envía al departamento que le corresponda." />
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
                   <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="px-3 py-2 text-center">
+                    <ExpenseTypeInfo typeName={line.expenseTypeName} />
+                  </td>
                   <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
                     {line.detail ?? '—'}
                   </td>
@@ -223,7 +219,7 @@ Con esta asignación el gasto se envía al departamento que le corresponda." />
                 <td className="px-3 py-3 text-right">{money(report.totalTip)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalExtras)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalAmount)}</td>
-                <td colSpan={3} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>

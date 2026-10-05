@@ -2,7 +2,31 @@
 
 import type { CardReportStatus, CreditCardItem } from '@/lib/api';
 
+import { Hint } from '../mis-reembolsos/expense-shared';
+
 export { DocumentHeader, Hint, formatDate, formatDateTime, money } from '../mis-reembolsos/expense-shared';
+
+const ASIGNACION = 'Con esta asignación el gasto se envía al departamento que le corresponda.';
+
+/** Explicación por tipo de gasto (nombres del catálogo). Única fuente para todas las pantallas. */
+const EXPENSE_TYPE_INFO: Record<string, string> = {
+  'Viáticos cliente': 'El gasto lo asume directamente el cliente.',
+  'Costo operativo': 'El gasto lo asume el área operativa (costo de operación).',
+  'Costo de venta / temas comerciales':
+    'El gasto lo asume el área de venta/comercial (área de la división).',
+  'Costo de Marketing': 'Temas de marketing (Marketing de la División).',
+};
+
+/** Tipo fuera del mapa: texto general, sin romper la fila. */
+export function expenseTypeInfo(typeName: string | null | undefined): string {
+  const base = (typeName && EXPENSE_TYPE_INFO[typeName]) || 'Tipo de gasto sin descripción específica.';
+  return `${base} ${ASIGNACION}`;
+}
+
+/** Ícono "i" de la fila: no se guarda, se calcula del tipo seleccionado. */
+export function ExpenseTypeInfo({ typeName }: { typeName: string | null | undefined }) {
+  return <Hint text={expenseTypeInfo(typeName)} />;
+}
 
 /** Solo tres estados: el gasto de tarjeta no pasa por autorización. */
 export const CARD_STATUS_META: Record<CardReportStatus, { label: string; className: string }> = {
