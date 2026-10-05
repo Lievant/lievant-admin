@@ -8,6 +8,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { todayInMexico } from '../../common/business-date';
+import { linesWithoutInvoice } from '../../common/invoice-lines';
+import type { LineWithoutInvoice } from '../../common/invoice-lines';
 import {
   aNumero,
   buildExpenseReportWorkbook,
@@ -63,22 +65,8 @@ function money(value: string | number): string {
   return Number(value).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 
-export interface LineWithoutInvoice {
-  position: number;
-  vendor: string;
-  lineDate: string;
-}
-
-/** Una línea tiene factura si está marcada y existe el archivo en S3. */
-export function linesWithoutInvoice(
-  lines: Pick<CardExpenseLine, 'hasInvoice' | 'invoiceS3Key' | 'vendor' | 'lineDate' | 'sortOrder'>[],
-): LineWithoutInvoice[] {
-  return [...lines]
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((l, i) => ({ l, position: i + 1 }))
-    .filter(({ l }) => !(l.hasInvoice && l.invoiceS3Key))
-    .map(({ l, position }) => ({ position, vendor: l.vendor, lineDate: l.lineDate }));
-}
+export { linesWithoutInvoice };
+export type { LineWithoutInvoice };
 
 export interface PaginatedCardReports {
   items: CardExpenseReport[];

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { linesWithoutInvoice } from '../../common/invoice-lines';
 import { User } from '../auth/entities/user.entity';
 import { userHasPermission } from '../auth/permissions.util';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
@@ -189,6 +190,18 @@ export class ExpensesService {
     }
     if (report.lines.length === 0) {
       throw new BadRequestException('Agrega al menos una línea de gasto antes de enviar.');
+    }
+    const faltantes = linesWithoutInvoice(report.lines);
+    if (faltantes.length > 0) {
+      const detalle = faltantes
+        .map((l) => `#${l.position} (${l.vendor}, ${l.lineDate})`)
+        .join('; ');
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: `No se puede enviar: ${faltantes.length} línea(s) sin adjunto (imagen o documento): ${detalle}.`,
+        linesWithoutInvoice: faltantes,
+      });
     }
     if (!report.authorizerId) {
       throw new BadRequestException(

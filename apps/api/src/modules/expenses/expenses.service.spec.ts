@@ -58,3 +58,49 @@ describe('ExpensesService.replaceLines (tipo y detalle)', () => {
     expect(saved[0].expenseTypeName).toBe('Viáticos cliente');
   });
 });
+
+describe('ExpensesService.submitReport (adjunto por línea)', () => {
+  const user = { id: 'u1' } as any;
+  const withFile = { vendor: 'A', lineDate: '2026-10-01', sortOrder: 0, hasInvoice: true, invoiceS3Key: 'k' };
+  const without = { vendor: 'B', lineDate: '2026-10-02', sortOrder: 1, hasInvoice: false, invoiceS3Key: null };
+
+  function build(lines: unknown[], status = 'draft') {
+    const reportsRepo = {
+      findOne: jest.fn(async () => ({
+        id: 'r1',
+        requesterId: 'u1',
+        authorizerId: 'a1',
+        status,
+        lines,
+      })),
+      save: jest.fn(),
+    };
+    const service: any = new (ExpensesService as any)(reportsRepo, {}, {}, {}, {}, {}, {}, {});
+    jest.spyOn(service, 'notifySubmitted').mockResolvedValue(undefined);
+    return { service, reportsRepo };
+  }
+
+  it('bloquea el envío y lista las líneas sin adjunto', async () => {
+    const { service, reportsRepo } = build([withFile, without]);
+    await expect(service.submitReport('r1', user)).rejects.toMatchObject({
+      response: { linesWithoutInvoice: [{ position: 2, vendor: 'B', lineDate: '2026-10-02' }] },
+    });
+    expect(reportsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('permite el envío cuando todas las líneas tienen adjunto', async () => {
+    const { service, reportsRepo } = build([withFile]);
+    await service.submitReport('r1', user);
+    expect(reportsRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'submitted' }));
+  });
+
+  it('un adjunto marcado pero sin archivo (quitado) no cuenta', async () => {
+    const { service } = build([{ ...withFile, invoiceS3Key: null }]);
+    await expect(service.submitReport('r1', user)).rejects.toThrow(BadRequestException);
+  });
+
+  it('un reporte ya enviado sigue rechazándose por su estado, no por adjuntos', async () => {
+    const { service } = build([without], 'submitted');
+    await expect(service.submitReport('r1', user)).rejects.toThrow(/ya fue enviado/);
+  });
+});
