@@ -15,6 +15,7 @@ import {
   submitExpenseReportAction,
   updateExpenseReportAction,
 } from './actions';
+import { describeMissingAttachment } from '@/components/missing-attachment';
 import { ExpenseTypeInfoCell, ExpenseTypeInfoHeader } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
@@ -213,6 +214,12 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     }
     return res.id ?? report?.id ?? null;
   }
+
+  // Sin adjunto en cada línea el backend rechaza el envío; aquí se anticipa.
+  const missingMessage = describeMissingAttachment(
+    lines.map((l) => l.hasInvoice),
+    'Guarda el borrador y adjunta un archivo en cada una para poder enviar.',
+  );
 
   function handleSaveDraft() {
     startTransition(async () => {
@@ -500,6 +507,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         </div>
       </section>
 
+      {missingMessage && (
+        <p className="text-right text-sm text-amber-700" role="status">
+          {missingMessage}
+        </p>
+      )}
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
@@ -512,7 +524,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         <button
           type="button"
           onClick={() => setConfirmSubmit(true)}
-          disabled={isPending}
+          disabled={isPending || missingMessage !== null}
+          title={missingMessage ?? undefined}
           className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
         >
           Enviar para autorización

@@ -53,3 +53,17 @@ Sin cambios de esquema. `notes` ya existe (`1751000000010-CreateExpenseReportsMo
 
 Backend: `expenses/dto/expense-report.dto.ts`, `expenses/expenses.service.ts`, `expenses/expenses.service.spec.ts`.
 Frontend: `components/expense-type-info.tsx` (nuevo), `mis-gastos-tarjeta/card-shared.tsx`, `mis-reembolsos/expense-report-form.tsx`, `mis-reembolsos/expense-report-detail.tsx`, `lib/api.ts`. Proxy routes: ninguna nueva.
+
+## 8. Bloqueo de envío sin adjunto
+
+**Regla.** `PATCH /expenses/:id/submit` (único camino `draft → submitted`, `expenses.service.ts` `submitReport`) rechaza con 400 si alguna línea no tiene adjunto. Una línea tiene adjunto si `has_invoice = true` **y** `invoice_s3_key` no es nulo; imagen y documento cuentan igual (los formatos los fija el flujo de subida existente, sin restricciones nuevas). Los adjuntos son por línea y hoy no existe endpoint para borrarlos: un adjunto "quitado" (sin key) no cuenta.
+
+**Contrato de error (mismo que tarjetas).** `{ statusCode: 400, error, message, linesWithoutInvoice: [{ position, vendor, lineDate }] }`. El helper `linesWithoutInvoice` vive en `apps/api/src/common/invoice-lines.ts` y tarjetas lo re-exporta.
+
+**Frontend.** Botón "Enviar para autorización" deshabilitado, con mensaje "N de M líneas sin adjunto (#…)", en el formulario (alta y edición) y en el detalle. Mensaje compartido: `components/missing-attachment.ts`.
+
+**Alcance.** Los reportes enviados o procesados no se tocan; un borrador sin adjuntos queda bloqueado hasta adjuntar. Sin migración.
+
+**Criterios.** (1) Con líneas sin adjunto no se envía: botón y API lo impiden listando las líneas. (2) Con todas adjuntas se envía igual que antes. (3) Adjunto sin key no cuenta. (4) Imagen y documento cuentan igual. (5) Reportes enviados/procesados no cambian. (6) Tarjetas igual. (7) `tsc`, pruebas y build pasan.
+
+**Archivos.** `common/invoice-lines.ts`, `expenses.service.ts` (+ spec), `credit-cards.service.ts` (re-export), `components/missing-attachment.ts`, `expense-report-form.tsx`, `expense-report-detail.tsx`.

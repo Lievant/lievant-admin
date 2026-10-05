@@ -11,6 +11,7 @@ import {
   processExpenseReportAction,
   submitExpenseReportAction,
 } from './actions';
+import { describeMissingAttachment } from '@/components/missing-attachment';
 import { ExpenseTypeInfoCell, ExpenseTypeInfoHeader } from '@/components/expense-type-info';
 import { DocumentHeader, formatDate, money, StatusBadge, StatusTimeline } from './expense-shared';
 
@@ -83,6 +84,10 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
   const puedeAutorizar = viewer.isAuthorizer && report.status === 'submitted';
   const puedeProcesar = viewer.canProcess && report.status === 'authorized';
   const puedeEnviar = viewer.isOwner && report.status === 'draft';
+  const mensajeSinAdjunto = describeMissingAttachment(
+    (report.lines ?? []).map((l) => l.hasInvoice),
+    'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
+  );
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setError(null);
@@ -213,6 +218,11 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
 
       {(puedeEnviar || puedeAutorizar || puedeProcesar) && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          {puedeEnviar && mensajeSinAdjunto && (
+            <p className="mb-3 text-right text-sm text-amber-700" role="status">
+              {mensajeSinAdjunto}
+            </p>
+          )}
           {puedeEnviar && (
             <div className="flex flex-wrap justify-end gap-2">
               <Link
@@ -223,7 +233,8 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
               </Link>
               <button
                 type="button"
-                disabled={isPending}
+                disabled={isPending || mensajeSinAdjunto !== null}
+                title={mensajeSinAdjunto ?? undefined}
                 onClick={() =>
                   run(() => submitExpenseReportAction(report.id), 'No se pudo enviar el reporte.')
                 }
