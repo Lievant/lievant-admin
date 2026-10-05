@@ -15,6 +15,7 @@ import {
   submitExpenseReportAction,
   updateExpenseReportAction,
 } from './actions';
+import { ExpenseTypeInfoCell, ExpenseTypeInfoHeader } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
 /** Línea en edición. `persistedId` solo existe si ya está guardada en la BD. */
@@ -25,6 +26,7 @@ interface DraftLine {
   vendor: string;
   conceptId: string;
   expenseTypeId: string;
+  notes: string;
   subtotal: string;
   tip: string;
   extras: string;
@@ -48,6 +50,7 @@ function emptyLine(): DraftLine {
     vendor: '',
     conceptId: '',
     expenseTypeId: '',
+    notes: '',
     subtotal: '',
     tip: '',
     extras: '',
@@ -97,6 +100,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
           vendor: l.vendor,
           conceptId: l.conceptId ?? '',
           expenseTypeId: l.expenseTypeId ?? '',
+          notes: l.notes ?? '',
           subtotal: String(Number(l.subtotal)),
           tip: String(Number(l.tip)),
           extras: String(Number(l.extras)),
@@ -140,6 +144,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
+  // El tipo de gasto es obligatorio: sin opción vacía, la primera del catálogo
+  // (orden del catálogo: "Viáticos cliente") es el valor por defecto.
+  const defaultTypeId = catalogs?.types[0]?.id ?? '';
+  const typeOf = (l: DraftLine) => l.expenseTypeId || defaultTypeId;
+
   function buildPayload(): ExpenseReportPayload | null {
     if (!motive.trim()) {
       setError('El motivo es obligatorio.');
@@ -151,6 +160,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     }
     if (periodEnd < periodStart) {
       setError('La fecha de término no puede ser anterior a la de inicio.');
+      return null;
+    }
+
+    if (lines.some((l) => !typeOf(l))) {
+      setError('El tipo de gasto es obligatorio; espera a que cargue el catálogo.');
       return null;
     }
 
@@ -174,7 +188,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         lineDate: l.lineDate,
         vendor: l.vendor.trim(),
         ...(l.conceptId ? { conceptId: l.conceptId } : {}),
-        ...(l.expenseTypeId ? { expenseTypeId: l.expenseTypeId } : {}),
+        expenseTypeId: typeOf(l),
+        ...(l.notes.trim() ? { notes: l.notes.trim() } : {}),
         subtotal: toNumber(l.subtotal),
         tip: toNumber(l.tip),
         extras: toNumber(l.extras),
@@ -347,6 +362,10 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
+                <th className="px-3 py-3 text-left">
+                  <ExpenseTypeInfoHeader />
+                </th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
                   <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
@@ -404,17 +423,31 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                     <td className="px-3 py-2 text-right font-semibold text-navy">{money(total)}</td>
                     <td className="px-3 py-2">
                       <select
-                        value={line.expenseTypeId}
+                        value={typeOf(line)}
                         onChange={(e) => patchLine(line.key, { expenseTypeId: e.target.value })}
                         className={inputClass}
+                        required
                       >
-                        <option value="">—</option>
                         {catalogs?.types.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <ExpenseTypeInfoCell
+                        typeName={catalogs?.types.find((t) => t.id === typeOf(line))?.name}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={line.notes}
+                        onChange={(e) => patchLine(line.key, { notes: e.target.value })}
+                        className={inputClass}
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <InvoiceCell
@@ -449,7 +482,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={3} />
+                <td colSpan={5} />
               </tr>
             </tfoot>
           </table>

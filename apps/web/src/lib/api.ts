@@ -4414,7 +4414,7 @@ export interface ExpenseLinePayload {
   lineDate: string;
   vendor: string;
   conceptId?: string;
-  expenseTypeId?: string;
+  expenseTypeId: string;
   subtotal?: number;
   tip?: number;
   extras?: number;

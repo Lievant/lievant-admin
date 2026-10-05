@@ -2,41 +2,13 @@
 
 import type { CardReportStatus, CreditCardItem } from '@/lib/api';
 
-import { Hint } from '../mis-reembolsos/expense-shared';
-
 export { DocumentHeader, Hint, formatDate, formatDateTime, money } from '../mis-reembolsos/expense-shared';
 
-/** Texto de la celda "Información" por tipo de gasto (nombres del catálogo). Única fuente para todas las vistas. */
-const EXPENSE_TYPE_INFO: Record<string, string> = {
-  'Viáticos cliente': 'Lo asume directamente el cliente',
-  'Costo operativo': 'Costo de operación',
-  'Costo de venta / temas comerciales': 'Área de la división',
-  'Costo de Marketing': 'Marketing de la división',
-};
-
-/** Tipo fuera del mapa: texto vacío. */
-export function expenseTypeInfo(typeName: string | null | undefined): string {
-  return (typeName && EXPENSE_TYPE_INFO[typeName]) || '';
-}
-
-/** Celda de solo lectura: se calcula del tipo de la fila, no se guarda. */
-export function ExpenseTypeInfoCell({ typeName }: { typeName: string | null | undefined }) {
-  return (
-    <span className="block min-w-[220px] whitespace-normal text-xs text-slate-500">
-      {expenseTypeInfo(typeName)}
-    </span>
-  );
-}
-
-/** Encabezado "Información" con la "i" explicativa general (igual que Factura). */
-export function ExpenseTypeInfoHeader() {
-  return (
-    <>
-      Información
-      <Hint text="Costo de operación: lo asume el área operativa. Área de la división: venta/comercial. Marketing de la División: temas de marketing. Viáticos cliente: lo asume directamente el cliente. Con esta asignación el gasto se envía al departamento que le corresponda." />
-    </>
-  );
-}
+export {
+  ExpenseTypeInfoCell,
+  ExpenseTypeInfoHeader,
+  expenseTypeInfo,
+} from '@/components/expense-type-info';
 
 /** Solo tres estados: el gasto de tarjeta no pasa por autorización. */
 export const CARD_STATUS_META: Record<CardReportStatus, { label: string; className: string }> = {
