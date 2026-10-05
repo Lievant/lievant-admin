@@ -16,7 +16,7 @@ import {
   submitCardReportAction,
   updateCardReportAction,
 } from '../actions';
-import { DocumentHeader, ExpenseTypeInfo, Hint, describeCard, money } from '../card-shared';
+import { DocumentHeader, ExpenseTypeInfoCell, ExpenseTypeInfoHeader, Hint, describeCard, money } from '../card-shared';
 
 interface DraftLine {
   key: string;
@@ -374,7 +374,9 @@ export function CardExpenseForm({ report }: Props) {
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
-                <th className="px-3 py-3 text-center">Información</th>
+                <th className="px-3 py-3 text-left">
+                  <ExpenseTypeInfoHeader />
+                </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
@@ -461,8 +463,8 @@ export function CardExpenseForm({ report }: Props) {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 text-center">
-                      <ExpenseTypeInfo
+                    <td className="px-3 py-2 align-top">
+                      <ExpenseTypeInfoCell
                         typeName={catalogs?.types.find((t) => t.id === typeOf(line))?.name}
                       />
                     </td>
