@@ -11,6 +11,8 @@ import {
   processExpenseReportAction,
   submitExpenseReportAction,
 } from './actions';
+import { describeMissingAttachment } from '@/components/missing-attachment';
+import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
 import { DocumentHeader, formatDate, money, StatusBadge, StatusTimeline } from './expense-shared';
 
 interface Props {
@@ -82,6 +84,10 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
   const puedeAutorizar = viewer.isAuthorizer && report.status === 'submitted';
   const puedeProcesar = viewer.canProcess && report.status === 'authorized';
   const puedeEnviar = viewer.isOwner && report.status === 'draft';
+  const mensajeSinAdjunto = describeMissingAttachment(
+    (report.lines ?? []).map((l) => l.hasInvoice),
+    'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
+  );
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setError(null);
@@ -164,6 +170,10 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <th className="px-3 py-3 text-right">Extras</th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
+                <th className="px-3 py-3 text-left">
+                  <ExpenseTypeInfoHeader />
+                </th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">Factura</th>
               </tr>
             </thead>
@@ -172,12 +182,20 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[155px] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="min-w-[255px] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="px-3 py-2 align-top">
+                    <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
+                      {expenseTypeInfo(line.expenseTypeName)}
+                    </span>
+                  </td>
+                  <td className="min-w-[160px] max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.notes ?? ''}>
+                    {line.notes ?? '—'}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <InvoiceLink line={line} />
                   </td>
@@ -193,7 +211,7 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <td className="px-3 py-3 text-right">{money(report.totalTip)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalExtras)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalAmount)}</td>
-                <td colSpan={2} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>
@@ -202,6 +220,11 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
 
       {(puedeEnviar || puedeAutorizar || puedeProcesar) && (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          {puedeEnviar && mensajeSinAdjunto && (
+            <p className="mb-3 text-right text-sm text-amber-700" role="status">
+              {mensajeSinAdjunto}
+            </p>
+          )}
           {puedeEnviar && (
             <div className="flex flex-wrap justify-end gap-2">
               <Link
@@ -212,7 +235,8 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
               </Link>
               <button
                 type="button"
-                disabled={isPending}
+                disabled={isPending || mensajeSinAdjunto !== null}
+                title={mensajeSinAdjunto ?? undefined}
                 onClick={() =>
                   run(() => submitExpenseReportAction(report.id), 'No se pudo enviar el reporte.')
                 }

@@ -85,11 +85,10 @@ export async function deleteCardReportAction(id: string): Promise<CardActionResu
 
 export async function processCardReportAction(
   id: string,
-  paymentDate: string,
-  note?: string,
 ): Promise<CardActionResult> {
   try {
-    await processCardReport(id, { paymentDate, ...(note ? { note } : {}) });
+    // Sin cuerpo: el backend usa hoy (hora de México) como fecha de pago y deja la nota vacía.
+    await processCardReport(id);
     revalidateAll(id);
     return { success: true, id };
   } catch (err) {
