@@ -4,6 +4,12 @@ import type { CardReportStatus, CreditCardItem } from '@/lib/api';
 
 export { DocumentHeader, Hint, formatDate, formatDateTime, money } from '../mis-reembolsos/expense-shared';
 
+export {
+  ExpenseTypeInfoCell,
+  ExpenseTypeInfoHeader,
+  expenseTypeInfo,
+} from '@/components/expense-type-info';
+
 /** Solo tres estados: el gasto de tarjeta no pasa por autorización. */
 export const CARD_STATUS_META: Record<CardReportStatus, { label: string; className: string }> = {
   draft: { label: 'Borrador', className: 'bg-slate-100 text-slate-600' },

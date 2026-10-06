@@ -15,6 +15,8 @@ import {
   submitExpenseReportAction,
   updateExpenseReportAction,
 } from './actions';
+import { describeMissingAttachment } from '@/components/missing-attachment';
+import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
 /** Línea en edición. `persistedId` solo existe si ya está guardada en la BD. */
@@ -25,6 +27,7 @@ interface DraftLine {
   vendor: string;
   conceptId: string;
   expenseTypeId: string;
+  notes: string;
   subtotal: string;
   tip: string;
   extras: string;
@@ -48,6 +51,7 @@ function emptyLine(): DraftLine {
     vendor: '',
     conceptId: '',
     expenseTypeId: '',
+    notes: '',
     subtotal: '',
     tip: '',
     extras: '',
@@ -97,6 +101,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
           vendor: l.vendor,
           conceptId: l.conceptId ?? '',
           expenseTypeId: l.expenseTypeId ?? '',
+          notes: l.notes ?? '',
           subtotal: String(Number(l.subtotal)),
           tip: String(Number(l.tip)),
           extras: String(Number(l.extras)),
@@ -140,6 +145,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
   }
 
+  // El tipo de gasto es obligatorio: sin opción vacía, la primera del catálogo
+  // (orden del catálogo: "Viáticos cliente") es el valor por defecto.
+  const defaultTypeId = catalogs?.types[0]?.id ?? '';
+  const typeOf = (l: DraftLine) => l.expenseTypeId || defaultTypeId;
+
   function buildPayload(): ExpenseReportPayload | null {
     if (!motive.trim()) {
       setError('El motivo es obligatorio.');
@@ -151,6 +161,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     }
     if (periodEnd < periodStart) {
       setError('La fecha de término no puede ser anterior a la de inicio.');
+      return null;
+    }
+
+    if (lines.some((l) => !typeOf(l))) {
+      setError('El tipo de gasto es obligatorio; espera a que cargue el catálogo.');
       return null;
     }
 
@@ -174,7 +189,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         lineDate: l.lineDate,
         vendor: l.vendor.trim(),
         ...(l.conceptId ? { conceptId: l.conceptId } : {}),
-        ...(l.expenseTypeId ? { expenseTypeId: l.expenseTypeId } : {}),
+        expenseTypeId: typeOf(l),
+        ...(l.notes.trim() ? { notes: l.notes.trim() } : {}),
         subtotal: toNumber(l.subtotal),
         tip: toNumber(l.tip),
         extras: toNumber(l.extras),
@@ -198,6 +214,12 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
     }
     return res.id ?? report?.id ?? null;
   }
+
+  // Sin adjunto en cada línea el backend rechaza el envío; aquí se anticipa.
+  const missingMessage = describeMissingAttachment(
+    lines.map((l) => l.hasInvoice),
+    'Guarda el borrador y adjunta un archivo en cada una para poder enviar.',
+  );
 
   function handleSaveDraft() {
     startTransition(async () => {
@@ -347,6 +369,10 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
                 <th className="px-3 py-3 text-left">Tipo de gasto</th>
+                <th className="px-3 py-3 text-left">
+                  <ExpenseTypeInfoHeader />
+                </th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
                   <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
@@ -364,7 +390,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         type="date"
                         value={line.lineDate}
                         onChange={(e) => patchLine(line.key, { lineDate: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[125px]`}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -372,14 +398,14 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         type="text"
                         value={line.vendor}
                         onChange={(e) => patchLine(line.key, { vendor: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[120px]`}
                       />
                     </td>
                     <td className="px-3 py-2">
                       <select
                         value={line.conceptId}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[155px]`}
                       >
                         <option value="">—</option>
                         {catalogs?.concepts.map((c) => (
@@ -397,24 +423,38 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                           step="0.01"
                           value={line[field]}
                           onChange={(e) => patchLine(line.key, { [field]: e.target.value })}
-                          className={`${inputClass} text-right`}
+                          className={`${inputClass} min-w-[78px] text-right`}
                         />
                       </td>
                     ))}
                     <td className="px-3 py-2 text-right font-semibold text-navy">{money(total)}</td>
                     <td className="px-3 py-2">
                       <select
-                        value={line.expenseTypeId}
+                        value={typeOf(line)}
                         onChange={(e) => patchLine(line.key, { expenseTypeId: e.target.value })}
-                        className={inputClass}
+                        className={`${inputClass} min-w-[255px]`}
+                        required
                       >
-                        <option value="">—</option>
                         {catalogs?.types.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.name}
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
+                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="text"
+                        maxLength={500}
+                        value={line.notes}
+                        onChange={(e) => patchLine(line.key, { notes: e.target.value })}
+                        className={`${inputClass} min-w-[160px]`}
+                      />
                     </td>
                     <td className="px-3 py-2 text-center">
                       <InvoiceCell
@@ -449,7 +489,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={3} />
+                <td colSpan={5} />
               </tr>
             </tfoot>
           </table>
@@ -467,6 +507,11 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         </div>
       </section>
 
+      {missingMessage && (
+        <p className="text-right text-sm text-amber-700" role="status">
+          {missingMessage}
+        </p>
+      )}
       <div className="flex flex-wrap justify-end gap-2">
         <button
           type="button"
@@ -479,7 +524,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         <button
           type="button"
           onClick={() => setConfirmSubmit(true)}
-          disabled={isPending}
+          disabled={isPending || missingMessage !== null}
+          title={missingMessage ?? undefined}
           className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
         >
           Enviar para autorización

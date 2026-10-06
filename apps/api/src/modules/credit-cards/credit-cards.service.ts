@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
+import { todayInMexico } from '../../common/business-date';
+import { linesWithoutInvoice } from '../../common/invoice-lines';
+import type { LineWithoutInvoice } from '../../common/invoice-lines';
 import {
   aNumero,
   buildExpenseReportWorkbook,
@@ -61,6 +64,9 @@ function formatLongDate(date: string): string {
 function money(value: string | number): string {
   return Number(value).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
+
+export { linesWithoutInvoice };
+export type { LineWithoutInvoice };
 
 export interface PaginatedCardReports {
   items: CardExpenseReport[];
@@ -262,6 +268,19 @@ export class CreditCardsService {
       throw new BadRequestException('Agrega al menos una línea de gasto antes de enviar.');
     }
 
+    const faltantes = linesWithoutInvoice(report.lines);
+    if (faltantes.length > 0) {
+      const detalle = faltantes
+        .map((l) => `#${l.position} (${l.vendor}, ${l.lineDate})`)
+        .join('; ');
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: `No se puede enviar: ${faltantes.length} línea(s) sin factura adjunta: ${detalle}.`,
+        linesWithoutInvoice: faltantes,
+      });
+    }
+
     report.status = 'submitted';
     report.submittedAt = new Date();
     await this.reportsRepo.save(report);
@@ -288,11 +307,12 @@ export class CreditCardsService {
     report.status = 'processed';
     report.processedBy = user.id;
     report.processedAt = new Date();
-    report.paymentDate = dto.paymentDate;
+    const paymentDate = dto.paymentDate ?? todayInMexico();
+    report.paymentDate = paymentDate;
     report.paymentNote = dto.note?.trim() || null;
     await this.reportsRepo.save(report);
 
-    await this.notifyProcessed(report, user, dto.paymentDate);
+    await this.notifyProcessed(report, user, paymentDate);
     return this.getReportOrFail(id);
   }
 
@@ -523,6 +543,7 @@ export class CreditCardsService {
         { header: 'EXTRAS', width: 12, kind: 'money', totalKey: 'extras' },
         { header: 'TOTAL', width: 14, kind: 'money', totalKey: 'total' },
         { header: 'TIPO DE GASTO', width: 24 },
+        { header: 'DETALLE', width: 30 },
         { header: 'FACTURA', width: 10 },
       ],
       rows: lines.map((l) => [
@@ -536,6 +557,7 @@ export class CreditCardsService {
         aNumero(l.extras),
         aNumero(l.total),
         l.expenseTypeName ?? '',
+        l.detail ?? '',
         l.hasInvoice ? 'Sí' : 'No',
       ]),
       totals: {
@@ -625,6 +647,20 @@ export class CreditCardsService {
   ): Promise<void> {
     const linesRepo = mgr.getRepository(CardExpenseLine);
 
+    // El tipo de gasto es obligatorio y debe existir y estar activo en el catálogo.
+    const requestedTypeIds = [...new Set(lines.map((l) => l.expenseTypeId))];
+    if (lines.some((l) => !l.expenseTypeId)) {
+      throw new BadRequestException('El tipo de gasto es obligatorio en cada línea.');
+    }
+    if (requestedTypeIds.length > 0) {
+      const found = await mgr
+        .getRepository(CatalogExpenseType)
+        .find({ where: { id: In(requestedTypeIds), isActive: true } });
+      if (found.length !== requestedTypeIds.length) {
+        throw new BadRequestException('Algún tipo de gasto no existe o está inactivo.');
+      }
+    }
+
     const existing = await linesRepo.find({ where: { reportId } });
     const existingById = new Map(existing.map((l) => [l.id, l]));
 
@@ -675,8 +711,9 @@ export class CreditCardsService {
           vendor: line.vendor,
           conceptId: line.conceptId ?? null,
           conceptName: line.conceptId ? (conceptName.get(line.conceptId) ?? null) : null,
-          expenseTypeId: line.expenseTypeId ?? null,
-          expenseTypeName: line.expenseTypeId ? (typeName.get(line.expenseTypeId) ?? null) : null,
+          expenseTypeId: line.expenseTypeId,
+          expenseTypeName: typeName.get(line.expenseTypeId) ?? null,
+          detail: line.detail?.trim() || null,
           subtotal: (line.subtotal ?? 0).toFixed(2),
           tip: (line.tip ?? 0).toFixed(2),
           extras: (line.extras ?? 0).toFixed(2),
