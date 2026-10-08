@@ -16,7 +16,7 @@ import {
   updateExpenseReportAction,
 } from './actions';
 import { describeMissingAttachment } from '@/components/missing-attachment';
-import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
 /** Línea en edición. `persistedId` solo existe si ya está guardada en la BD. */
@@ -369,27 +369,23 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">
                   Proveedor
-                  <Hint text="Nombre de locación o razón social de la factura" />
                 </th>
                 <th className="px-3 py-3 text-left">Concepto</th>
                 <th className="px-3 py-3 text-right">
                   Subtotal
-                  <Hint text="Monto antes de impuestos y cargos adicionales" />
                 </th>
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">
                   Extras
-                  <Hint text="Cargos adicionales como estacionamiento, servicio, IVA" />
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
                 <th className="px-3 py-3 text-left">
-                  <ExpenseTypeInfoHeader />
+                  Tipo de gasto
+                  <ExpenseTypeHint />
                 </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
-                  <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
                 </th>
                 <th className="px-3 py-3 text-right">Acción</th>
               </tr>
@@ -397,7 +393,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
             <tbody className="divide-y divide-slate-100">
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-6 text-center text-sm text-slate-400">
+                  <td colSpan={11} className="px-3 py-6 text-center text-sm text-slate-400">
                     Sin líneas. Agrega una línea.
                   </td>
                 </tr>
@@ -426,7 +422,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                       <select
                         value={conceptOf(line)}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={`${inputClass} min-w-[155px]`}
+                        className={`${inputClass} min-w-[11rem]`}
                       >
                         {catalogs?.concepts.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -462,18 +458,13 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
-                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
-                      </span>
-                    </td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
                         maxLength={500}
                         value={line.notes}
                         onChange={(e) => patchLine(line.key, { notes: e.target.value })}
-                        className={`${inputClass} min-w-[160px]`}
+                        className={`${inputClass} min-w-[14rem]`}
                       />
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -508,7 +499,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={5} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>
