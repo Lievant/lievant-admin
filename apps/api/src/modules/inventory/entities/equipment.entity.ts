@@ -70,11 +70,24 @@ export class Equipment {
   @Column({ name: 'purchase_date', type: 'date', nullable: true })
   purchaseDate!: string | null;
 
-  @Column({ name: 'purchase_value', type: 'decimal', precision: 12, scale: 2, default: 0 })
-  purchaseValue!: number;
+  // null = sin valor capturado. Ojo: pg entrega DECIMAL como string en runtime.
+  @Column({ name: 'purchase_value', type: 'decimal', precision: 14, scale: 2, nullable: true })
+  purchaseValue!: number | null;
 
   @Column({ type: 'text', nullable: true })
   notes!: string | null;
+
+  // ── Información financiera ───────────────────────────────────────────────
+  // Proveedor de la factura de compra (FK a vendors.vendors), distinto del de
+  // garantía. La depreciación no se guarda: se deriva al leer.
+  @Column({ name: 'financial_provider_id', type: 'uuid', nullable: true })
+  financialProviderId!: string | null;
+
+  @Column({ name: 'invoice_number', type: 'varchar', length: 100, nullable: true })
+  invoiceNumber!: string | null;
+
+  @Column({ name: 'invoice_date', type: 'date', nullable: true })
+  invoiceDate!: string | null;
 
   // ── Garantía ──────────────────────────────────────────────────────────────
   // El proveedor es FK a vendors.vendors; aquí solo vive el id para no arrastrar
