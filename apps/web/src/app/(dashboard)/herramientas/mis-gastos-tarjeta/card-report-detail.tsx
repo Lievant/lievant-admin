@@ -83,8 +83,10 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
     .map((l, i) => ({ l, n: i + 1 }))
     .filter(({ l }) => !l.hasInvoice)
     .map(({ n }) => n);
-  const mensajeSinFactura =
-    sinFactura.length === 0
+  const sinLineas = (report.lines ?? []).length === 0;
+  const mensajeSinFactura = sinLineas
+    ? 'Agrega al menos una línea para poder enviar.'
+    : sinFactura.length === 0
       ? null
       : `${sinFactura.length} línea${sinFactura.length === 1 ? '' : 's'} sin factura (${sinFactura
           .map((n) => `#${n}`)
@@ -183,6 +185,13 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {(report.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={13} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas.
+                  </td>
+                </tr>
+              )}
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
@@ -245,7 +254,7 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
               </Link>
               <button
                 type="button"
-                disabled={isPending || sinFactura.length > 0}
+                disabled={isPending || sinLineas || sinFactura.length > 0}
                 title={mensajeSinFactura ?? undefined}
                 onClick={() =>
                   run(() => submitCardReportAction(report.id), 'No se pudo enviar el reporte.')
