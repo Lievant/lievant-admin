@@ -16,8 +16,8 @@ import {
   submitCardReportAction,
   updateCardReportAction,
 } from '../actions';
-import { expenseTypeInfo } from '@/components/expense-type-info';
-import { DocumentHeader, ExpenseTypeInfoHeader, Hint, describeCard, money } from '../card-shared';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
+import { DocumentHeader, Hint, describeCard, money } from '../card-shared';
 
 interface DraftLine {
   key: string;
@@ -367,35 +367,29 @@ export function CardExpenseForm({ report }: Props) {
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">
                   Colaborador
-                  <Hint text="Nombre del colaborador que realizó o se benefició del gasto" />
                 </th>
                 <th className="px-3 py-3 text-left">
                   Motivo/Evento
-                  <Hint text="Especifica el evento, junta o motivo del gasto" />
                 </th>
                 <th className="px-3 py-3 text-left">
                   Proveedor
-                  <Hint text="Nombre de locación o razón social de la factura" />
                 </th>
                 <th className="px-3 py-3 text-left">Concepto</th>
                 <th className="px-3 py-3 text-right">
                   Subtotal
-                  <Hint text="Monto antes de impuestos y cargos adicionales" />
                 </th>
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">
                   Extras
-                  <Hint text="Cargos adicionales como estacionamiento, servicio, IVA" />
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
                 <th className="px-3 py-3 text-left">
-                  <ExpenseTypeInfoHeader />
+                  Tipo de gasto
+                  <ExpenseTypeHint />
                 </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
-                  <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
                 </th>
                 <th className="px-3 py-3 text-right">✕</th>
               </tr>
@@ -403,7 +397,7 @@ export function CardExpenseForm({ report }: Props) {
             <tbody className="divide-y divide-slate-100">
               {lines.length === 0 && (
                 <tr>
-                  <td colSpan={14} className="px-3 py-6 text-center text-sm text-slate-400">
+                  <td colSpan={13} className="px-3 py-6 text-center text-sm text-slate-400">
                     Sin líneas. Agrega una línea.
                   </td>
                 </tr>
@@ -448,7 +442,7 @@ export function CardExpenseForm({ report }: Props) {
                       <select
                         value={conceptOf(line)}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={`${inputClass} min-w-[10rem]`}
+                        className={`${inputClass} min-w-[11rem]`}
                       >
                         {catalogs?.concepts.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -484,18 +478,13 @@ export function CardExpenseForm({ report }: Props) {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="block w-[13rem] whitespace-normal text-xs text-slate-500">
-                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
-                      </span>
-                    </td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
                         maxLength={500}
                         value={line.detail}
                         onChange={(e) => patchLine(line.key, { detail: e.target.value })}
-                        className={`${inputClass} min-w-[11.5rem]`}
+                        className={`${inputClass} min-w-[14rem]`}
                       />
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -530,7 +519,7 @@ export function CardExpenseForm({ report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={5} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>

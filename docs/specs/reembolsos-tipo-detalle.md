@@ -1,4 +1,4 @@
-# Spec — Mis Reembolsos: Tipo de Gasto obligatorio, Información y Detalle
+# Spec — Mis Reembolsos: Tipo de Gasto obligatorio, "i" informativa y Detalle
 
 **Módulo:** Herramientas › Mis Reembolsos
 **Autor:** Leonardo Cancino (Databeans)
@@ -8,7 +8,7 @@
 
 ## 1. Objetivo
 
-Replicar en reembolsos: Tipo de Gasto obligatorio (sin opción vacía, "Viáticos cliente" por defecto), columna "Información" de solo lectura y columna "Detalle".
+Replicar en reembolsos: Tipo de Gasto obligatorio (sin opción vacía, "Viáticos cliente" por defecto), "i" en el encabezado de Tipo de Gasto con la explicación de cada tipo, y columna "Detalle". (Información empezó como columna y se reemplazó por la "i"; ver sección 9.)
 
 ## 2. Decisiones
 
@@ -17,7 +17,7 @@ Replicar en reembolsos: Tipo de Gasto obligatorio (sin opción vacía, "Viático
 | D1 | **Detalle reutiliza `expenses.expense_lines.notes`** (TEXT, nullable). Sin migración. | Ya existía en entidad, DTO y servicio, pero ninguna pantalla lo capturaba ni mostraba. Evita una columna duplicada. |
 | D2 | El DTO limita `notes` a 500 caracteres (`@MaxLength(500)`). La columna sigue siendo TEXT. | Mismo límite que Detalle en tarjetas. |
 | D3 | Mismo catálogo `catalogs.expense_types` (4 tipos, sin renombrar). "Viáticos cliente" es `sort_order` 1. | El catálogo es compartido con tarjetas. |
-| D4 | Mapa tipo → Información y "i" del encabezado se extraen a `apps/web/src/components/expense-type-info.tsx`; tarjetas lo re-exporta desde `card-shared.tsx` sin cambiar su comportamiento. | Una sola fuente, sin copiar y pegar. |
+| D4 | El mapa tipo → texto y la "i" de Tipo de Gasto viven en `apps/web/src/components/expense-type-info.tsx` (`ExpenseTypeHint`), compartido con tarjetas. | Una sola fuente, sin copiar y pegar. |
 | D5 | Sin constraint NOT NULL en BD para `expense_type_id`; la obligatoriedad vive en DTO + servicio. Líneas históricas sin tipo no se tocan; al editarlas se preselecciona "Viáticos cliente". | No hay backfill. |
 | D6 | Fuera de alcance: bloqueo de envío por factura, flujo de procesado, renombrar catálogo, enrutamiento por tipo. | El envío, la autorización y las notificaciones de reembolsos no dependen del tipo de gasto (verificado). |
 
@@ -40,8 +40,8 @@ Sin cambios de esquema. `notes` ya existe (`1751000000010-CreateExpenseReportsMo
 
 1. Nuevo reporte: Tipo de Gasto sin opción vacía, arranca en "Viáticos cliente", 4 tipos.
 2. API sin Tipo de Gasto o con uno inexistente → rechazado.
-3. Columna "Información" de solo lectura entre Tipo de Gasto y Detalle, con los 4 textos.
-4. Encabezado "Información" con la "i" y el mismo párrafo que tarjetas.
+3. No hay columna "Información"; el encabezado de Tipo de Gasto tiene una "i" cuyo panel muestra los 4 textos.
+4. El panel de la "i" se abre con hover, foco y clic/tap, se cierra con Escape o clic fuera, y no se recorta dentro de la tabla con scroll.
 5. Columna "Detalle": se guarda y reaparece al reabrir y editar; vacío es válido.
 6. El Excel incluye Detalle.
 7. Reembolsos y líneas antiguas abren sin errores.
@@ -67,3 +67,7 @@ Frontend: `components/expense-type-info.tsx` (nuevo), `mis-gastos-tarjeta/card-s
 **Criterios.** (1) Con líneas sin adjunto no se envía: botón y API lo impiden listando las líneas. (2) Con todas adjuntas se envía igual que antes. (3) Adjunto sin key no cuenta. (4) Imagen y documento cuentan igual. (5) Reportes enviados/procesados no cambian. (6) Tarjetas igual. (7) `tsc`, pruebas y build pasan.
 
 **Archivos.** `common/invoice-lines.ts`, `expenses.service.ts` (+ spec), `credit-cards.service.ts` (re-export), `components/missing-attachment.ts`, `expense-report-form.tsx`, `expense-report-detail.tsx`.
+
+## 9. Actualización: "Información" ya no es columna
+
+Se eliminó la columna "Información" de formulario y detalle. El encabezado de Tipo de Gasto lleva ahora una "i" con un panel (portal, posición fija) que lista los cuatro tipos con el formato "**Nombre** - texto". Textos en `components/expense-type-info.tsx`, única fuente. En alta y edición se quitaron las "i" de los encabezados de la tabla (Proveedor, Subtotal, Extras y Factura); se conservan las de los campos del formulario (Autorizador y Motivo). El Excel nunca llevó Información.

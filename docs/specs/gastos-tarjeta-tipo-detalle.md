@@ -44,7 +44,7 @@ Que cada línea de un reporte de tarjeta lleve siempre un Tipo de Gasto, tenga u
 2. API sin Tipo de Gasto o con uno inexistente → rechazado.
 3. Columna "Detalle" a la derecha de Tipo de Gasto; se guarda y reaparece al reabrir y editar.
 4. Detalle vacío es válido.
-5. Ícono "i" tras "Detalle" con el mismo estilo que el de Factura y el texto informativo.
+5. ~~Ícono "i" tras "Detalle"~~ Reemplazado: el encabezado de Tipo de Gasto lleva una "i" con un panel que explica cada tipo (ver sección 8).
 6. Reporte con líneas sin factura: botón deshabilitado con mensaje y API con error que lista las líneas.
 7. Reporte con todas las facturas se envía igual que antes.
 8. Reportes antiguos abren sin errores.
@@ -54,4 +54,12 @@ Que cada línea de un reporte de tarjeta lleve siempre un Tipo de Gasto, tenga u
 ## 7. Archivos a tocar
 
 Backend: migración `1751000000031`, `card-expense-line.entity.ts`, `dto/credit-cards.dto.ts`, `credit-cards.service.ts` (+ spec).
-Frontend: `lib/api.ts` (tipos), `mis-gastos-tarjeta/nuevo/card-expense-form.tsx`, `card-report-detail.tsx`, `card-shared.tsx` (si aloja la "i"). Proxy routes: ninguna nueva (se reutilizan `api/credit-cards/reports/...`).
+Frontend: `lib/api.ts` (tipos), `mis-gastos-tarjeta/nuevo/card-expense-form.tsx`, `card-report-detail.tsx`, `components/expense-type-info.tsx` (la "i" de Tipo de Gasto). Proxy routes: ninguna nueva (se reutilizan `api/credit-cards/reports/...`).
+
+## 8. Actualización: "Información" ya no es columna
+
+La columna "Información" (texto por fila según el tipo) se eliminó de formularios y detalle. Ahora el encabezado de **Tipo de Gasto** lleva una "i" que abre un panel debajo con los cuatro tipos, uno por línea, con el formato "**Nombre** - texto" (hover, foco, clic/tap; se cierra al salir, con clic fuera o con Escape). El panel va en un portal (`createPortal`, posición fija) para que el scroll horizontal de la tabla no lo recorte.
+
+- Única fuente de los textos: `apps/web/src/components/expense-type-info.tsx` (componente `ExpenseTypeHint`, compartido con Mis Reembolsos).
+- En alta y edición se quitaron las "i" de los encabezados de la tabla (Colaborador, Motivo/Evento, Proveedor, Subtotal, Extras y Factura); quedan las de los campos del formulario. El detalle de un reporte no tenía otras "i" en la tabla.
+- Ni el Excel ni el API llevaron nunca "Información": sin cambios allí.
