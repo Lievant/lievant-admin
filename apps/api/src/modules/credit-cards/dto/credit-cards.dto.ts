@@ -100,9 +100,8 @@ export class CardExpenseLineDto {
   @MaxLength(300)
   vendor!: string;
 
-  @IsOptional()
-  @IsUUID()
-  conceptId?: string;
+  @IsUUID(undefined, { message: 'El concepto es obligatorio.' })
+  conceptId!: string;
 
   @IsUUID(undefined, { message: 'El tipo de gasto es obligatorio.' })
   expenseTypeId!: string;

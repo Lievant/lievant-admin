@@ -661,6 +661,20 @@ export class CreditCardsService {
       }
     }
 
+    // El concepto es obligatorio y debe existir y estar activo en el catálogo.
+    if (lines.some((l) => !l.conceptId)) {
+      throw new BadRequestException('El concepto es obligatorio en cada línea.');
+    }
+    const requestedConceptIds = [...new Set(lines.map((l) => l.conceptId))];
+    if (requestedConceptIds.length > 0) {
+      const foundConcepts = await mgr
+        .getRepository(CatalogExpenseConcept)
+        .find({ where: { id: In(requestedConceptIds), isActive: true } });
+      if (foundConcepts.length !== requestedConceptIds.length) {
+        throw new BadRequestException('Algún concepto no existe o está inactivo.');
+      }
+    }
+
     const existing = await linesRepo.find({ where: { reportId } });
     const existingById = new Map(existing.map((l) => [l.id, l]));
 
@@ -709,8 +723,8 @@ export class CreditCardsService {
           collaborator: line.collaborator ?? null,
           motive: line.motive ?? null,
           vendor: line.vendor,
-          conceptId: line.conceptId ?? null,
-          conceptName: line.conceptId ? (conceptName.get(line.conceptId) ?? null) : null,
+          conceptId: line.conceptId,
+          conceptName: conceptName.get(line.conceptId) ?? null,
           expenseTypeId: line.expenseTypeId,
           expenseTypeName: typeName.get(line.expenseTypeId) ?? null,
           detail: line.detail?.trim() || null,
