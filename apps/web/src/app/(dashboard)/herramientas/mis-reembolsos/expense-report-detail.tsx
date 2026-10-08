@@ -84,10 +84,13 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
   const puedeAutorizar = viewer.isAuthorizer && report.status === 'submitted';
   const puedeProcesar = viewer.canProcess && report.status === 'authorized';
   const puedeEnviar = viewer.isOwner && report.status === 'draft';
-  const mensajeSinAdjunto = describeMissingAttachment(
-    (report.lines ?? []).map((l) => l.hasInvoice),
-    'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
-  );
+  const sinLineas = (report.lines ?? []).length === 0;
+  const mensajeSinAdjunto = sinLineas
+    ? 'Agrega al menos una línea para poder enviar.'
+    : describeMissingAttachment(
+        (report.lines ?? []).map((l) => l.hasInvoice),
+        'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
+      );
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setError(null);
@@ -178,6 +181,13 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {(report.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={11} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas.
+                  </td>
+                </tr>
+              )}
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>

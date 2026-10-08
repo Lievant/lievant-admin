@@ -2,8 +2,9 @@ import { BadRequestException } from '@nestjs/common';
 import { ExpensesService } from './expenses.service';
 
 const TYPE_ID = '11111111-1111-1111-1111-111111111111';
+const CONCEPT_ID = '22222222-2222-2222-2222-222222222222';
 
-function buildService(activeTypeIds: string[] = [TYPE_ID]) {
+function buildService(activeTypeIds: string[] = [TYPE_ID], activeConceptIds: string[] = [CONCEPT_ID]) {
   const saved: any[] = [];
   const linesRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -20,19 +21,30 @@ function buildService(activeTypeIds: string[] = [TYPE_ID]) {
       return activeTypeIds.filter((id) => ids.includes(id)).map((id) => ({ id, name: 'Viáticos cliente' }));
     }),
   };
+  const conceptsRepo = {
+    find: jest.fn(async ({ where }: any) => {
+      const ids: string[] = where.id._value ?? [];
+      return activeConceptIds.filter((id) => ids.includes(id)).map((id) => ({ id, name: 'Alimentación' }));
+    }),
+  };
   const mgr = {
     getRepository: (entity: { name: string }) =>
       entity.name === 'CatalogExpenseType'
         ? typesRepo
         : entity.name === 'CatalogExpenseConcept'
-          ? { find: jest.fn().mockResolvedValue([]) }
+          ? conceptsRepo
           : linesRepo,
   };
   const service = new (ExpensesService as any)({}, {}, {}, {}, {}, {}, {}, {});
-  return { service: service as any, mgr, saved };
+  return { service: service as any, mgr, saved, linesRepo };
 }
 
-const baseLine = { lineDate: '2026-10-01', vendor: 'Prov', expenseTypeId: TYPE_ID };
+const baseLine = {
+  lineDate: '2026-10-01',
+  vendor: 'Prov',
+  expenseTypeId: TYPE_ID,
+  conceptId: CONCEPT_ID,
+};
 
 describe('ExpensesService.replaceLines (tipo y detalle)', () => {
   it('rechaza una línea sin tipo de gasto', async () => {
@@ -56,6 +68,28 @@ describe('ExpensesService.replaceLines (tipo y detalle)', () => {
     ]);
     expect(saved.map((l) => l.notes)).toEqual(['Comida con cliente', null, null]);
     expect(saved[0].expenseTypeName).toBe('Viáticos cliente');
+  });
+});
+
+describe('ExpensesService.replaceLines (concepto y cero líneas)', () => {
+  it('rechaza una línea sin concepto', async () => {
+    const { service, mgr } = buildService();
+    await expect(
+      service.replaceLines(mgr, 'r1', [{ ...baseLine, conceptId: undefined }]),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rechaza un concepto inexistente o inactivo', async () => {
+    const { service, mgr } = buildService([TYPE_ID], []);
+    await expect(service.replaceLines(mgr, 'r1', [baseLine])).rejects.toThrow(BadRequestException);
+  });
+
+  it('guarda con cero líneas: borra las existentes y no falla', async () => {
+    const { service, mgr, linesRepo } = buildService();
+    linesRepo.find.mockResolvedValue([{ id: 'l1' }, { id: 'l2' }]);
+    await expect(service.replaceLines(mgr, 'r1', [])).resolves.toBeUndefined();
+    expect(linesRepo.delete).toHaveBeenCalled();
+    expect(linesRepo.save).not.toHaveBeenCalled();
   });
 });
 
@@ -97,6 +131,12 @@ describe('ExpensesService.submitReport (adjunto por línea)', () => {
   it('un adjunto marcado pero sin archivo (quitado) no cuenta', async () => {
     const { service } = build([{ ...withFile, invoiceS3Key: null }]);
     await expect(service.submitReport('r1', user)).rejects.toThrow(BadRequestException);
+  });
+
+  it('rechaza el envío con cero líneas', async () => {
+    const { service, reportsRepo } = build([]);
+    await expect(service.submitReport('r1', user)).rejects.toThrow(/al menos una línea/);
+    expect(reportsRepo.save).not.toHaveBeenCalled();
   });
 
   it('un reporte ya enviado sigue rechazándose por su estado, no por adjuntos', async () => {

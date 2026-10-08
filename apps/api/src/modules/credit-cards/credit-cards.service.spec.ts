@@ -2,10 +2,17 @@ import { BadRequestException } from '@nestjs/common';
 import { CreditCardsService, linesWithoutInvoice } from './credit-cards.service';
 
 const TYPE_ID = '11111111-1111-1111-1111-111111111111';
+const CONCEPT_ID = '22222222-2222-2222-2222-222222222222';
 
 function buildService(
-  opts: { activeTypeIds?: string[]; lines?: unknown[]; status?: string } = {},
+  opts: {
+    activeTypeIds?: string[];
+    activeConceptIds?: string[];
+    lines?: unknown[];
+    status?: string;
+  } = {},
 ) {
+  const activeConceptIds = opts.activeConceptIds ?? [CONCEPT_ID];
   const saved: any[] = [];
   const linesRepo = {
     find: jest.fn().mockResolvedValue([]),
@@ -24,12 +31,18 @@ function buildService(
         .map((id) => ({ id, name: 'Viáticos cliente' }));
     }),
   };
+  const conceptsRepo = {
+    find: jest.fn(async ({ where }: any) => {
+      const ids: string[] = where.id._value ?? [];
+      return activeConceptIds.filter((id) => ids.includes(id)).map((id) => ({ id, name: 'Alimentación' }));
+    }),
+  };
   const mgr = {
     getRepository: (entity: { name: string }) =>
       entity.name === 'CatalogExpenseType'
         ? typesRepo
         : entity.name === 'CatalogExpenseConcept'
-          ? { find: jest.fn().mockResolvedValue([]) }
+          ? conceptsRepo
           : linesRepo,
   };
   const reportsRepo = {
@@ -57,10 +70,15 @@ function buildService(
   const notifyProcessed = jest
     .spyOn(service as any, 'notifyProcessed')
     .mockResolvedValue(undefined);
-  return { service, mgr, saved, reportsRepo, notifyProcessed };
+  return { service, mgr, saved, reportsRepo, notifyProcessed, linesRepo };
 }
 
-const baseLine = { lineDate: '2026-10-01', vendor: 'Prov', expenseTypeId: TYPE_ID };
+const baseLine = {
+  lineDate: '2026-10-01',
+  vendor: 'Prov',
+  expenseTypeId: TYPE_ID,
+  conceptId: CONCEPT_ID,
+};
 
 describe('CreditCardsService.replaceLines (tipo y detalle)', () => {
   it('rechaza una línea sin tipo de gasto', async () => {
@@ -88,6 +106,30 @@ describe('CreditCardsService.replaceLines (tipo y detalle)', () => {
   });
 });
 
+describe('CreditCardsService.replaceLines (concepto y cero líneas)', () => {
+  it('rechaza una línea sin concepto', async () => {
+    const { service, mgr } = buildService();
+    await expect(
+      (service as any).replaceLines(mgr, 'r1', [{ ...baseLine, conceptId: undefined }]),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rechaza un concepto inexistente o inactivo', async () => {
+    const { service, mgr } = buildService({ activeConceptIds: [] });
+    await expect((service as any).replaceLines(mgr, 'r1', [baseLine])).rejects.toThrow(
+      BadRequestException,
+    );
+  });
+
+  it('guarda con cero líneas: borra las existentes y no falla', async () => {
+    const { service, mgr, linesRepo } = buildService();
+    linesRepo.find.mockResolvedValue([{ id: 'l1' }]);
+    await expect((service as any).replaceLines(mgr, 'r1', [])).resolves.toBeUndefined();
+    expect(linesRepo.delete).toHaveBeenCalled();
+    expect(linesRepo.save).not.toHaveBeenCalled();
+  });
+});
+
 describe('CreditCardsService.submitReport (factura por línea)', () => {
   const user = { id: 'u1' } as any;
   const withInvoice = { vendor: 'A', lineDate: '2026-10-01', sortOrder: 0, hasInvoice: true, invoiceS3Key: 'k' };
@@ -98,6 +140,12 @@ describe('CreditCardsService.submitReport (factura por línea)', () => {
     await expect(service.submitReport('r1', user)).rejects.toMatchObject({
       response: { linesWithoutInvoice: [{ position: 2, vendor: 'B', lineDate: '2026-10-02' }] },
     });
+    expect(reportsRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('rechaza el envío con cero líneas', async () => {
+    const { service, reportsRepo } = buildService({ lines: [] });
+    await expect(service.submitReport('r1', user)).rejects.toThrow(/al menos una línea/);
     expect(reportsRepo.save).not.toHaveBeenCalled();
   });
 

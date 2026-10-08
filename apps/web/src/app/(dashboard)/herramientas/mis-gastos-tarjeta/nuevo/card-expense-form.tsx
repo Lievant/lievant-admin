@@ -85,8 +85,8 @@ export function CardExpenseForm({ report }: Props) {
   const [observations, setObservations] = useState(report?.observations ?? '');
 
   const [lines, setLines] = useState<DraftLine[]>(
-    report?.lines?.length
-      ? report.lines.map((l) => ({
+    report
+      ? (report.lines ?? []).map((l) => ({
           key: nextKey(),
           persistedId: l.id,
           lineDate: l.lineDate.slice(0, 10),
@@ -128,6 +128,9 @@ export function CardExpenseForm({ report }: Props) {
   // (orden del catálogo: "Viáticos cliente") es el valor por defecto.
   const defaultTypeId = catalogs?.types[0]?.id ?? '';
   const typeOf = (l: DraftLine) => l.expenseTypeId || defaultTypeId;
+  // Igual con el concepto: la primera opción del catálogo es el valor por defecto.
+  const defaultConceptId = catalogs?.concepts[0]?.id ?? '';
+  const conceptOf = (l: DraftLine) => l.conceptId || defaultConceptId;
 
   const selectedCard = cards.find((c) => c.id === creditCardId) ?? report?.creditCard ?? null;
 
@@ -163,6 +166,10 @@ export function CardExpenseForm({ report }: Props) {
       setError('La fecha de término no puede ser anterior a la de inicio.');
       return null;
     }
+    if (lines.some((l) => !conceptOf(l))) {
+      setError('El concepto es obligatorio; espera a que cargue el catálogo.');
+      return null;
+    }
     if (lines.some((l) => !typeOf(l))) {
       setError('El tipo de gasto es obligatorio; espera a que cargue el catálogo.');
       return null;
@@ -187,7 +194,7 @@ export function CardExpenseForm({ report }: Props) {
         ...(l.collaborator.trim() ? { collaborator: l.collaborator.trim() } : {}),
         ...(l.motive.trim() ? { motive: l.motive.trim() } : {}),
         vendor: l.vendor.trim(),
-        ...(l.conceptId ? { conceptId: l.conceptId } : {}),
+        conceptId: conceptOf(l),
         expenseTypeId: typeOf(l),
         ...(l.detail.trim() ? { detail: l.detail.trim() } : {}),
         subtotal: toNumber(l.subtotal),
@@ -218,10 +225,17 @@ export function CardExpenseForm({ report }: Props) {
     .map((l, i) => ({ l, n: i + 1 }))
     .filter(({ l }) => !l.hasInvoice)
     .map(({ n }) => n);
-  const canSubmit = missingInvoice.length === 0;
-  const missingMessage = canSubmit
-    ? null
-    : `${missingInvoice.length} línea${missingInvoice.length === 1 ? '' : 's'} sin factura (${missingInvoice
+  const noLines = lines.length === 0;
+  // Un reporte nuevo necesita al menos una línea para guardarse; enviar siempre.
+  const saveBlocked = !report && noLines;
+  const canSubmit = !noLines && missingInvoice.length === 0;
+  const missingMessage = noLines
+    ? report
+      ? 'Agrega al menos una línea para poder enviar.'
+      : 'Agrega al menos una línea para guardar el reporte.'
+    : canSubmit
+      ? null
+      : `${missingInvoice.length} línea${missingInvoice.length === 1 ? '' : 's'} sin factura (${missingInvoice
         .map((n) => `#${n}`)
         .join(', ')}). Guarda el borrador y adjunta la factura de cada una para poder enviar.`;
 
@@ -387,6 +401,13 @@ export function CardExpenseForm({ report }: Props) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {lines.length === 0 && (
+                <tr>
+                  <td colSpan={14} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas. Agrega una línea.
+                  </td>
+                </tr>
+              )}
               {lines.map((line) => {
                 const total = toNumber(line.subtotal) + toNumber(line.tip) + toNumber(line.extras);
                 return (
@@ -425,11 +446,10 @@ export function CardExpenseForm({ report }: Props) {
                     </td>
                     <td className="px-3 py-2">
                       <select
-                        value={line.conceptId}
+                        value={conceptOf(line)}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
                         className={`${inputClass} min-w-[10rem]`}
                       >
-                        <option value="">—</option>
                         {catalogs?.concepts.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -491,8 +511,7 @@ export function CardExpenseForm({ report }: Props) {
                       <button
                         type="button"
                         onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
-                        disabled={lines.length === 1}
-                        className="text-slate-400 transition hover:text-rose-600 disabled:opacity-30"
+                        className="text-slate-400 transition hover:text-rose-600"
                         aria-label="Eliminar línea"
                       >
                         <TrashIcon className="h-4 w-4" />
@@ -554,7 +573,8 @@ export function CardExpenseForm({ report }: Props) {
         <button
           type="button"
           onClick={handleSaveDraft}
-          disabled={isPending}
+          disabled={isPending || saveBlocked}
+          title={saveBlocked ? (missingMessage ?? undefined) : undefined}
           className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
         >
           {isPending ? 'Guardando…' : 'Guardar borrador'}
