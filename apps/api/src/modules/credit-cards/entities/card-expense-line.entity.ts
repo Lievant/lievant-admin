@@ -46,6 +46,10 @@ export class CardExpenseLine {
   @Column({ name: 'expense_type_name', type: 'varchar', length: 100, nullable: true })
   expenseTypeName!: string | null;
 
+  /** Texto libre sobre el gasto; opcional. */
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  detail!: string | null;
+
   @Column({ type: 'decimal', precision: 14, scale: 2, default: 0 })
   subtotal!: string;
 

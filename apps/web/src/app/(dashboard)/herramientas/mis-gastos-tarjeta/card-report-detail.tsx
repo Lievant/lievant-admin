@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { DownloadIcon, EyeIcon } from '@/components/icons';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CardExpenseLineItem, CardExpenseReportItem } from '@/lib/api';
 import { processCardReportAction, submitCardReportAction } from './actions';
@@ -75,11 +76,20 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [showPayment, setShowPayment] = useState(false);
-  const [paymentDate, setPaymentDate] = useState('');
-  const [paymentNote, setPaymentNote] = useState('');
 
   const puedeEnviar = viewer.isCreator && report.status === 'draft';
+  const sinFactura = (report.lines ?? [])
+    .map((l, i) => ({ l, n: i + 1 }))
+    .filter(({ l }) => !l.hasInvoice)
+    .map(({ n }) => n);
+  const sinLineas = (report.lines ?? []).length === 0;
+  const mensajeSinFactura = sinLineas
+    ? 'Agrega al menos una línea para poder enviar.'
+    : sinFactura.length === 0
+      ? null
+      : `${sinFactura.length} línea${sinFactura.length === 1 ? '' : 's'} sin factura (${sinFactura
+          .map((n) => `#${n}`)
+          .join(', ')}). Edita el reporte y adjunta la factura de cada una para poder enviar.`;
   const puedeProcesar = viewer.canProcess && report.status === 'submitted';
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
@@ -87,7 +97,6 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
     startTransition(async () => {
       const res = await fn();
       if (res.success) {
-        setShowPayment(false);
         router.refresh();
       } else {
         setError(res.error ?? fallback);
@@ -166,25 +175,39 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">Extras</th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
+                <th className="px-3 py-3 text-left">
+                  Tipo de gasto
+                  <ExpenseTypeHint />
+                </th>
+                <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">Factura</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {(report.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas.
+                  </td>
+                </tr>
+              )}
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.collaborator ?? '—'}</td>
+                  <td className="min-w-[7rem] px-3 py-2 text-slate-600">{line.collaborator ?? '—'}</td>
                   <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.motive ?? ''}>
                     {line.motive ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[11rem] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
-                  <td className="px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="min-w-[16rem] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
+                  <td className="min-w-[14rem] max-w-[18rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
+                    {line.detail ?? '—'}
+                  </td>
                   <td className="px-3 py-2 text-center">
                     <InvoiceLink line={line} />
                   </td>
@@ -200,12 +223,18 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                 <td className="px-3 py-3 text-right">{money(report.totalTip)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalExtras)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalAmount)}</td>
-                <td colSpan={2} />
+                <td colSpan={3} />
               </tr>
             </tfoot>
           </table>
         </ScrollableTable>
       </section>
+
+      {puedeEnviar && mensajeSinFactura && (
+        <p className="text-right text-sm text-amber-700" role="status">
+          {mensajeSinFactura}
+        </p>
+      )}
 
       {(puedeEnviar || puedeProcesar) && (
         <section className="flex flex-wrap justify-end gap-2 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -219,7 +248,8 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
               </Link>
               <button
                 type="button"
-                disabled={isPending}
+                disabled={isPending || sinLineas || sinFactura.length > 0}
+                title={mensajeSinFactura ?? undefined}
                 onClick={() =>
                   run(() => submitCardReportAction(report.id), 'No se pudo enviar el reporte.')
                 }
@@ -232,75 +262,16 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
           {puedeProcesar && (
             <button
               type="button"
-              onClick={() => setShowPayment(true)}
-              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700"
+              disabled={isPending}
+              onClick={() =>
+                run(() => processCardReportAction(report.id), 'No se pudo registrar el pago.')
+              }
+              className="rounded-md bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
             >
               Registrar procesado
             </button>
           )}
         </section>
-      )}
-
-      {showPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-navy">Registrar procesado</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              {report.reportNumber} — {money(report.totalAmount)}
-            </p>
-
-            <div className="mt-4 space-y-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="fecha-pago">
-                  Fecha de pago
-                </label>
-                <input
-                  id="fecha-pago"
-                  type="date"
-                  value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500" htmlFor="nota-pago">
-                  Nota (opcional)
-                </label>
-                <textarea
-                  id="nota-pago"
-                  rows={2}
-                  value={paymentNote}
-                  onChange={(e) => setPaymentNote(e.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowPayment(false)}
-                disabled={isPending}
-                className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isPending || !paymentDate}
-                onClick={() =>
-                  run(
-                    () => processCardReportAction(report.id, paymentDate, paymentNote),
-                    'No se pudo registrar el pago.',
-                  )
-                }
-                className="rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-50"
-              >
-                {isPending ? 'Guardando…' : 'Confirmar'}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );

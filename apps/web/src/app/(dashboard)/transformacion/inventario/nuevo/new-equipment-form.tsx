@@ -90,6 +90,7 @@ interface NewEquipmentFormProps {
 export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormProps) {
   // La garantía es opcional y va colapsada: la mayoría de las altas no la traen.
   const [warrantyOpen, setWarrantyOpen] = useState(false);
+  const [financialOpen, setFinancialOpen] = useState(false);
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +112,9 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
     area: '',
     purchaseDate: '',
     purchaseValue: '',
+    financialProviderId: '',
+    invoiceNumber: '',
+    invoiceDate: '',
     notes: '',
     warrantyProviderId: '',
     warrantyExpiryDate: '',
@@ -156,6 +160,9 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         area: form.area || undefined,
         purchaseDate: form.purchaseDate || undefined,
         purchaseValue: form.purchaseValue ? parseFloat(form.purchaseValue) : undefined,
+        financialProviderId: form.financialProviderId || undefined,
+        invoiceNumber: form.invoiceNumber || undefined,
+        invoiceDate: form.invoiceDate || undefined,
         notes: form.notes || undefined,
         warrantyProviderId: form.warrantyProviderId || undefined,
         warrantyExpiryDate: form.warrantyExpiryDate || undefined,
@@ -221,6 +228,11 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
             <label className={labelClass}>ID Legado</label>
             <input type="text" value={form.legacyId} onChange={(e) => set('legacyId', e.target.value)} className={inputClass} placeholder="AD046, M092…" />
           </div>
+          {/* Se queda fuera de la sección financiera (colapsable): define el año del ID Lievant. */}
+          <div>
+            <label className={labelClass}>Fecha de compra</label>
+            <input type="date" value={form.purchaseDate} onChange={(e) => set('purchaseDate', e.target.value)} className={inputClass} />
+          </div>
         </div>
         <div className="mt-4">
           <label className={labelClass}>Nombre en Active Directory</label>
@@ -282,19 +294,58 @@ export function NewEquipmentForm({ types, brands, statuses }: NewEquipmentFormPr
         </div>
       </fieldset>
 
-      {/* Financiero */}
+      {/* Información financiera — colapsable, igual que garantía */}
       <fieldset className="rounded-xl border border-slate-200 bg-white p-5">
-        <legend className="px-1 text-sm font-semibold text-navy">Financiero</legend>
-        <div className="mt-3 grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Fecha de compra</label>
-            <input type="date" value={form.purchaseDate} onChange={(e) => set('purchaseDate', e.target.value)} className={inputClass} />
+        <button
+          type="button"
+          onClick={() => setFinancialOpen(!financialOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-navy">Información Financiera</span>
+          <span className="text-xs text-slate-400">
+            {financialOpen ? 'Ocultar' : 'Mostrar'} · opcional
+          </span>
+        </button>
+
+        {financialOpen && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className={labelClass}>Proveedor</label>
+              <VendorPicker
+                value={form.financialProviderId}
+                onChange={(id) => set('financialProviderId', id)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className={labelClass}>No. de factura</label>
+                <input
+                  type="text"
+                  value={form.invoiceNumber}
+                  onChange={(e) => set('invoiceNumber', e.target.value)}
+                  className={inputClass}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Fecha de factura</label>
+                <input
+                  type="date"
+                  value={form.invoiceDate}
+                  onChange={(e) => set('invoiceDate', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Valor de compra (MXN)</label>
+                <input type="number" min="0" step="0.01" value={form.purchaseValue} onChange={(e) => set('purchaseValue', e.target.value)} className={inputClass} placeholder="0.00" />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              La depreciación (36 meses desde la fecha de factura) se calcula sola en el detalle.
+            </p>
           </div>
-          <div>
-            <label className={labelClass}>Valor del equipo (MXN)</label>
-            <input type="number" min="0" step="0.01" value={form.purchaseValue} onChange={(e) => set('purchaseValue', e.target.value)} className={inputClass} placeholder="0.00" />
-          </div>
-        </div>
+        )}
       </fieldset>
 
       {/* Garantía — colapsable, al final */}

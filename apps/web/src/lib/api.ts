@@ -2350,7 +2350,14 @@ export interface EquipmentSummary {
   location: string | null;
   area: string | null;
   purchaseDate: string | null;
-  purchaseValue: string;
+  /** DECIMAL serializado como string; null = sin valor capturado. */
+  purchaseValue: string | null;
+  // ── Información financiera ────────────────────────────────────────────────
+  financialProviderId: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  /** Proveedor resuelto + depreciación calculada al día de hoy por el API. */
+  financialInfo: EquipmentFinancialInfo;
   // ── Garantía ──────────────────────────────────────────────────────────────
   warrantyProviderId: string | null;
   warrantyExpiryDate: string | null;
@@ -2367,6 +2374,20 @@ export interface EquipmentSummary {
 }
 
 export type WarrantyStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_garantia';
+
+/** Depreciación en línea recta a 36 meses desde la fecha de factura. */
+export interface EquipmentFinancialInfo {
+  providerId: string | null;
+  providerName: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  purchaseValue: number | null;
+  depreciationEndDate: string | null;
+  monthlyDepreciation: number | null;
+  currentValue: number | null;
+  depreciationPercentage: number;
+  isFullyDepreciated: boolean;
+}
 
 export type MaintenanceStatus = 'sin_mantenimiento' | 'vencido' | 'por_vencer' | 'al_dia';
 
@@ -2506,7 +2527,10 @@ export interface CreateEquipmentPayload {
   location?: string;
   area?: string;
   purchaseDate?: string;
-  purchaseValue?: number;
+  purchaseValue?: number | null;
+  financialProviderId?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
   warrantyProviderId?: string;
   warrantyExpiryDate?: string;
   warrantyPurchaseOrder?: string;
@@ -4414,7 +4438,7 @@ export interface ExpenseLinePayload {
   lineDate: string;
   vendor: string;
   conceptId?: string;
-  expenseTypeId?: string;
+  expenseTypeId: string;
   subtotal?: number;
   tip?: number;
   extras?: number;
@@ -4544,6 +4568,7 @@ export interface CardExpenseLineItem {
   conceptName: string | null;
   expenseTypeId: string | null;
   expenseTypeName: string | null;
+  detail: string | null;
   subtotal: string;
   tip: string;
   extras: string;
@@ -4599,7 +4624,8 @@ export interface CardExpenseLinePayload {
   motive?: string;
   vendor: string;
   conceptId?: string;
-  expenseTypeId?: string;
+  expenseTypeId: string;
+  detail?: string;
   subtotal?: number;
   tip?: number;
   extras?: number;
@@ -4729,7 +4755,7 @@ export function submitCardReport(id: string): Promise<CardExpenseReportItem> {
 
 export function processCardReport(
   id: string,
-  payload: { paymentDate: string; note?: string },
+  payload: { paymentDate?: string; note?: string } = {},
 ): Promise<CardExpenseReportItem> {
   return apiFetch<CardExpenseReportItem>(`/credit-cards/reports/${id}/process`, {
     method: 'PATCH',

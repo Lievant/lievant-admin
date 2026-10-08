@@ -100,13 +100,16 @@ export class CardExpenseLineDto {
   @MaxLength(300)
   vendor!: string;
 
-  @IsOptional()
-  @IsUUID()
-  conceptId?: string;
+  @IsUUID(undefined, { message: 'El concepto es obligatorio.' })
+  conceptId!: string;
+
+  @IsUUID(undefined, { message: 'El tipo de gasto es obligatorio.' })
+  expenseTypeId!: string;
 
   @IsOptional()
-  @IsUUID()
-  expenseTypeId?: string;
+  @IsString()
+  @MaxLength(500)
+  detail?: string;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -162,8 +165,10 @@ export class CreateCardReportDto {
 export class UpdateCardReportDto extends CreateCardReportDto {}
 
 export class ProcessCardReportDto {
+  /** Opcional: sin ella se usa la fecha de hoy en hora de México. */
+  @IsOptional()
   @IsDateString()
-  paymentDate!: string;
+  paymentDate?: string;
 
   @IsOptional()
   @IsString()
