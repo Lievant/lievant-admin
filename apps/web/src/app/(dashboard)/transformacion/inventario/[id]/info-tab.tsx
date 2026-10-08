@@ -4,8 +4,9 @@ import { useState } from 'react';
 import type { EquipmentBrandCatalog, EquipmentDetail, EquipmentStatusCatalog, EquipmentTypeCatalog } from '@/lib/api';
 import { VendorPicker } from '../vendor-picker';
 import { WarrantyCard } from './warranty-card';
+import { FinancialCard } from './financial-card';
 import { BrandSelect } from '../brand-select';
-import { formatCurrency, formatDate } from '../constants';
+import { formatDate } from '../constants';
 
 interface Catalogs {
   types: EquipmentTypeCatalog[];
@@ -33,6 +34,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warrantyOpen, setWarrantyOpen] = useState(false);
+  const [financialOpen, setFinancialOpen] = useState(false);
 
   const [form, setForm] = useState({
     equipmentType: equipment.equipmentType,
@@ -47,6 +49,9 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
     area: equipment.area ?? '',
     purchaseDate: equipment.purchaseDate ?? '',
     purchaseValue: equipment.purchaseValue ? String(parseFloat(equipment.purchaseValue)) : '',
+    financialProviderId: equipment.financialProviderId ?? '',
+    invoiceNumber: equipment.invoiceNumber ?? '',
+    invoiceDate: equipment.invoiceDate ?? '',
     chargerIncluded: equipment.chargerIncluded,
     notes: equipment.notes ?? '',
     legacyId: equipment.legacyId ?? '',
@@ -80,7 +85,6 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           location: form.location || undefined,
           area: form.area || undefined,
           purchaseDate: form.purchaseDate || undefined,
-          purchaseValue: form.purchaseValue ? parseFloat(form.purchaseValue) : undefined,
           chargerIncluded: form.chargerIncluded,
           notes: form.notes || undefined,
           legacyId: form.legacyId || undefined,
@@ -91,6 +95,11 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           warrantyExpiryDate: form.warrantyExpiryDate || null,
           warrantyPurchaseOrder: form.warrantyPurchaseOrder || null,
           warrantyNotes: form.warrantyNotes || null,
+          // Igual que garantía: vacío = null para poder borrar el dato.
+          financialProviderId: form.financialProviderId || null,
+          invoiceNumber: form.invoiceNumber || null,
+          invoiceDate: form.invoiceDate || null,
+          purchaseValue: form.purchaseValue ? parseFloat(form.purchaseValue) : null,
         }),
       });
       if (!res.ok) {
@@ -135,7 +144,6 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           <Field label="Área" value={equipment.area} />
           <Field label="No. Responsiva" value={equipment.responsiva} />
           <Field label="Fecha de compra" value={formatDate(equipment.purchaseDate)} />
-          <Field label="Valor del equipo" value={formatCurrency(equipment.purchaseValue)} />
           <Field label="Cargador incluido" value={equipment.chargerIncluded ? 'Sí' : 'No'} />
         </dl>
         {equipment.specifications && (
@@ -151,6 +159,7 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           </div>
         )}
         </div>
+        <FinancialCard equipment={equipment} />
         <WarrantyCard equipment={equipment} canWrite onUpdated={onUpdated} />
       </div>
     );
@@ -219,10 +228,6 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
           <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Fecha compra</label>
           <input type="date" value={form.purchaseDate} onChange={(e) => set('purchaseDate', e.target.value)} className={inputClass} />
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Valor (MXN)</label>
-          <input type="number" min="0" step="0.01" value={form.purchaseValue} onChange={(e) => set('purchaseValue', e.target.value)} className={inputClass} />
-        </div>
         <div className="flex items-center gap-2 pt-5">
           <input type="checkbox" id="charger-edit" checked={form.chargerIncluded} onChange={(e) => set('chargerIncluded', e.target.checked)} className="h-4 w-4" />
           <label htmlFor="charger-edit" className="text-sm text-slate-700">Cargador incluido</label>
@@ -235,6 +240,74 @@ export function InfoTab({ equipment, catalogs, onUpdated }: Props) {
       <div>
         <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">Notas TI</label>
         <textarea value={form.notes} onChange={(e) => set('notes', e.target.value)} rows={3} className={inputClass} />
+      </div>
+
+      {/* Información financiera — colapsable, igual que garantía */}
+      <div className="rounded-xl border border-slate-200 p-4">
+        <button
+          type="button"
+          onClick={() => setFinancialOpen(!financialOpen)}
+          className="flex w-full items-center justify-between text-left"
+        >
+          <span className="text-sm font-semibold text-navy">Información Financiera</span>
+          <span className="text-xs text-slate-400">{financialOpen ? 'Ocultar' : 'Mostrar'}</span>
+        </button>
+
+        {financialOpen && (
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                Proveedor
+              </label>
+              <VendorPicker
+                value={form.financialProviderId}
+                initialName={equipment.financialInfo.providerName}
+                onChange={(id) => set('financialProviderId', id)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  No. de factura
+                </label>
+                <input
+                  type="text"
+                  value={form.invoiceNumber}
+                  onChange={(e) => set('invoiceNumber', e.target.value)}
+                  className={inputClass}
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Fecha de factura
+                </label>
+                <input
+                  type="date"
+                  value={form.invoiceDate}
+                  onChange={(e) => set('invoiceDate', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Valor de compra (MXN)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.purchaseValue}
+                  onChange={(e) => set('purchaseValue', e.target.value)}
+                  className={inputClass}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-400">
+              La depreciación (36 meses desde la fecha de factura) se calcula sola en la ficha.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Garantía — colapsable, al final */}

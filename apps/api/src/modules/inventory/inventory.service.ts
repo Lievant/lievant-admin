@@ -130,6 +130,103 @@ function toDateString(value: unknown): string | null {
   return String(value).slice(0, 10);
 }
 
+// ── Información financiera: depreciación derivada ────────────────────────────
+
+/** Vida contable del equipo de cómputo: se deprecia en línea recta en 36 meses. */
+export const DEPRECIATION_MONTHS = 36;
+
+export interface FinancialInfo {
+  providerId: string | null;
+  providerName: string | null;
+  invoiceNumber: string | null;
+  invoiceDate: string | null;
+  purchaseValue: number | null;
+  depreciationEndDate: string | null;
+  monthlyDepreciation: number | null;
+  currentValue: number | null;
+  depreciationPercentage: number;
+  isFullyDepreciated: boolean;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Meses de calendario completos entre `fromDate` y hoy (0 si es futura).
+ * Un mes cuenta cuando se alcanza el mismo día del mes siguiente: del 15-ene al
+ * 14-feb van 0 meses, al 15-feb va 1. Fin de mes usa el mismo tope que
+ * addMonthsClamped: 31-ene → 28-feb ya es 1 mes.
+ */
+export function fullMonthsElapsed(fromDate: string, now: Date): number {
+  const [fy = 0, fm = 1, fd = 1] = fromDate.slice(0, 10).split('-').map(Number);
+  const ny = now.getFullYear();
+  const nm = now.getMonth() + 1;
+  const nd = now.getDate();
+  let months = (ny - fy) * 12 + (nm - fm);
+  const lastDayThisMonth = new Date(ny, nm, 0).getDate();
+  if (nd < Math.min(fd, lastDayThisMonth)) months -= 1;
+  return Math.max(0, months);
+}
+
+/**
+ * Depreciación en línea recta a 36 meses desde la fecha de factura (no la de
+ * compra: es la que respalda contablemente el activo). Sin fecha de factura no
+ * hay reloj, así que todo lo derivado sale null/0; sin valor, sí se calculan
+ * las fechas y el avance pero no los montos.
+ */
+export function deriveFinancialInfo(
+  e: {
+    financialProviderId: string | null;
+    invoiceNumber: string | null;
+    invoiceDate: string | null;
+    purchaseValue: number | string | null;
+  },
+  providerName: string | null,
+  now: Date = new Date(),
+): FinancialInfo {
+  const invoiceDate = e.invoiceDate ? toDateString(e.invoiceDate) : null;
+  const rawValue = e.purchaseValue === null || e.purchaseValue === undefined ? null : Number(e.purchaseValue);
+  const purchaseValue = rawValue !== null && Number.isFinite(rawValue) ? rawValue : null;
+
+  const base = {
+    providerId: e.financialProviderId,
+    providerName: e.financialProviderId ? providerName : null,
+    invoiceNumber: e.invoiceNumber,
+    invoiceDate,
+    purchaseValue,
+  };
+
+  if (!invoiceDate) {
+    return {
+      ...base,
+      depreciationEndDate: null,
+      monthlyDepreciation: purchaseValue !== null ? round2(purchaseValue / DEPRECIATION_MONTHS) : null,
+      currentValue: null,
+      depreciationPercentage: 0,
+      isFullyDepreciated: false,
+    };
+  }
+
+  const months = Math.min(fullMonthsElapsed(invoiceDate, now), DEPRECIATION_MONTHS);
+  const isFullyDepreciated = months >= DEPRECIATION_MONTHS;
+  const monthly = purchaseValue !== null ? purchaseValue / DEPRECIATION_MONTHS : null;
+
+  return {
+    ...base,
+    depreciationEndDate: addMonthsClamped(invoiceDate, DEPRECIATION_MONTHS),
+    monthlyDepreciation: monthly !== null ? round2(monthly) : null,
+    // Se calcula con la mensualidad sin redondear: con la redondeada, 36 pagos
+    // de $416.67 sobre $15,000 dejarían un residuo de centavos.
+    currentValue:
+      monthly !== null && purchaseValue !== null
+        ? isFullyDepreciated
+          ? 0
+          : Math.max(0, round2(purchaseValue - monthly * months))
+        : null,
+    depreciationPercentage: round2((months / DEPRECIATION_MONTHS) * 100),
+    isFullyDepreciated,
+  };
+}
+
 @Injectable()
 export class InventoryService {
   constructor(
@@ -242,7 +339,10 @@ export class InventoryService {
     // por página para un dato que solo se usa en el detalle.
     // El semáforo de mantenimiento se calcula para toda la página en una sola
     // consulta (el último preventivo por equipo), no una por fila.
-    const maintByEquipment = await this.deriveMaintenanceForEquipmentIds(data.map((d) => d.id));
+    const [maintByEquipment, financialProviders] = await Promise.all([
+      this.deriveMaintenanceForEquipmentIds(data.map((d) => d.id)),
+      this.vendorNames(data.map((d) => d.financialProviderId)),
+    ]);
 
     const enriched = data.map((item) => {
       const maint =
@@ -256,6 +356,10 @@ export class InventoryService {
         warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
         maintenanceStatus: maint.maintenanceStatus,
         nextMaintenanceDate: maint.nextMaintenanceDate,
+        financialInfo: deriveFinancialInfo(
+          item,
+          item.financialProviderId ? (financialProviders.get(item.financialProviderId) ?? null) : null,
+        ),
       };
     });
 
@@ -375,16 +479,39 @@ export class InventoryService {
     return (rows as { name: string }[])[0]?.name ?? null;
   }
 
+  /** Nombres de varios proveedores en una sola consulta (para el listado). */
+  private async vendorNames(ids: (string | null)[]): Promise<Map<string, string>> {
+    const unique = [...new Set(ids.filter((id): id is string => !!id))];
+    if (unique.length === 0) return new Map();
+    const rows = (await this.equipmentRepo.query(
+      `SELECT id, name FROM vendors.vendors WHERE id = ANY($1::uuid[])`,
+      [unique],
+    )) as { id: string; name: string }[];
+    return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  /** Añade `financialInfo` (proveedor resuelto + depreciación al día de hoy). */
+  private async withFinancialInfo<T extends Equipment>(item: T) {
+    const providerName = await this.vendorName(item.financialProviderId);
+    return { ...item, financialInfo: deriveFinancialInfo(item, providerName) };
+  }
+
+  /**
+   * Incluye también `financialInfo`: la pantalla de detalle reemplaza su estado
+   * con lo que devuelven update y la subida de factura, y sin él la tarjeta
+   * financiera se vaciaba tras guardar.
+   */
   private async withWarranty<T extends Equipment>(item: T) {
-    const [providerName, invoiceUrl] = await Promise.all([
+    const [providerName, invoiceUrl, withFinancial] = await Promise.all([
       this.vendorName(item.warrantyProviderId),
       item.warrantyInvoiceS3Key
         ? this.storage.getPresignedUrl(item.warrantyInvoiceS3Key)
         : Promise.resolve(null),
+      this.withFinancialInfo(item),
     ]);
 
     return {
-      ...item,
+      ...withFinancial,
       warrantyProviderName: providerName,
       warrantyInvoiceUrl: invoiceUrl,
       warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
@@ -543,7 +670,10 @@ export class InventoryService {
       warrantyPurchaseOrder: dto.warrantyPurchaseOrder ?? null,
       warrantyNotes: dto.warrantyNotes ?? null,
       purchaseDate: dto.purchaseDate ?? null,
-      purchaseValue: dto.purchaseValue ?? 0,
+      purchaseValue: dto.purchaseValue ?? null,
+      financialProviderId: dto.financialProviderId ?? null,
+      invoiceNumber: dto.invoiceNumber ?? null,
+      invoiceDate: dto.invoiceDate ?? null,
       notes: dto.notes ?? null,
     });
 
@@ -590,7 +720,12 @@ export class InventoryService {
     trackField('status', item.status, dto.status);
     trackField('location', item.location, dto.location);
     trackField('area', item.area, dto.area);
-    trackField('purchaseValue', item.purchaseValue, dto.purchaseValue);
+    // Se compara numéricamente: pg devuelve '15000.00' y el DTO 15000, y como
+    // texto eso registraba un cambio en cada guardado aunque nadie tocara el valor.
+    if (dto.purchaseValue !== undefined) {
+      const oldVal = item.purchaseValue === null ? null : Number(item.purchaseValue);
+      if (oldVal !== dto.purchaseValue) trackField('purchaseValue', oldVal, dto.purchaseValue ?? '');
+    }
     trackField('notes', item.notes, dto.notes);
     trackField('specifications', item.specifications, dto.specifications);
 
@@ -605,6 +740,17 @@ export class InventoryService {
       trackField('warrantyProviderId', oldName, newName ?? '');
     }
     trackField('warrantyExpiryDate', item.warrantyExpiryDate, dto.warrantyExpiryDate);
+
+    // Información financiera: mismo criterio que garantía, proveedor por nombre.
+    if (dto.financialProviderId !== undefined && dto.financialProviderId !== item.financialProviderId) {
+      const [oldName, newName] = await Promise.all([
+        this.vendorName(item.financialProviderId),
+        this.vendorName(dto.financialProviderId ?? null),
+      ]);
+      trackField('financialProviderId', oldName, newName ?? '');
+    }
+    trackField('invoiceNumber', item.invoiceNumber, dto.invoiceNumber === null ? '' : dto.invoiceNumber);
+    trackField('invoiceDate', item.invoiceDate, dto.invoiceDate === null ? '' : dto.invoiceDate);
     trackField('warrantyPurchaseOrder', item.warrantyPurchaseOrder, dto.warrantyPurchaseOrder);
     trackField('warrantyNotes', item.warrantyNotes, dto.warrantyNotes);
 
@@ -633,7 +779,12 @@ export class InventoryService {
       ...(dto.location !== undefined && { location: dto.location }),
       ...(dto.area !== undefined && { area: dto.area }),
       ...(dto.purchaseDate !== undefined && { purchaseDate: dto.purchaseDate }),
-      ...(dto.purchaseValue !== undefined && { purchaseValue: dto.purchaseValue }),
+      ...(dto.purchaseValue !== undefined && { purchaseValue: dto.purchaseValue ?? null }),
+      ...(dto.financialProviderId !== undefined && {
+        financialProviderId: dto.financialProviderId ?? null,
+      }),
+      ...(dto.invoiceNumber !== undefined && { invoiceNumber: dto.invoiceNumber ?? null }),
+      ...(dto.invoiceDate !== undefined && { invoiceDate: dto.invoiceDate ?? null }),
       ...(dto.notes !== undefined && { notes: dto.notes }),
     });
 
