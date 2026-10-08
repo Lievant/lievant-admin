@@ -16,7 +16,7 @@ import {
   updateExpenseReportAction,
 } from './actions';
 import { describeMissingAttachment } from '@/components/missing-attachment';
-import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
 import { DocumentHeader, Hint, money } from './expense-shared';
 
 /** Línea en edición. `persistedId` solo existe si ya está guardada en la BD. */
@@ -93,8 +93,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
   const [periodEnd, setPeriodEnd] = useState(report?.periodEnd?.slice(0, 10) ?? '');
 
   const [lines, setLines] = useState<DraftLine[]>(
-    report?.lines?.length
-      ? report.lines.map((l) => ({
+    report
+      ? (report.lines ?? []).map((l) => ({
           key: nextKey(),
           persistedId: l.id,
           lineDate: l.lineDate.slice(0, 10),
@@ -149,6 +149,9 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
   // (orden del catálogo: "Viáticos cliente") es el valor por defecto.
   const defaultTypeId = catalogs?.types[0]?.id ?? '';
   const typeOf = (l: DraftLine) => l.expenseTypeId || defaultTypeId;
+  // Igual con el concepto: la primera opción del catálogo es el valor por defecto.
+  const defaultConceptId = catalogs?.concepts[0]?.id ?? '';
+  const conceptOf = (l: DraftLine) => l.conceptId || defaultConceptId;
 
   function buildPayload(): ExpenseReportPayload | null {
     if (!motive.trim()) {
@@ -164,6 +167,10 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
       return null;
     }
 
+    if (lines.some((l) => !conceptOf(l))) {
+      setError('El concepto es obligatorio; espera a que cargue el catálogo.');
+      return null;
+    }
     if (lines.some((l) => !typeOf(l))) {
       setError('El tipo de gasto es obligatorio; espera a que cargue el catálogo.');
       return null;
@@ -188,7 +195,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         ...(l.persistedId ? { id: l.persistedId } : {}),
         lineDate: l.lineDate,
         vendor: l.vendor.trim(),
-        ...(l.conceptId ? { conceptId: l.conceptId } : {}),
+        conceptId: conceptOf(l),
         expenseTypeId: typeOf(l),
         ...(l.notes.trim() ? { notes: l.notes.trim() } : {}),
         subtotal: toNumber(l.subtotal),
@@ -216,10 +223,17 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
   }
 
   // Sin adjunto en cada línea el backend rechaza el envío; aquí se anticipa.
-  const missingMessage = describeMissingAttachment(
-    lines.map((l) => l.hasInvoice),
-    'Guarda el borrador y adjunta un archivo en cada una para poder enviar.',
-  );
+  const noLines = lines.length === 0;
+  // Un reporte nuevo necesita al menos una línea para guardarse; enviar siempre.
+  const saveBlocked = !report && noLines;
+  const missingMessage = noLines
+    ? report
+      ? 'Agrega al menos una línea para poder enviar.'
+      : 'Agrega al menos una línea para guardar el reporte.'
+    : describeMissingAttachment(
+        lines.map((l) => l.hasInvoice),
+        'Guarda el borrador y adjunta un archivo en cada una para poder enviar.',
+      );
 
   function handleSaveDraft() {
     startTransition(async () => {
@@ -355,32 +369,35 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <th className="px-3 py-3 text-left">Fecha</th>
                 <th className="px-3 py-3 text-left">
                   Proveedor
-                  <Hint text="Nombre de locación o razón social de la factura" />
                 </th>
                 <th className="px-3 py-3 text-left">Concepto</th>
                 <th className="px-3 py-3 text-right">
                   Subtotal
-                  <Hint text="Monto antes de impuestos y cargos adicionales" />
                 </th>
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">
                   Extras
-                  <Hint text="Cargos adicionales como estacionamiento, servicio, IVA" />
                 </th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
                 <th className="px-3 py-3 text-left">
-                  <ExpenseTypeInfoHeader />
+                  Tipo de gasto
+                  <ExpenseTypeHint />
                 </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">
                   Factura
-                  <Hint text="Sube el comprobante fiscal. Formatos: PDF, JPG, PNG" />
                 </th>
                 <th className="px-3 py-3 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {lines.length === 0 && (
+                <tr>
+                  <td colSpan={11} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas. Agrega una línea.
+                  </td>
+                </tr>
+              )}
               {lines.map((line) => {
                 const total = toNumber(line.subtotal) + toNumber(line.tip) + toNumber(line.extras);
                 return (
@@ -403,11 +420,10 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                     </td>
                     <td className="px-3 py-2">
                       <select
-                        value={line.conceptId}
+                        value={conceptOf(line)}
                         onChange={(e) => patchLine(line.key, { conceptId: e.target.value })}
-                        className={`${inputClass} min-w-[155px]`}
+                        className={`${inputClass} min-w-[11rem]`}
                       >
-                        <option value="">—</option>
                         {catalogs?.concepts.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.name}
@@ -442,18 +458,13 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                         ))}
                       </select>
                     </td>
-                    <td className="px-3 py-2 align-top">
-                      <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
-                        {expenseTypeInfo(catalogs?.types.find((t) => t.id === typeOf(line))?.name)}
-                      </span>
-                    </td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
                         maxLength={500}
                         value={line.notes}
                         onChange={(e) => patchLine(line.key, { notes: e.target.value })}
-                        className={`${inputClass} min-w-[160px]`}
+                        className={`${inputClass} min-w-[14rem]`}
                       />
                     </td>
                     <td className="px-3 py-2 text-center">
@@ -469,8 +480,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                       <button
                         type="button"
                         onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
-                        disabled={lines.length === 1}
-                        className="text-slate-400 transition hover:text-rose-600 disabled:opacity-30"
+                        className="text-slate-400 transition hover:text-rose-600"
                         aria-label="Eliminar línea"
                       >
                         <TrashIcon className="h-4 w-4" />
@@ -489,7 +499,7 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
                 <td className="px-3 py-3 text-right">{money(totals.tip)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.extras)}</td>
                 <td className="px-3 py-3 text-right">{money(totals.total)}</td>
-                <td colSpan={5} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>
@@ -516,7 +526,8 @@ export function ExpenseReportForm({ requesterName, report }: Props) {
         <button
           type="button"
           onClick={handleSaveDraft}
-          disabled={isPending}
+          disabled={isPending || saveBlocked}
+          title={saveBlocked ? (missingMessage ?? undefined) : undefined}
           className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
         >
           {isPending ? 'Guardando…' : 'Guardar borrador'}

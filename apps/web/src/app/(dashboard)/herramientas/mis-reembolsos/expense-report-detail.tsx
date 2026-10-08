@@ -12,7 +12,7 @@ import {
   submitExpenseReportAction,
 } from './actions';
 import { describeMissingAttachment } from '@/components/missing-attachment';
-import { ExpenseTypeInfoHeader, expenseTypeInfo } from '@/components/expense-type-info';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
 import { DocumentHeader, formatDate, money, StatusBadge, StatusTimeline } from './expense-shared';
 
 interface Props {
@@ -84,10 +84,13 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
   const puedeAutorizar = viewer.isAuthorizer && report.status === 'submitted';
   const puedeProcesar = viewer.canProcess && report.status === 'authorized';
   const puedeEnviar = viewer.isOwner && report.status === 'draft';
-  const mensajeSinAdjunto = describeMissingAttachment(
-    (report.lines ?? []).map((l) => l.hasInvoice),
-    'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
-  );
+  const sinLineas = (report.lines ?? []).length === 0;
+  const mensajeSinAdjunto = sinLineas
+    ? 'Agrega al menos una línea para poder enviar.'
+    : describeMissingAttachment(
+        (report.lines ?? []).map((l) => l.hasInvoice),
+        'Edita el reporte y adjunta un archivo en cada una para poder enviar.',
+      );
 
   function run(fn: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setError(null);
@@ -169,31 +172,33 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">Extras</th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
                 <th className="px-3 py-3 text-left">
-                  <ExpenseTypeInfoHeader />
+                  Tipo de gasto
+                  <ExpenseTypeHint />
                 </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">Factura</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {(report.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas.
+                  </td>
+                </tr>
+              )}
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="min-w-[155px] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[11rem] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
                   <td className="min-w-[255px] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="block w-[120px] whitespace-normal text-xs text-slate-500">
-                      {expenseTypeInfo(line.expenseTypeName)}
-                    </span>
-                  </td>
-                  <td className="min-w-[160px] max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.notes ?? ''}>
+                  <td className="min-w-[14rem] max-w-[18rem] truncate px-3 py-2 text-slate-600" title={line.notes ?? ''}>
                     {line.notes ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -211,7 +216,7 @@ export function ExpenseReportDetail({ report, viewer, backHref }: Props) {
                 <td className="px-3 py-3 text-right">{money(report.totalTip)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalExtras)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalAmount)}</td>
-                <td colSpan={4} />
+                <td colSpan={3} />
               </tr>
             </tfoot>
           </table>

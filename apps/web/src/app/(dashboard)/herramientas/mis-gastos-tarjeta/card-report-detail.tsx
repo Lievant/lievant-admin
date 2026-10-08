@@ -4,14 +4,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 import { DownloadIcon, EyeIcon } from '@/components/icons';
-import { expenseTypeInfo } from '@/components/expense-type-info';
+import { ExpenseTypeHint } from '@/components/expense-type-info';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CardExpenseLineItem, CardExpenseReportItem } from '@/lib/api';
 import { processCardReportAction, submitCardReportAction } from './actions';
 import {
   CardStatusBadge,
   DocumentHeader,
-  ExpenseTypeInfoHeader,
   describeCard,
   formatDate,
   formatDateTime,
@@ -83,8 +82,10 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
     .map((l, i) => ({ l, n: i + 1 }))
     .filter(({ l }) => !l.hasInvoice)
     .map(({ n }) => n);
-  const mensajeSinFactura =
-    sinFactura.length === 0
+  const sinLineas = (report.lines ?? []).length === 0;
+  const mensajeSinFactura = sinLineas
+    ? 'Agrega al menos una línea para poder enviar.'
+    : sinFactura.length === 0
       ? null
       : `${sinFactura.length} línea${sinFactura.length === 1 ? '' : 's'} sin factura (${sinFactura
           .map((n) => `#${n}`)
@@ -174,15 +175,22 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                 <th className="px-3 py-3 text-right">Propina</th>
                 <th className="px-3 py-3 text-right">Extras</th>
                 <th className="px-3 py-3 text-right">Total</th>
-                <th className="px-3 py-3 text-left">Tipo de gasto</th>
                 <th className="px-3 py-3 text-left">
-                  <ExpenseTypeInfoHeader />
+                  Tipo de gasto
+                  <ExpenseTypeHint />
                 </th>
                 <th className="px-3 py-3 text-left">Detalle</th>
                 <th className="px-3 py-3 text-center">Factura</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
+              {(report.lines ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-3 py-6 text-center text-sm text-slate-400">
+                    Sin líneas.
+                  </td>
+                </tr>
+              )}
               {(report.lines ?? []).map((line) => (
                 <tr key={line.id}>
                   <td className="px-3 py-2 text-slate-600">{formatDate(line.lineDate)}</td>
@@ -191,18 +199,13 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                     {line.motive ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-slate-700">{line.vendor}</td>
-                  <td className="min-w-[10rem] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
+                  <td className="min-w-[11rem] px-3 py-2 text-slate-600">{line.conceptName ?? '—'}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.subtotal)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.tip)}</td>
                   <td className="px-3 py-2 text-right text-slate-600">{money(line.extras)}</td>
                   <td className="px-3 py-2 text-right font-semibold text-navy">{money(line.total)}</td>
                   <td className="min-w-[16rem] px-3 py-2 text-slate-600">{line.expenseTypeName ?? '—'}</td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="block w-[13rem] whitespace-normal text-xs text-slate-500">
-                      {expenseTypeInfo(line.expenseTypeName)}
-                    </span>
-                  </td>
-                  <td className="min-w-[11.5rem] max-w-[14rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
+                  <td className="min-w-[14rem] max-w-[18rem] truncate px-3 py-2 text-slate-600" title={line.detail ?? ''}>
                     {line.detail ?? '—'}
                   </td>
                   <td className="px-3 py-2 text-center">
@@ -220,7 +223,7 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
                 <td className="px-3 py-3 text-right">{money(report.totalTip)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalExtras)}</td>
                 <td className="px-3 py-3 text-right">{money(report.totalAmount)}</td>
-                <td colSpan={4} />
+                <td colSpan={3} />
               </tr>
             </tfoot>
           </table>
@@ -245,7 +248,7 @@ export function CardReportDetail({ report, viewer, backHref }: Props) {
               </Link>
               <button
                 type="button"
-                disabled={isPending || sinFactura.length > 0}
+                disabled={isPending || sinLineas || sinFactura.length > 0}
                 title={mensajeSinFactura ?? undefined}
                 onClick={() =>
                   run(() => submitCardReportAction(report.id), 'No se pudo enviar el reporte.')
