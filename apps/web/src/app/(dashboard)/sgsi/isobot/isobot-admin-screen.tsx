@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { compararMacroprocesos } from '@/app/(dashboard)/herramientas/isobot/isobot-document-library';
 import {
   AlertIcon,
@@ -17,6 +17,7 @@ import {
   uploadViaPresignedUrl,
   validateUploadSize,
 } from '@/lib/presigned-upload';
+import { type SortDir, type SortKey, sortDocuments } from './sort-documents';
 
 // ── tipos ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,10 @@ interface Filtros {
 
 const FILTROS_VACIOS: Filtros = { search: '', macroprocess: '', fileType: '' };
 const TIPOS = ['pdf', 'docx', 'xlsx'];
+// El servidor pagina (máximo 100 por página) y ordena por fecha; para poder
+// ordenar por cualquier columna se traen todas las páginas del filtro actual.
+const PAGE_SIZE = 100;
+const MAX_PAGINAS = 50;
 
 // ── utilidades ───────────────────────────────────────────────────────────────
 
@@ -86,12 +91,11 @@ function mensajeDeError(body: unknown, fallback: string): string {
 export function IsobotAdminScreen() {
   const [documentos, setDocumentos] = useState<AdminDocument[]>([]);
   const [stats, setStats] = useState<AdminDocumentsPage['stats'] | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [macroprocesos, setMacroprocesos] = useState<string[]>([]);
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS);
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
-  const [cargandoMas, setCargandoMas] = useState(false);
+  const [orden, setOrden] = useState<{ key: SortKey; dir: SortDir } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [subiendo, setSubiendo] = useState(false);
@@ -112,7 +116,7 @@ export function IsobotAdminScreen() {
       if (filtros.macroprocess) params.set('macroprocess', filtros.macroprocess);
       if (filtros.fileType) params.set('fileType', filtros.fileType);
       if (cursor) params.set('cursor', cursor);
-      params.set('limit', '20');
+      params.set('limit', String(PAGE_SIZE));
       return params.toString();
     },
     [filtros],
@@ -121,19 +125,29 @@ export function IsobotAdminScreen() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/isobot/admin/documents?${queryString()}`);
-      if (res.status === 403) {
-        setError('No tienes permiso para administrar los documentos del SGSI.');
-        return;
+      const todos: AdminDocument[] = [];
+      let primera: AdminDocumentsPage | null = null;
+      let cursor: string | undefined;
+
+      for (let i = 0; i < MAX_PAGINAS; i++) {
+        const res = await fetch(`/api/isobot/admin/documents?${queryString(cursor)}`);
+        if (res.status === 403) {
+          setError('No tienes permiso para administrar los documentos del SGSI.');
+          return;
+        }
+        if (!res.ok) {
+          setError('No se pudieron cargar los documentos.');
+          return;
+        }
+        const page = (await res.json()) as AdminDocumentsPage;
+        primera ??= page;
+        todos.push(...page.data);
+        if (!page.nextCursor) break;
+        cursor = page.nextCursor;
       }
-      if (!res.ok) {
-        setError('No se pudieron cargar los documentos.');
-        return;
-      }
-      const page = (await res.json()) as AdminDocumentsPage;
-      setDocumentos(page.data);
-      setStats(page.stats);
-      setNextCursor(page.nextCursor);
+
+      setDocumentos(todos);
+      if (primera) setStats(primera.stats);
       setError(null);
     } catch {
       setError('No se pudieron cargar los documentos.');
@@ -157,20 +171,18 @@ export function IsobotAdminScreen() {
     })();
   }, []);
 
-  async function cargarMas() {
-    if (!nextCursor || cargandoMas) return;
-    setCargandoMas(true);
-    try {
-      const res = await fetch(`/api/isobot/admin/documents?${queryString(nextCursor)}`);
-      if (res.ok) {
-        const page = (await res.json()) as AdminDocumentsPage;
-        setDocumentos((prev) => [...prev, ...page.data]);
-        setNextCursor(page.nextCursor);
-      }
-    } finally {
-      setCargandoMas(false);
-    }
+  // Clic en el encabezado: la columna nueva arranca ascendente; la misma alterna.
+  function ordenarPor(key: SortKey) {
+    setOrden((actual) =>
+      actual?.key === key ? { key, dir: actual.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    );
   }
+
+  // Sobre las filas ya filtradas por el servidor; no modifica `documentos`.
+  const filas = useMemo(
+    () => (orden ? sortDocuments(documentos, orden.key, orden.dir) : documentos),
+    [documentos, orden],
+  );
 
   const filtrosActivos = filtros.search || filtros.macroprocess || filtros.fileType;
 
@@ -284,17 +296,17 @@ export function IsobotAdminScreen() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">Documento</th>
-                  <th className="px-4 py-3">Macroproceso</th>
-                  <th className="px-4 py-3 text-center">Tipo</th>
-                  <th className="px-4 py-3 text-right">Fragmentos</th>
-                  <th className="px-4 py-3 text-right">Tamaño</th>
-                  <th className="px-4 py-3">Actualizado</th>
+                  <HeaderOrdenable label="Documento" columna="title" orden={orden} onOrdenar={ordenarPor} />
+                  <HeaderOrdenable label="Macroproceso" columna="macroprocess" orden={orden} onOrdenar={ordenarPor} />
+                  <HeaderOrdenable label="Tipo" columna="fileType" orden={orden} onOrdenar={ordenarPor} align="center" />
+                  <HeaderOrdenable label="Fragmentos" columna="chunkCount" orden={orden} onOrdenar={ordenarPor} align="right" />
+                  <HeaderOrdenable label="Tamaño" columna="fileSize" orden={orden} onOrdenar={ordenarPor} align="right" />
+                  <HeaderOrdenable label="Actualizado" columna="updatedAt" orden={orden} onOrdenar={ordenarPor} />
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {documentos.map((doc) => (
+                {filas.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50">
                     <td className="max-w-xs px-4 py-3">
                       <p className="truncate font-medium text-navy">{doc.title}</p>
@@ -338,20 +350,8 @@ export function IsobotAdminScreen() {
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-            <span>
-              {documentos.length} de {stats?.documentos ?? documentos.length}
-            </span>
-            {nextCursor && (
-              <button
-                type="button"
-                onClick={() => void cargarMas()}
-                disabled={cargandoMas}
-                className="rounded-lg border border-slate-200 px-4 py-2 font-medium text-navy hover:border-navy disabled:opacity-60"
-              >
-                {cargandoMas ? 'Cargando…' : 'Cargar más'}
-              </button>
-            )}
+          <div className="mt-4 text-sm text-slate-500">
+            {documentos.length} de {stats?.documentos ?? documentos.length}
           </div>
         </>
       )}
@@ -396,6 +396,40 @@ export function IsobotAdminScreen() {
 }
 
 // ── piezas ───────────────────────────────────────────────────────────────────
+
+function HeaderOrdenable({
+  label,
+  columna,
+  orden,
+  onOrdenar,
+  align = 'left',
+}: {
+  label: string;
+  columna: SortKey;
+  orden: { key: SortKey; dir: SortDir } | null;
+  onOrdenar: (key: SortKey) => void;
+  align?: 'left' | 'center' | 'right';
+}) {
+  const activa = orden?.key === columna;
+  const justify = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+  return (
+    <th
+      className="px-4 py-3"
+      aria-sort={activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => onOrdenar(columna)}
+        className={`flex w-full items-center gap-1 ${justify} uppercase tracking-wide hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-navy`}
+      >
+        {label}
+        <span aria-hidden="true" className={`text-[10px] leading-none ${activa ? 'text-black' : 'text-slate-300'}`}>
+          {activa ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 function StatCard({
   icon,
