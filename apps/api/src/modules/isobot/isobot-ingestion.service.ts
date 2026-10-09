@@ -231,11 +231,24 @@ export class IsobotIngestionService {
 
     let documentId: string;
     if (documentIdExistente) {
+      // title/macroprocess/category: NULL conserva el valor actual (COALESCE).
       await this.documentsRepo.manager.query(
         `UPDATE isobot.documents
-         SET s3_key = $2, file_type = $3, file_size = $4, updated_at = NOW()
+         SET s3_key = $2, file_type = $3, file_size = $4,
+             title = COALESCE($5, title),
+             macroprocess = COALESCE($6, macroprocess),
+             category = COALESCE($7, category),
+             updated_at = NOW()
          WHERE id = $1`,
-        [documentIdExistente, s3Key, fileType, fileSize],
+        [
+          documentIdExistente,
+          s3Key,
+          fileType,
+          fileSize,
+          metadata.title ?? null,
+          metadata.macroprocess ?? null,
+          metadata.category ?? null,
+        ],
       );
       documentId = documentIdExistente;
     } else {
@@ -428,10 +441,14 @@ export class IsobotIngestionService {
     const claveAnterior = documento.s3Key;
     const buffer = await this.storage.getObjectBuffer(dto.s3Key);
 
+    // Vacío o ausente conserva el valor actual; `file_name` nunca cambia.
+    const title = dto.title?.trim() || documento.title;
+    const macroprocess = dto.macroprocess?.trim() || documento.macroprocess;
+    const category = dto.category?.trim() || documento.category;
     const metadata: DocumentMetadata = {
-      ...(documento.title !== null ? { title: documento.title } : {}),
-      ...(documento.macroprocess !== null ? { macroprocess: documento.macroprocess } : {}),
-      ...(documento.category !== null ? { category: documento.category } : {}),
+      ...(title ? { title } : {}),
+      ...(macroprocess ? { macroprocess } : {}),
+      ...(category ? { category } : {}),
     };
 
     const resultado = await this.indexar(
