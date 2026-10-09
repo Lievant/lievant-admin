@@ -455,6 +455,11 @@ function ProgressBar({ pct, label }: { pct: number; label: string }) {
   );
 }
 
+/** Título sugerido a partir del nombre del archivo: el nombre sin su extensión. */
+function tituloDesdeArchivo(nombre: string): string {
+  return nombre.replace(/\.[^.]+$/, '');
+}
+
 /**
  * Modal único para subir y para reemplazar: mismo diseño y mismos campos. En
  * "reemplazar" cambian el título, el botón, los mensajes y que los campos
@@ -549,8 +554,11 @@ function DocumentModal({
             onChange={(e) => {
               const seleccionado = e.target.files?.[0] ?? null;
               setFile(seleccionado);
-              if (seleccionado && !title) {
-                setTitle(seleccionado.name.replace(/\.[^.]+$/, ''));
+              // Subir solo rellena un título vacío. Reemplazar arranca con el título
+              // actual, así que ahí cada archivo elegido lo vuelve a rellenar; no
+              // se guarda nada hasta confirmar con el botón.
+              if (seleccionado && (reemplazando || !title)) {
+                setTitle(tituloDesdeArchivo(seleccionado.name));
               }
             }}
             className="w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-navy"
