@@ -357,7 +357,8 @@ export function IsobotAdminScreen() {
       )}
 
       {subiendo && (
-        <UploadModal
+        <DocumentModal
+          modo="subir"
           macroprocesos={macroprocesos}
           onClose={() => setSubiendo(false)}
           onDone={() => {
@@ -368,8 +369,10 @@ export function IsobotAdminScreen() {
       )}
 
       {reemplazando && (
-        <ReplaceModal
+        <DocumentModal
+          modo="reemplazar"
           documento={reemplazando}
+          macroprocesos={macroprocesos}
           onClose={() => setReemplazando(null)}
           onDone={() => {
             setReemplazando(null);
@@ -452,20 +455,31 @@ function ProgressBar({ pct, label }: { pct: number; label: string }) {
   );
 }
 
-function UploadModal({
+/**
+ * Modal único para subir y para reemplazar: mismo diseño y mismos campos. En
+ * "reemplazar" cambian el título, el botón, los mensajes y que los campos
+ * arrancan con los datos actuales del documento.
+ */
+function DocumentModal({
+  modo,
+  documento,
   macroprocesos,
   onClose,
   onDone,
 }: {
+  modo: 'subir' | 'reemplazar';
+  /** Obligatorio al reemplazar. */
+  documento?: AdminDocument;
   macroprocesos: string[];
   onClose: () => void;
   onDone: () => void;
 }) {
+  const reemplazando = modo === 'reemplazar' && documento !== undefined;
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [macroprocess, setMacroprocess] = useState('');
-  const [category, setCategory] = useState('');
+  const [title, setTitle] = useState(documento?.title ?? '');
+  const [macroprocess, setMacroprocess] = useState(documento?.macroprocess ?? '');
+  const [category, setCategory] = useState(documento?.category ?? '');
   const [pct, setPct] = useState(0);
   const [fase, setFase] = useState<'idle' | 'subiendo' | 'indexando'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -488,7 +502,10 @@ function UploadModal({
       // objeto para extraer texto y generar embeddings, que es la parte lenta.
       await uploadViaPresignedUrl({
         presignUrl: '/api/isobot/admin/documents/presigned-upload',
-        registerUrl: '/api/isobot/admin/documents/register',
+        registerUrl: reemplazando
+          ? `/api/isobot/admin/documents/${documento.id}/register`
+          : '/api/isobot/admin/documents/register',
+        ...(reemplazando ? { registerMethod: 'PUT' as const } : {}),
         file,
         extra: {
           ...(title.trim() ? { title: title.trim() } : {}),
@@ -501,7 +518,13 @@ function UploadModal({
         },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo subir el documento.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : reemplazando
+            ? 'No se pudo reemplazar el documento.'
+            : 'No se pudo subir el documento.',
+      );
       setFase('idle');
       return;
     }
@@ -511,7 +534,10 @@ function UploadModal({
   const trabajando = fase !== 'idle';
 
   return (
-    <Modal title="Subir documento" onClose={trabajando ? () => undefined : onClose}>
+    <Modal
+      title={reemplazando ? 'Reemplazar documento' : 'Subir documento'}
+      onClose={trabajando ? () => undefined : onClose}
+    >
       <div className="space-y-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Archivo</label>
@@ -579,7 +605,13 @@ function UploadModal({
         {trabajando && (
           <ProgressBar
             pct={fase === 'indexando' ? 100 : pct}
-            label={fase === 'indexando' ? 'Indexando y generando embeddings…' : `Subiendo… ${pct}%`}
+            label={
+              fase === 'indexando'
+                ? reemplazando
+                  ? 'Reindexando…'
+                  : 'Indexando y generando embeddings…'
+                : `Subiendo… ${pct}%`
+            }
           />
         )}
 
@@ -598,106 +630,9 @@ function UploadModal({
             disabled={!file || trabajando}
             className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {trabajando ? 'Procesando…' : 'Subir e indexar'}
+            {trabajando ? 'Procesando…' : reemplazando ? 'Reemplazar' : 'Subir e indexar'}
           </button>
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReplaceModal({
-  documento,
-  onClose,
-  onDone,
-}: {
-  documento: AdminDocument;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [pct, setPct] = useState(0);
-  const [fase, setFase] = useState<'idle' | 'subiendo' | 'indexando'>('idle');
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    if (!file || fase !== 'idle') return;
-
-    const errorTamano = validateUploadSize(file);
-    if (errorTamano) {
-      setError(errorTamano);
-      return;
-    }
-
-    setError(null);
-    setFase('subiendo');
-    setPct(0);
-
-    try {
-      await uploadViaPresignedUrl({
-        presignUrl: '/api/isobot/admin/documents/presigned-upload',
-        registerUrl: `/api/isobot/admin/documents/${documento.id}/register`,
-        registerMethod: 'PUT',
-        file,
-        onProgress: (p) => {
-          setPct(p);
-          if (p >= 100) setFase('indexando');
-        },
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo reemplazar el documento.');
-      setFase('idle');
-      return;
-    }
-    onDone();
-  }
-
-  const trabajando = fase !== 'idle';
-
-  return (
-    <Modal title="Reemplazar documento" onClose={trabajando ? () => undefined : onClose}>
-      <p className="text-sm text-slate-600">
-        Se sustituirá el archivo de <span className="font-medium text-navy">{documento.title}</span>{' '}
-        y se regenerarán sus {documento.chunkCount} fragmentos. El nombre de archivo original se
-        conserva.
-      </p>
-
-      <div className="mt-3">
-        <input
-          type="file"
-          accept=".pdf,.docx,.xlsx"
-          disabled={trabajando}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-navy"
-        />
-      </div>
-
-      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
-
-      {trabajando && (
-        <ProgressBar
-          pct={fase === 'indexando' ? 100 : pct}
-          label={fase === 'indexando' ? 'Reindexando…' : `Subiendo… ${pct}%`}
-        />
-      )}
-
-      <div className="flex justify-end gap-2 pt-4">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={trabajando}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 disabled:opacity-60"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={!file || trabajando}
-          className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {trabajando ? 'Procesando…' : 'Reemplazar'}
-        </button>
       </div>
     </Modal>
   );
