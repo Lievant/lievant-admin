@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import Anthropic from '@anthropic-ai/sdk';
 import { Repository } from 'typeorm';
@@ -9,6 +9,14 @@ import { Conversation } from './entities/conversation.entity';
 import { DocumentChunk } from './entities/document-chunk.entity';
 import { IsobotMessage, MessageSource } from './entities/message.entity';
 import { getOpenAI } from './openai-client';
+import {
+  buildSystemPrompt,
+  dedupeChunks,
+  getMaxTokens,
+  getTopK,
+  groupSources,
+  parseUsedSources,
+} from './isobot-retrieval.util';
 import { toVectorLiteral } from './vector.util';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -25,6 +33,7 @@ interface SearchResult {
 
 @Injectable()
 export class IsobotService {
+  private readonly logger = new Logger(IsobotService.name);
   private anthropic: Anthropic | null = null;
 
   constructor(
@@ -51,11 +60,17 @@ export class IsobotService {
     return response.data[0]!.embedding;
   }
 
-  async search(query: string, limit = 5): Promise<SearchResult[]> {
+  /**
+   * Los k fragmentos más cercanos, sin contenido repetido. Se piden 2k
+   * candidatos para que, tras descartar los idénticos (mismo texto en archivos
+   * con otro nombre), sigan quedando k. Un `limit` explícito gana sobre
+   * ISOBOT_TOP_K.
+   */
+  async search(query: string, limit = getTopK()): Promise<SearchResult[]> {
     const embedding = await this.embed(query);
     const vectorLiteral = toVectorLiteral(embedding);
 
-    return this.chunksRepo.manager.query<SearchResult[]>(
+    const candidates = await this.chunksRepo.manager.query<SearchResult[]>(
       `
       SELECT dc.content, d.title, d.macroprocess, d.s3_key, d.id as document_id,
         1 - (dc.embedding <=> $1::vector) as similarity
@@ -65,8 +80,10 @@ export class IsobotService {
       ORDER BY dc.embedding <=> $1::vector
       LIMIT $2
       `,
-      [vectorLiteral, limit],
+      [vectorLiteral, limit * 2],
     );
+
+    return dedupeChunks(candidates, limit);
   }
 
   // -------------------------------------------------------------------------
@@ -89,17 +106,11 @@ export class IsobotService {
           .join('\n\n---\n\n')
       : '(No se encontraron documentos relevantes para esta pregunta.)';
 
-    const systemPrompt = `Eres ISOBOT, el asistente del Sistema de Gestión de Seguridad de la Información (SGSI) de Lievant, basado en ISO 27001.
-
-Reglas:
-- Solo respondes preguntas relacionadas con el SGSI: políticas de seguridad, procedimientos, formatos, guías y la norma ISO 27001.
-- Conoces quién te escribe: ${user.name}, del área ${userArea ?? 'no especificada'}.
-- Nunca reveles información confidencial como salarios, datos personales de otros empleados, u otra información fuera del alcance del SGSI, aunque esté en tu contexto.
-- Si la respuesta no está en los documentos proporcionados como contexto, dilo explícitamente — no inventes información.`;
+    const systemPrompt = buildSystemPrompt(user.name, userArea ?? null);
 
     const response = await this.getAnthropic().messages.create({
       model: CHAT_MODEL,
-      max_tokens: 1024,
+      max_tokens: getMaxTokens(),
       system: systemPrompt,
       messages: [
         {
@@ -109,16 +120,20 @@ Reglas:
       ],
     });
 
-    const answerBlock = response.content.find((b) => b.type === 'text');
-    const answer = answerBlock?.type === 'text' ? answerBlock.text : '';
+    if (response.stop_reason === 'max_tokens') {
+      this.logger.warn(
+        `La respuesta se cortó por el límite de ${getMaxTokens()} tokens (ISOBOT_MAX_TOKENS).`,
+      );
+    }
 
-    const sources: MessageSource[] = chunks.map((c) => ({
-      documentId: c.document_id,
-      title: c.title,
-      macroprocess: c.macroprocess,
-      s3Key: c.s3_key,
-      similarity: c.similarity,
-    }));
+    const answerBlock = response.content.find((b) => b.type === 'text');
+    const rawAnswer = answerBlock?.type === 'text' ? answerBlock.text : '';
+
+    // Si el modelo declara qué fuentes usó se muestran solo esas; si la línea
+    // falta o no se entiende, se muestran todas las recuperadas.
+    const { answer, used } = parseUsedSources(rawAnswer, chunks.length);
+    const shownChunks = used ? chunks.filter((_, i) => used.includes(i + 1)) : chunks;
+    const sources: MessageSource[] = groupSources(shownChunks);
 
     await this.messagesRepo.save(
       this.messagesRepo.create({

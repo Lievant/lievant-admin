@@ -31,5 +31,8 @@ export interface MessageSource {
   title: string;
   macroprocess: string | null;
   s3Key: string | null;
+  /** La mejor similitud entre los fragmentos del documento. */
   similarity: number;
+  /** Fragmentos del documento que entraron al contexto. Ausente en mensajes antiguos (una fuente por fragmento). */
+  fragments?: number;
 }
