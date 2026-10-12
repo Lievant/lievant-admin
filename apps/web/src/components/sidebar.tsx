@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import {
+  AlertIcon,
   BellIcon,
   BuildingIcon,
   ChartDotsIcon,
@@ -85,8 +86,10 @@ export function Sidebar({ user }: SidebarProps) {
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
   // para poder delegarlo sin dar usuarios, roles y catálogos.
   const showSgsiIsobot = hasModule(user, 'sgsi', 'isobot', 'write');
-  const showModulos =
-    showFinanzas || showRrhh || showMedios || showSgsiIsobot || showTransformacion;
+  const showSgsiRiesgos = hasModule(user, 'sgsi', 'riesgos', 'read');
+  // El grupo se ve si el usuario puede ver al menos uno de sus hijos.
+  const showSgsi = showSgsiIsobot || showSgsiRiesgos;
+  const showModulos = showFinanzas || showRrhh || showMedios || showSgsi || showTransformacion;
 
   // Herramientas: cada link se controla por su módulo y la sección entera se
   // oculta si el usuario no conserva ninguno.
@@ -272,11 +275,36 @@ export function Sidebar({ user }: SidebarProps) {
           </>
         )}
 
-        {showSgsiIsobot && (
-          <NavLink href="/sgsi/isobot" active={pathname.startsWith('/sgsi')}>
-            <ShieldLockIcon className="h-5 w-5" />
-            SGSI
-          </NavLink>
+        {showSgsi && (
+          <>
+            {/* No existe una página /sgsi: el grupo lleva al primer hijo visible. */}
+            <NavLink
+              href={showSgsiIsobot ? '/sgsi/isobot' : '/sgsi/matriz-riesgos'}
+              active={pathname.startsWith('/sgsi')}
+            >
+              <ShieldLockIcon className="h-5 w-5" />
+              SGSI
+            </NavLink>
+            {pathname.startsWith('/sgsi') && (
+              <SubMenu>
+                {showSgsiIsobot && (
+                  <NavSubLink href="/sgsi/isobot" active={pathname.startsWith('/sgsi/isobot')}>
+                    <RobotIcon className="h-4 w-4" />
+                    Administración ISOBOT
+                  </NavSubLink>
+                )}
+                {showSgsiRiesgos && (
+                  <NavSubLink
+                    href="/sgsi/matriz-riesgos"
+                    active={pathname.startsWith('/sgsi/matriz-riesgos')}
+                  >
+                    <AlertIcon className="h-4 w-4" />
+                    Matriz de Riesgos
+                  </NavSubLink>
+                )}
+              </SubMenu>
+            )}
+          </>
         )}
 
         {/* Ecommerce, Marketing Digital y Omnicanalidad no tienen módulos ni
