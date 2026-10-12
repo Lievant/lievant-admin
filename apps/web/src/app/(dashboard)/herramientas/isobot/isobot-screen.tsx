@@ -13,6 +13,8 @@ interface MessageSource {
   macroprocess: string | null;
   s3Key: string | null;
   similarity: number;
+  /** Ausente en mensajes antiguos, que guardaban una fuente por fragmento. */
+  fragments?: number;
 }
 
 interface ChatMessage {
@@ -36,7 +38,27 @@ function IsobotAvatar() {
   );
 }
 
-function SourceChip({ source }: { source: MessageSource }) {
+/**
+ * Una fuente por documento. Los mensajes nuevos ya vienen agrupados; los
+ * guardados antes traen una entrada por fragmento, así que se agrupan aquí por
+ * `documentId` (mejor similitud y suma de fragmentos).
+ */
+function agruparFuentes(sources: MessageSource[]): (MessageSource & { fragments: number })[] {
+  const porDocumento = new Map<string, MessageSource & { fragments: number }>();
+  for (const s of sources) {
+    const fragmentos = s.fragments ?? 1;
+    const actual = porDocumento.get(s.documentId);
+    if (!actual) {
+      porDocumento.set(s.documentId, { ...s, fragments: fragmentos });
+    } else {
+      actual.fragments += fragmentos;
+      actual.similarity = Math.max(actual.similarity, s.similarity);
+    }
+  }
+  return [...porDocumento.values()];
+}
+
+function SourceChip({ source }: { source: MessageSource & { fragments: number } }) {
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
@@ -59,7 +81,9 @@ function SourceChip({ source }: { source: MessageSource }) {
       type="button"
       onClick={handleClick}
       disabled={loading}
-      title={source.macroprocess ?? undefined}
+      title={`Similitud ${source.similarity.toFixed(2)} · ${source.fragments} ${
+        source.fragments === 1 ? 'fragmento' : 'fragmentos'
+      }`}
       className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:border-black hover:text-black disabled:opacity-60"
     >
       📄 {source.title}
@@ -196,8 +220,8 @@ export function IsobotScreen() {
                   </div>
                   {msg.sources && msg.sources.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {msg.sources.map((source, j) => (
-                        <SourceChip key={j} source={source} />
+                      {agruparFuentes(msg.sources).map((source) => (
+                        <SourceChip key={source.documentId} source={source} />
                       ))}
                     </div>
                   )}
