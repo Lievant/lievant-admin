@@ -1,0 +1,381 @@
+{
+  "fuente": "TIC-RE-08 Matriz de Riesgos de Seg de Inf 2026.xlsx (v00, 12.01.2026)",
+  "formulas": {
+    "valor_riesgo": "vulnerabilidad x severidad x probabilidad (1..125)",
+    "riesgo_residual": "valor_riesgo x eficacia_control (0.1..62.5), redondear a 2 decimales",
+    "semaforo_residual": "verde <=20; amarillo >20 y <=40; rojo >40"
+  },
+  "estados_accion": [
+    "No iniciado",
+    "Pendiente",
+    "Iniciado",
+    "En proceso",
+    "Resuelto"
+  ],
+  "amenazas": [
+    "Acceso a la red o al sistema de información por personas no autorizadas.",
+    "Amenaza o ataque con bomba.",
+    "Incumplimiento de relaciones contractuales.",
+    "Infracción legal.",
+    "Comprometer información confidencial.",
+    "Ocultar la identidad de un usuario.",
+    "Daño causado por un tercero.",
+    "Daños resultantes de las pruebas de penetración.",
+    "Destrucción de registros.",
+    "Desastre generado por causas humanas.",
+    "Desastre natural, incendio, inundación, rayo.",
+    "Revelación de información.",
+    "Divulgación de contraseñas.",
+    "Malversación y fraude.",
+    "Errores en mantenimiento.",
+    "Fallo de los enlaces de comunicación.",
+    "Falsificación de registros.",
+    "Espionaje industrial.",
+    "Fuga de información.",
+    "Interrupción de procesos de negocio.",
+    "Pérdida de electricidad.",
+    "Pérdida de servicios de apoyo.",
+    "Mal funcionamiento del equipo.",
+    "Código malicioso.",
+    "Uso indebido de los sistemas de información.",
+    "Uso indebido de las herramientas de auditoría.",
+    "Contaminación.",
+    "Errores de software.",
+    "Huelgas o paros.",
+    "Ataques terroristas.",
+    "Hurtos o vandalismo.",
+    "Cambio involuntario de datos en un sistema de información.",
+    "Cambios no autorizados de registros.",
+    "Instalación no autorizada de software.",
+    "Acceso físico no autorizado.",
+    "Uso no autorizado de material con copyright.",
+    "Uso no autorizado de software.",
+    "Error de usuario."
+  ],
+  "vulnerabilidades": [
+    "Interfaz de usuario complicada.",
+    "Contraseñas predeterminadas no modificadas.",
+    "Eliminación de medios de almacenamiento sin eliminar datos.",
+    "Sensibilidad del equipo a los cambios de voltaje.",
+    "Sensibilidad del equipo a la humedad, temperatura o contaminantes.",
+    "Inadecuada seguridad del cableado.",
+    "Inadecuada gestión de capacidad del sistema.",
+    "Gestión inadecuada del cambio.",
+    "Clasificación inadecuada de la información.",
+    "Control inadecuado del acceso físico.",
+    "Mantenimiento inadecuado.",
+    "Inadecuada gestión de red.",
+    "Respaldo inapropiado o irregular.",
+    "Inadecuada gestión y protección de contraseñas.",
+    "Protección física no apropiada.",
+    "Reemplazo inadecuado de equipos viejos.",
+    "Falta de formación y conciencia sobre seguridad.",
+    "Inadecuada segregación de funciones.",
+    "Mala segregación de las instalaciones operativas y de prueba.",
+    "Insuficiente supervisión de los empleados y vendedores.",
+    "Especificación incompleta para el desarrollo de software.",
+    "Pruebas de software insuficientes.",
+    "Falta de política de acceso o política de acceso remoto.",
+    "Ausencia de política de escritorio limpio y pantalla clara.",
+    "Falta de control sobre los datos de entrada y salida.",
+    "Falta de documentación interna.",
+    "Carencia o mala implementación de la auditoría interna.",
+    "Falta de políticas para el uso de la criptografía.",
+    "Falta de procedimientos para eliminar los derechos de acceso a la terminación del empleo.",
+    "Desprotección en equipos móviles.",
+    "Falta de redundancia, copia única.",
+    "Ausencia de sistemas de identificación y autenticación.",
+    "No validación de los datos procesados.",
+    "Ubicación vulnerable a inundaciones.",
+    "Mala selección de datos de prueba.",
+    "Copia no controlada de datos.",
+    "Descarga no controlada de Internet.",
+    "Uso incontrolado de sistemas de información.",
+    "Software no documentado.",
+    "Empleados desmotivados.",
+    "Conexiones a red pública desprotegidas.",
+    "Los derechos del usuario no se revisan regularmente."
+  ],
+  "activos_tipos": [
+    {
+      "activo": "Personas",
+      "descripcion": "programadores, directores "
+    },
+    {
+      "activo": "Hardware",
+      "descripcion": "impresoras, celulares, laptop, tabletas, servidores"
+    },
+    {
+      "activo": "Software",
+      "descripcion": "windows, aws, sql, office, adobe acrobat"
+    },
+    {
+      "activo": "Información",
+      "descripcion": "base de datos de usuarios, clientes, domicilios, información de proyecto"
+    },
+    {
+      "activo": "Edificios",
+      "descripcion": "Oficinas, piso de producción, almacenes"
+    },
+    {
+      "activo": "Servicios",
+      "descripcion": "servicios de internet, servicio de seguridad física, servicio de limpieza"
+    },
+    {
+      "activo": "SaaS",
+      "descripcion": "Software as a service, Herramientas en la nube"
+    }
+  ],
+  "escalas": {
+    "vulnerabilidad": [
+      {
+        "valor": 1,
+        "etiqueta": "Muy baja",
+        "descripcion": "Muy baja: no se identifican vulnerabilidades aplicables del catálogo o están plenamente mitigadas mediante controles eficaces y evidencia vigente."
+      },
+      {
+        "valor": 2,
+        "etiqueta": "Baja",
+        "descripcion": "Baja: existe una vulnerabilidad aislada de impacto limitado, como documentación incompleta, interfaz complicada o una mejora menor de mantenimiento; los controles reducen adecuadamente la exposición."
+      },
+      {
+        "valor": 3,
+        "etiqueta": "Media",
+        "descripcion": "Media: existen varias debilidades operativas o una vulnerabilidad relevante, como capacitación insuficiente, gestión inadecuada del cambio, respaldos irregulares o revisión periódica de accesos; los controles son parciales."
+      },
+      {
+        "valor": 4,
+        "etiqueta": "Alta",
+        "descripcion": "Alta: se presentan múltiples vulnerabilidades significativas en contraseñas, accesos físicos o remotos, redes, equipos móviles, segregación de funciones o protección de información; la amenaza puede materializarse con facilidad."
+      },
+      {
+        "valor": 5,
+        "etiqueta": "Crítica",
+        "descripcion": "Crítica: hay ausencia o falla generalizada de controles esenciales, como autenticación, cifrado, respaldo y redundancia, gestión de accesos o protección de redes públicas; la amenaza puede materializarse de forma inmediata y afectar activos críticos."
+      }
+    ],
+    "severidad": [
+      {
+        "valor": 1,
+        "etiqueta": "Impacto insignificante",
+        "descripcion": "Impacto insignificante; sin pérdida de información ni interrupción relevante, y sin afectación perceptible a clientes o reputación."
+      },
+      {
+        "valor": 2,
+        "etiqueta": "Impacto menor y recuperable",
+        "descripcion": "Impacto menor y recuperable; interrupción breve o error limitado, sin datos sensibles expuestos ni incumplimientos significativos."
+      },
+      {
+        "valor": 3,
+        "etiqueta": "Impacto moderado",
+        "descripcion": "Impacto moderado; afecta parcialmente campañas, servicios o información de clientes y requiere esfuerzo relevante de recuperación."
+      },
+      {
+        "valor": 4,
+        "etiqueta": "Impacto alto",
+        "descripcion": "Impacto alto; pérdida o alteración importante de datos, interrupción prolongada, afectación contractual, financiera o reputacional."
+      },
+      {
+        "valor": 5,
+        "etiqueta": "Impacto crítico",
+        "descripcion": "Impacto crítico; exposición masiva de datos, fraude, indisponibilidad severa, sanciones, pérdida de clientes o daño grave a la reputación."
+      }
+    ],
+    "probabilidad": [
+      {
+        "valor": 1,
+        "etiqueta": "Rara vez",
+        "descripcion": "Rara vez: máximo un evento cada dos años; no existen antecedentes recientes y las condiciones de materialización son excepcionales."
+      },
+      {
+        "valor": 2,
+        "etiqueta": "Poco Probable",
+        "descripcion": "Poco probable: máximo un evento al año; existen antecedentes aislados o condiciones ocasionales que podrían materializarlo."
+      },
+      {
+        "valor": 3,
+        "etiqueta": "Posible",
+        "descripcion": "Posible: hasta un evento cada tres meses; la amenaza se presenta periódicamente y hay exposición operativa moderada."
+      },
+      {
+        "valor": 4,
+        "etiqueta": "Probable",
+        "descripcion": "Probable: al menos un evento al mes; existen antecedentes frecuentes, exposición continua o controles que fallan regularmente."
+      },
+      {
+        "valor": 5,
+        "etiqueta": "Casi cierta",
+        "descripcion": "Casi cierta: al menos un evento por semana; la amenaza es recurrente, activa o se materializa de forma habitual en la operación."
+      }
+    ],
+    "eficacia_control": [
+      {
+        "valor": 0.1,
+        "etiqueta": "Muy eficaz",
+        "descripcion": "Muy eficaz: el control está implementado, documentado, se ejecuta consistentemente y evita o detecta oportunamente la materialización del riesgo."
+      },
+      {
+        "valor": 0.2,
+        "etiqueta": "Eficaz",
+        "descripcion": "Eficaz: el control opera adecuadamente y reduce significativamente el riesgo, aunque presenta oportunidades menores de mejora o evidencia."
+      },
+      {
+        "valor": 0.3,
+        "etiqueta": "Moderadamente eficaz",
+        "descripcion": "Moderadamente eficaz: el control existe, pero su aplicación es parcial o inconsistente; reduce el riesgo de forma limitada y requiere fortalecimiento."
+      },
+      {
+        "valor": 0.4,
+        "etiqueta": "Poco eficaz",
+        "descripcion": "Poco eficaz: el control presenta fallas frecuentes, cobertura insuficiente o escaso seguimiento, por lo que la amenaza aún puede materializarse."
+      },
+      {
+        "valor": 0.5,
+        "etiqueta": "Ineficaz o inexistente",
+        "descripcion": "Ineficaz o inexistente: no hay control establecido, no se aplica o no reduce el riesgo; la amenaza puede materializarse sin barreras efectivas."
+      }
+    ]
+  },
+  "semaforo_leyenda": [
+    {
+      "color": "Verde",
+      "descripcion": "Riesgo bajo: monitoreo del riesgo"
+    },
+    {
+      "color": "Amarillo",
+      "descripcion": "Riesgo medio: monitorear y/o  evaluar toma de acciones"
+    },
+    {
+      "color": "Rojo",
+      "descripcion": "Riesgo alto: se deben tomar acciones (abrir plan de acción)"
+    }
+  ],
+  "riesgos_ejemplo": [
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Autenticacion",
+      "vulnerabilidad": "Falta factor MFA",
+      "activo_afectado": "COR",
+      "riesgo": "Acceso a informacón de Clientes, proyectos,información de costo por hora de cada persona y valor de los proyectos",
+      "vulnerabilidad_1_5": 4,
+      "severidad_1_5": 4,
+      "probabilidad_1_5": 3,
+      "control": "TIC-PO-03 Ver.00 — Política de Control de Accesos y Uso de Herramientas Tecnológicas\nControl 5.17: La información de autenticación debería ir acompañada de factores de autenticación adicionales para acceder a los sistemas de información críticos (autenticación multifactorial).",
+      "eficacia_control": 0.3,
+      "fecha_reporte": "2026-09-07",
+      "estrategia_mitigacion": "Dejar de usar COR y pasar sus funcionalidades a Lievant-Admin",
+      "acciones": "Realizar el desarrolo correspondiente",
+      "fecha_estimada_solucion": "31 de diciembre ",
+      "dueno": "Paulo Ossa",
+      "estado_accion": "No iniciado"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Autenticacion",
+      "vulnerabilidad": "Falta factor MFA",
+      "activo_afectado": "LAPZO",
+      "riesgo": "Acceso a informacón sensible de usuarios como psicometricos y evaluación de desempeño",
+      "vulnerabilidad_1_5": 4,
+      "severidad_1_5": 4,
+      "probabilidad_1_5": 3,
+      "control": "TIC-PO-03 Ver.00 — Política de Control de Accesos y Uso de Herramientas Tecnológicas\nControl 5.17: La información de autenticación debería ir acompañada de factores de autenticación adicionales para acceder a los sistemas de información críticos (autenticación multifactorial).",
+      "eficacia_control": 0.3,
+      "fecha_reporte": "2026-09-07",
+      "estrategia_mitigacion": "Cambio de Plataforma, o implementación de MFA en la plataforma actual",
+      "acciones": "Realizar solicitud de MFA en Lapzo",
+      "fecha_estimada_solucion": "2026-12-31",
+      "dueno": "Claudia Vázquez",
+      "estado_accion": "Resuelto"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Autenticacion",
+      "vulnerabilidad": "Falta factor MFA",
+      "activo_afectado": "SmartDashboard",
+      "riesgo": "Acceso a informacón de Clientes, con informacón de ventas detalladas de su operación",
+      "vulnerabilidad_1_5": 2,
+      "severidad_1_5": 2,
+      "probabilidad_1_5": 2,
+      "control": "TIC-PO-03 Ver.00 — Política de Control de Accesos y Uso de Herramientas Tecnológicas\nControl 5.17: La información de autenticación debería ir acompañada de factores de autenticación adicionales para acceder a los sistemas de información críticos (autenticación multifactorial).",
+      "eficacia_control": 0.3,
+      "fecha_reporte": "2026-09-07",
+      "estrategia_mitigacion": "Cambia en la funcionalidad para que sea obligatorio el MFA siempre",
+      "acciones": "Cambio en desarrollo",
+      "fecha_estimada_solucion": "2026-09-30",
+      "dueno": "Oscar Rocha",
+      "estado_accion": "Resuelto"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Falta de acceso a la información",
+      "vulnerabilidad": "Pérdida de la disponibilidad de la información",
+      "activo_afectado": "Bases de datos fundamentales de la agencia",
+      "riesgo": "Acceso a toda la información c2, c3 y c4 de la compañía",
+      "vulnerabilidad_1_5": 5,
+      "severidad_1_5": 5,
+      "probabilidad_1_5": 2,
+      "control": "TIC-PO-04 Política de Gestión de Infraestructura\nControl Principal: 8.3 - Copias de seguridad de la información\n5.37 - Documentación de procedimientos operacionales: Indica que los procedimientos deben incluir las copias de seguridad (punto d) y la capacidad de recuperación.\n5.30 - Preparación para las TIC para la continuidad del negocio: Los backups deben alinearse con los planes de continuidad y los tiempos de restauración requeridos.\n8.14 - Redundancia de los recursos de tratamiento de la información: Complementa los backups garantizando disponibilidad continua.\n5.12 y 5.15 (referenciados): Control de acceso y gestión segura de documentos como apoyo a la protección de información.",
+      "eficacia_control": 0.5,
+      "fecha_reporte": "2026-09-07",
+      "estrategia_mitigacion": "Un plan completo para realizar los respaldos de las principales herramientas de la agencia, definir como, dónde y cuando se resguardan, y asegurar que se puedan recuperar en cualquier momento.",
+      "acciones": "1. Plan de respaldos para las herramientas críticas de información (M365, COR, Lapzo y Contpaqi).\n2. Plan de resguardo y recuperación de respaldos en el Servidor físico\n3. Bitacora anual de respaldos de información y tablas de retención.\n4. Ejecución de Respaldos\n5. Comprobación de recuperación de la información.",
+      "fecha_estimada_solucion": "2026-10-31",
+      "dueno": "Daniel Ortiz",
+      "estado_accion": "Iniciado"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Acceso no autorizado",
+      "vulnerabilidad": "Acceso a correos  críticos asociados al tenant de M365",
+      "activo_afectado": "M365 (tenant, correos, onedrive, sharepoing)",
+      "riesgo": "Control total del Tenant, acceso a toda la información operativa de agencia, y perdida de control de la información",
+      "vulnerabilidad_1_5": 4,
+      "severidad_1_5": 5,
+      "probabilidad_1_5": 5,
+      "control": "TIC-PO-03 — Política de Control de Accesos y Uso de Herramientas Tecnológicas\nTIC-PO-02 — Política de Seguridad de la Información\n Control 5.15 — Política de Control de Acceso (Acceso Lógico)\nControl 5.18 — Gestión de Derechos de Acceso\nControl 8.3 — Restricción del Acceso a la Información",
+      "eficacia_control": 0.3,
+      "fecha_reporte": "2026-09-07",
+      "estrategia_mitigacion": "Eliminar los 3 correos mas críticos\nVerificar si hay cuentas sin MFA\nHacer doble check en cuentas de administradores\nRealizar restricción geográfica y comunicado para los que viajan fuera de esos paises",
+      "acciones": "Se debe eliminar correo de edudardo y dejar disponible esa licencia\nSe debe eliminar correo de fernando, crear uno nuevo y darle acceso al buzon compartido.  Esto es provisional por dos meses.\nSe debe eliminar el correo de soporte, pero antes determinar con Fabian implicaciones, y mas bien que pase a ser de Triciclo.",
+      "fecha_estimada_solucion": "2026-09-08",
+      "dueno": "Daniel Ortiz",
+      "estado_accion": "Iniciado"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Confidencialidad",
+      "vulnerabilidad": "Acceso a información privilegiada por parte de los Account Managers de POLOS, es decir mas de 18 personas, cada una con mas de 10 clientes subiendo información de ventas y marketing",
+      "activo_afectado": "Información sensible de clientes, ventas, know how, productos, campañas",
+      "riesgo": "Robo de informaicón para beneficio propio o de terceros",
+      "vulnerabilidad_1_5": 4,
+      "severidad_1_5": 3,
+      "probabilidad_1_5": 5,
+      "control": "Política TIC-PO-03 — Control de Accesos y Uso de Herramientas Tecnológicas\nControl de Autenticación",
+      "eficacia_control": 0.3,
+      "fecha_reporte": "2026-09-09",
+      "estrategia_mitigacion": "Migrar parcialmente a equipos mas pequeños incrementando las licencias, o podria ser le uso de la plataforma de Lievant.studio con conexion por API",
+      "acciones": "Crear un MVP de chat por conjunto de Cuentas por Account Manager",
+      "fecha_estimada_solucion": "2026-09-09",
+      "dueno": "Paulo Ossa",
+      "estado_accion": "Pendiente"
+    },
+    {
+      "categoria": "Ciberseguridad (IT)",
+      "amenaza": "Pérdida de información",
+      "vulnerabilidad": "Filtración de agua por lluvia, cae directo de encritorios con la posibiblidad  de dañar equipos de cómputo y perder información almacenada en los mismos",
+      "activo_afectado": "Información sencible de clientes, campañas, ventas.",
+      "riesgo": "Pérdida de acceso a la información, o pérdida de información",
+      "vulnerabilidad_1_5": 4,
+      "severidad_1_5": 4,
+      "probabilidad_1_5": 4,
+      "control": "TIC-PO-002-Política de seguridad de la información",
+      "eficacia_control": 0.5,
+      "fecha_reporte": "2026-10-02",
+      "estrategia_mitigacion": "Impermiabilizar lugar por dónde se filtro el agua ",
+      "acciones": "Resguardar los equipos vulnerables, hablar con administración del edificio para que tome responsabilidad y solucione lo antes posible",
+      "fecha_estimada_solucion": "2026-10-05",
+      "dueno": "Roberto Alcalá",
+      "estado_accion": "En proceso"
+    }
+  ]
+}
