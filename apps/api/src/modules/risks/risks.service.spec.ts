@@ -97,6 +97,10 @@ function buildService(opts: { existing?: Record<string, unknown>; owners?: Recor
 
   const manager = {
     query: jest.fn(async (_sql: string, params: unknown[]) => {
+      // ownerActiveMap pasa un arreglo de ids; resolveActiveOwner, un id.
+      if (Array.isArray(params[0])) {
+        return (params[0] as string[]).flatMap((id) => (owners[id] ? [owners[id]] : []));
+      }
       const found = owners[String(params[0])];
       return found ? [found] : [];
     }),
@@ -184,6 +188,20 @@ describe('RisksService (CRUD)', () => {
     expect(res.data).toHaveLength(2);
   });
 
+  it('marca ownerActive según el estado actual del usuario dueño', async () => {
+    const { service, repo } = buildService({
+      owners: { [OWNER_ID]: { id: OWNER_ID, name: 'Paulo Ossa', is_active: false } },
+    });
+    repo.find.mockResolvedValue([stored()]);
+    expect((await service.list()).data[0]?.ownerActive).toBe(false);
+  });
+
+  it('un dueño que ya no existe en auth.users cuenta como inactivo', async () => {
+    const { service, repo } = buildService({ owners: {} });
+    repo.find.mockResolvedValue([stored()]);
+    expect((await service.list()).data[0]?.ownerActive).toBe(false);
+  });
+
   it('list sin riesgos devuelve lastUpdate null', async () => {
     const { service, repo } = buildService();
     repo.find.mockResolvedValue([]);
@@ -218,7 +236,8 @@ describe('Dueño: validación', () => {
       owners: { [OWNER_ID]: { id: OWNER_ID, name: 'Paulo Ossa', is_active: false } },
     });
     await expect(service.update('r1', { ownerUserId: OWNER_ID, actions: 'x' } as any, actor)).resolves.toBeDefined();
-    expect(manager.query).not.toHaveBeenCalled();
+    // No se resuelve ni valida al dueño (consulta por un id); solo se consulta su estado (arreglo).
+    expect(manager.query.mock.calls.every(([, params]) => Array.isArray((params as unknown[])[0]))).toBe(true);
   });
 });
 

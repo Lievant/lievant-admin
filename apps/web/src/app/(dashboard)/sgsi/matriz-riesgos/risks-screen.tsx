@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertIcon, CloseIcon, EyeIcon, PlusIcon, TrashIcon } from '@/components/icons';
 import { SortColumnHeader } from '@/components/ui/sort-column-header';
 import { useCurrentUser } from '@/components/user-provider';
+import { OwnerPicker, type OwnerValue } from './owner-picker';
 import type { CurrentUser } from '@/lib/api';
 import { nextSort, sortRows, type SortDir } from '@/lib/sort-rows';
 import {
@@ -49,7 +50,10 @@ interface Risk {
   mitigationStrategy: string | null;
   actions: string | null;
   estimatedResolutionDate: string | null;
+  ownerUserId: string;
   owner: string;
+  /** false si el usuario dueño hoy está inactivo. */
+  ownerActive: boolean;
   actionStatus: string;
   updatedAt: string;
 }
@@ -457,7 +461,10 @@ function ViewModal({ risk, onClose }: { risk: Risk; onClose: () => void }) {
         <div className="md:col-span-2">
           <Field label="Acciones">{risk.actions ?? '—'}</Field>
         </div>
-        <Field label="Dueño">{risk.owner}</Field>
+        <Field label="Dueño">
+          {risk.owner}
+          {!risk.ownerActive && <span className="ml-1 text-xs text-amber-600">(inactivo)</span>}
+        </Field>
         <div>
           <p className={labelClass}>Estado de la acción</p>
           <StatusBadge status={risk.actionStatus} />
@@ -493,7 +500,7 @@ interface FormState {
   mitigationStrategy: string;
   actions: string;
   estimatedResolutionDate: string;
-  owner: string;
+  owner: OwnerValue | null;
   actionStatus: string;
 }
 
@@ -513,7 +520,7 @@ function initialState(risk: Risk | null): FormState {
     mitigationStrategy: risk?.mitigationStrategy ?? '',
     actions: risk?.actions ?? '',
     estimatedResolutionDate: risk?.estimatedResolutionDate ?? '',
-    owner: risk?.owner ?? '',
+    owner: risk ? { id: risk.ownerUserId, name: risk.owner, inactive: !risk.ownerActive } : null,
     actionStatus: risk?.actionStatus ?? 'No iniciado',
   };
 }
@@ -608,7 +615,8 @@ function FormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const set = (field: keyof FormState) => (value: string) => setForm((f) => ({ ...f, [field]: value }));
+  const set = (field: Exclude<keyof FormState, 'owner'>) => (value: string) =>
+    setForm((f) => ({ ...f, [field]: value }));
 
   // Vista previa con la misma fórmula del backend; el servidor recalcula siempre.
   const preview = useMemo(() => {
@@ -627,7 +635,7 @@ function FormModal({
   async function submit() {
     if (saving) return;
 
-    const required: [keyof FormState, string][] = [
+    const required: [Exclude<keyof FormState, 'owner'>, string][] = [
       ['category', 'la categoría'],
       ['affectedAsset', 'el activo afectado'],
       ['threat', 'la amenaza'],
@@ -638,11 +646,14 @@ function FormModal({
       ['probabilityScore', 'la probabilidad'],
       ['control', 'el control'],
       ['controlEfficacy', 'la eficacia del control'],
-      ['owner', 'el dueño'],
     ];
     const missing = required.find(([field]) => !form[field].trim());
     if (missing) {
       setError(`Indica ${missing[1]}.`);
+      return;
+    }
+    if (!form.owner) {
+      setError('Elige al dueño de la lista.');
       return;
     }
 
@@ -659,7 +670,7 @@ function FormModal({
       probabilityScore: Number(form.probabilityScore),
       control: form.control.trim(),
       controlEfficacy: Number(form.controlEfficacy),
-      owner: form.owner.trim(),
+      ownerUserId: form.owner.id,
       actionStatus: form.actionStatus,
       // Al editar, vacío borra el valor (null); al crear, simplemente no se manda.
       ...(form.reportedAt || editing ? { reportedAt: form.reportedAt || null } : {}),
@@ -752,10 +763,13 @@ function FormModal({
           <textarea id="risk-actions" rows={2} value={form.actions} disabled={saving} onChange={(e) => set('actions')(e.target.value)} className={fieldClass} />
         </div>
 
-        <div>
-          <label htmlFor="risk-owner" className={labelClass}>Dueño</label>
-          <input id="risk-owner" type="text" value={form.owner} disabled={saving} onChange={(e) => set('owner')(e.target.value)} className={fieldClass} />
-        </div>
+        <OwnerPicker
+          id="risk-owner"
+          label="Dueño"
+          value={form.owner}
+          onChange={(owner) => setForm((f) => ({ ...f, owner }))}
+          disabled={saving}
+        />
         <div>
           <label htmlFor="risk-status" className={labelClass}>Estado de la acción</label>
           <select id="risk-status" value={form.actionStatus} disabled={saving} onChange={(e) => set('actionStatus')(e.target.value)} className={fieldClass}>

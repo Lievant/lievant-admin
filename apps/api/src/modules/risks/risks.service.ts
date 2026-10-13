@@ -38,6 +38,8 @@ export interface RiskItem {
   ownerUserId: string;
   /** Nombre del dueño (copia guardada al asignarlo). */
   owner: string;
+  /** false si el usuario dueño hoy está inactivo o dado de baja. */
+  ownerActive: boolean;
   actionStatus: string;
   createdAt: string;
   updatedAt: string;
@@ -78,7 +80,7 @@ export class RisksService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  private toItem(r: Risk): RiskItem {
+  private toItem(r: Risk, ownerActive: boolean): RiskItem {
     return {
       id: r.id,
       category: r.category,
@@ -105,6 +107,7 @@ export class RisksService {
       estimatedResolutionDate: r.estimatedResolutionDate,
       ownerUserId: r.ownerUserId,
       owner: r.owner,
+      ownerActive,
       actionStatus: r.actionStatus,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
@@ -118,6 +121,17 @@ export class RisksService {
   }
 
   // ── Dueño ──────────────────────────────────────────────────────────────────
+
+  /** Qué dueños siguen activos hoy (el nombre guardado es una copia; el estado no). */
+  private async ownerActiveMap(userIds: string[]): Promise<Map<string, boolean>> {
+    const unique = [...new Set(userIds)];
+    if (unique.length === 0) return new Map();
+    const rows = (await this.risksRepo.manager.query(
+      `SELECT id, is_active FROM auth.users WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`,
+      [unique],
+    )) as { id: string; is_active: boolean }[];
+    return new Map(rows.map((r) => [r.id, r.is_active]));
+  }
 
   /**
    * Usuarios activos cuyo nombre (del expediente si está vinculado, o el de la
@@ -235,11 +249,17 @@ export class RisksService {
       (max, r) => (max === null || r.updatedAt > max ? r.updatedAt : max),
       null,
     );
-    return { data: rows.map((r) => this.toItem(r)), lastUpdate: last?.toISOString() ?? null };
+    const active = await this.ownerActiveMap(rows.map((r) => r.ownerUserId));
+    return {
+      data: rows.map((r) => this.toItem(r, active.get(r.ownerUserId) ?? false)),
+      lastUpdate: last?.toISOString() ?? null,
+    };
   }
 
   async get(id: string): Promise<RiskItem> {
-    return this.toItem(await this.findActiveOrFail(id));
+    const risk = await this.findActiveOrFail(id);
+    const active = await this.ownerActiveMap([risk.ownerUserId]);
+    return this.toItem(risk, active.get(risk.ownerUserId) ?? false);
   }
 
   async create(dto: CreateRiskDto, user: User): Promise<RiskItem> {
@@ -278,7 +298,7 @@ export class RisksService {
     );
 
     await this.notifyOwner(saved, user);
-    return this.toItem(saved);
+    return this.toItem(saved, true); // se validó activo hace un instante
   }
 
   async update(id: string, dto: UpdateRiskDto, user: User): Promise<RiskItem> {
@@ -324,7 +344,8 @@ export class RisksService {
 
     const saved = await this.risksRepo.save(risk);
     if (ownerChanged) await this.notifyOwner(saved, user);
-    return this.toItem(saved);
+    const active = ownerChanged ? new Map([[saved.ownerUserId, true]]) : await this.ownerActiveMap([saved.ownerUserId]);
+    return this.toItem(saved, active.get(saved.ownerUserId) ?? false);
   }
 
   /** Baja lógica: el registro se conserva y deja de listarse. */
