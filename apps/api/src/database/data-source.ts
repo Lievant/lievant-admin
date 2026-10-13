@@ -53,6 +53,7 @@ import { ExpenseReport } from '../modules/expenses/entities/expense-report.entit
 import { Assigner } from '../modules/tools/entities/assigner.entity';
 import { Assignment } from '../modules/tools/entities/assignment.entity';
 import { Tool } from '../modules/tools/entities/tool.entity';
+import { Risk } from '../modules/risks/entities/risk.entity';
 import { AdAccount } from '../modules/media/entities/ad-account.entity';
 import { ApiCredential } from '../modules/media/entities/api-credential.entity';
 import { MediaBudget } from '../modules/media/entities/budget.entity';
@@ -168,6 +169,7 @@ const AppDataSource = new DataSource({
     CreditCard,
     CardExpenseReport,
     CardExpenseLine,
+    Risk,
   ],
   migrations: [__dirname + '/migrations/*{.js,.ts}'],
   migrationsTableName: 'migrations',

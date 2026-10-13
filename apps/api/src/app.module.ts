@@ -13,6 +13,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
+import { RisksModule } from './modules/risks/risks.module';
 import { MediaModule } from './modules/media/media.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PasswordsModule } from './modules/passwords/passwords.module';
@@ -67,6 +68,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     InventoryModule,
     ProjectsModule,
     IsobotModule,
+    RisksModule,
     VacationsModule,
     MediaModule,
     NotificationsModule,
