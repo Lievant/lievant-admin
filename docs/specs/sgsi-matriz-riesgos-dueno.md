@@ -27,7 +27,7 @@ Que el Dueño de un riesgo sea un usuario activo de la plataforma, elegido con b
 | D2 | `GET /risks/owner-candidates?q=` protegido con `sgsi.riesgos.write`; mínimo 2 caracteres, máximo 10, solo activos, sin mayúsculas ni acentos. Devuelve solo `{ id, name, email }`. | Los endpoints de empleados/usuarios de RRHH exigen otros permisos o devuelven más datos. |
 | D3 | Sin acentos con `translate(lower(...))` en SQL y normalización NFD en el servicio; **no** se depende de la extensión `unaccent`. | Evita una extensión en RDS. |
 | D4 | Modelo: `owner_user_id UUID NOT NULL` (FK a `auth.users`) + `owner` se conserva como **copia del nombre** al asignar. | Convención del repo (`technician_name`, `expense_type_name`): el historial no cambia si el usuario se renombra o se da de baja. Tabla y orden usan `owner`. |
-| D5 | Migración: se **modifica la 033** (la de la Matriz) porque no ha salido de la máquina local; se rehízo en la BD local (tabla vacía). Idempotente; sin aplicar en staging ni producción. | Evita una 034 para un esquema que aún no existe en ningún ambiente. |
+| D5 | Migración: se **modifica la 033** (la de la Matriz) porque no ha salido de la máquina local; se rehízo en la BD local con `revert` + `run` (ese `revert` elimina la tabla y sus filas). Idempotente; sin aplicar en staging ni producción. | Evita una 034 para un esquema que aún no existe en ningún ambiente. |
 | D6 | El servicio rechaza un `ownerUserId` inexistente o inactivo al crear o al **cambiarlo**; conservar un dueño que luego quedó inactivo no se bloquea. | Pedido. |
 | D7 | Notificación en la app: tipo `informativa`; `atencion` si el residual es rojo (> 40). Se envía al crear con dueño y al **cambiar** de dueño (al nuevo). No se notifica al editar otros campos, al eliminar, ni si el dueño es quien hace la acción. Un fallo se registra en el log y no impide guardar. | Pedido. |
 | D8 | `actionUrl` a `/sgsi/matriz-riesgos` **solo** si el destinatario tiene `sgsi.riesgos.read` (se evalúa con `userHasPermission`); si no, sin enlace. | Hoy solo SUPER_ADMIN lo tiene: un enlace daría acceso denegado. |
@@ -36,7 +36,7 @@ Que el Dueño de un riesgo sea un usuario activo de la plataforma, elegido con b
 
 - `GET /risks/owner-candidates?q=` (`sgsi.riesgos.write`) → `[{ id, name, email }]`. Va antes de `GET /risks/:id`.
 - `POST /risks` y `PATCH /risks/:id`: el campo `owner` (texto) se reemplaza por `ownerUserId` (UUID). Enviar `owner` es un error 400.
-- Respuesta de riesgo: `owner` (nombre, copia), `ownerUserId`.
+- Respuesta de riesgo: `owner` (nombre, copia), `ownerUserId` y `ownerActive` (false si el usuario hoy está inactivo, para mostrar "(inactivo)" al editar).
 
 ## 5. Criterios de aceptación
 
