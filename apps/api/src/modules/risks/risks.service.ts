@@ -1,11 +1,20 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { todayInMexico } from '../../common/business-date';
 import { User } from '../auth/entities/user.entity';
+import { userHasPermission } from '../auth/permissions.util';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateRiskDto, UpdateRiskDto } from './dto/risk.dto';
 import { Risk } from './entities/risk.entity';
 import { calculateRisk, RiskLevel } from './risk-calculation';
+import {
+  ACCENTED,
+  buildOwnerNotification,
+  normalizeSearchWords,
+  OWNER_SEARCH_MAX_RESULTS,
+  UNACCENTED,
+} from './risk-owner.util';
 
 export interface RiskItem {
   id: string;
@@ -26,6 +35,8 @@ export interface RiskItem {
   mitigationStrategy: string | null;
   actions: string | null;
   estimatedResolutionDate: string | null;
+  ownerUserId: string;
+  /** Nombre del dueño (copia guardada al asignarlo). */
   owner: string;
   actionStatus: string;
   createdAt: string;
@@ -38,6 +49,19 @@ export interface RiskList {
   lastUpdate: string | null;
 }
 
+/** Lo único que expone la búsqueda de candidatos a dueño. */
+export interface OwnerCandidate {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface OwnerRow {
+  id: string;
+  name: string;
+  is_active: boolean;
+}
+
 /** Texto vacío o solo espacios se guarda como null en los campos opcionales. */
 function emptyToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim();
@@ -46,7 +70,13 @@ function emptyToNull(value: string | null | undefined): string | null {
 
 @Injectable()
 export class RisksService {
-  constructor(@InjectRepository(Risk) private readonly risksRepo: Repository<Risk>) {}
+  private readonly logger = new Logger(RisksService.name);
+
+  constructor(
+    @InjectRepository(Risk) private readonly risksRepo: Repository<Risk>,
+    @InjectRepository(User) private readonly usersRepo: Repository<User>,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   private toItem(r: Risk): RiskItem {
     return {
@@ -73,6 +103,7 @@ export class RisksService {
       mitigationStrategy: r.mitigationStrategy,
       actions: r.actions,
       estimatedResolutionDate: r.estimatedResolutionDate,
+      ownerUserId: r.ownerUserId,
       owner: r.owner,
       actionStatus: r.actionStatus,
       createdAt: r.createdAt.toISOString(),
@@ -85,6 +116,114 @@ export class RisksService {
     if (!risk) throw new NotFoundException('Riesgo no encontrado.');
     return risk;
   }
+
+  // ── Dueño ──────────────────────────────────────────────────────────────────
+
+  /**
+   * Usuarios activos cuyo nombre (del expediente si está vinculado, o el de la
+   * cuenta) o correo contiene cada palabra buscada, sin mayúsculas ni acentos.
+   * Solo id, nombre y correo.
+   */
+  async searchOwnerCandidates(query?: string): Promise<OwnerCandidate[]> {
+    const words = normalizeSearchWords(query);
+    if (words.length === 0) return [];
+
+    const params: unknown[] = [ACCENTED, UNACCENTED];
+    const conditions = words.map((word) => {
+      params.push(`%${word}%`);
+      const p = `$${params.length}`;
+      return `(translate(lower(COALESCE(e.full_name, u.name)), $1, $2) LIKE ${p} ESCAPE '\\'
+               OR translate(lower(u.name), $1, $2) LIKE ${p} ESCAPE '\\'
+               OR lower(u.email) LIKE ${p} ESCAPE '\\')`;
+    });
+    params.push(OWNER_SEARCH_MAX_RESULTS);
+
+    const rows = (await this.risksRepo.manager.query(
+      `SELECT u.id, COALESCE(e.full_name, u.name) AS name, u.email
+       FROM auth.users u
+       LEFT JOIN LATERAL (
+         SELECT full_name FROM employees.employee_records
+         WHERE auth_user_id = u.id AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1
+       ) e ON true
+       WHERE u.deleted_at IS NULL AND u.is_active = true
+         AND ${conditions.join(' AND ')}
+       ORDER BY name ASC
+       LIMIT $${params.length}`,
+      params,
+    )) as OwnerCandidate[];
+
+    return rows.map((r) => ({ id: r.id, name: r.name, email: r.email }));
+  }
+
+  /** El dueño debe existir y estar activo; devuelve el nombre a guardar como copia. */
+  private async resolveActiveOwner(userId: string): Promise<{ id: string; name: string }> {
+    const rows = (await this.risksRepo.manager.query(
+      `SELECT u.id, COALESCE(e.full_name, u.name) AS name, u.is_active
+       FROM auth.users u
+       LEFT JOIN LATERAL (
+         SELECT full_name FROM employees.employee_records
+         WHERE auth_user_id = u.id AND deleted_at IS NULL
+         ORDER BY created_at DESC LIMIT 1
+       ) e ON true
+       WHERE u.id = $1 AND u.deleted_at IS NULL`,
+      [userId],
+    )) as OwnerRow[];
+
+    const owner = rows[0];
+    if (!owner) throw new BadRequestException('El dueño indicado no existe.');
+    if (!owner.is_active) throw new BadRequestException('El dueño indicado está inactivo.');
+    return { id: owner.id, name: owner.name };
+  }
+
+  /**
+   * Avisa al dueño dentro de la app. Nunca lanza: un fallo se registra y el
+   * riesgo ya quedó guardado. No se notifica a quien se asigna a sí mismo.
+   */
+  private async notifyOwner(risk: Risk, actor: User): Promise<void> {
+    try {
+      if (risk.ownerUserId === actor.id) return;
+
+      const recipient = await this.usersRepo.findOne({
+        where: { id: risk.ownerUserId },
+        relations: { roles: { permissions: true }, userPermissions: { permission: true } },
+      });
+      const { level } = calculateRisk(
+        risk.vulnerabilityScore,
+        risk.severityScore,
+        risk.probabilityScore,
+        risk.controlEfficacy,
+      );
+      const content = buildOwnerNotification({
+        actorName: actor.name ?? actor.email,
+        risk: risk.risk,
+        residualRisk: risk.residualRisk,
+        level,
+        canOpenMatrix: recipient ? userHasPermission(recipient, 'sgsi', 'riesgos', 'read') : false,
+      });
+
+      await this.notificationsService.create({
+        recipientId: risk.ownerUserId,
+        senderId: actor.id,
+        senderName: actor.name ?? actor.email,
+        title: content.title,
+        message: content.message,
+        type: content.type,
+        module: 'sgsi',
+        entityId: risk.id,
+        entityType: 'risk',
+        ...(content.actionUrl ? { actionUrl: content.actionUrl } : {}),
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar al dueño del riesgo ${risk.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
 
   /** Todos los activos, sin paginar: la tabla ordena en el cliente. */
   async list(): Promise<RiskList> {
@@ -104,6 +243,7 @@ export class RisksService {
   }
 
   async create(dto: CreateRiskDto, user: User): Promise<RiskItem> {
+    const owner = await this.resolveActiveOwner(dto.ownerUserId);
     const { riskValue, residualRisk } = calculateRisk(
       dto.vulnerabilityScore,
       dto.severityScore,
@@ -129,17 +269,29 @@ export class RisksService {
         mitigationStrategy: emptyToNull(dto.mitigationStrategy),
         actions: emptyToNull(dto.actions),
         estimatedResolutionDate: dto.estimatedResolutionDate ?? null,
-        owner: dto.owner,
+        ownerUserId: owner.id,
+        owner: owner.name,
         actionStatus: dto.actionStatus,
         createdBy: user.id,
         updatedBy: user.id,
       }),
     );
+
+    await this.notifyOwner(saved, user);
     return this.toItem(saved);
   }
 
   async update(id: string, dto: UpdateRiskDto, user: User): Promise<RiskItem> {
     const risk = await this.findActiveOrFail(id);
+
+    // Solo un dueño distinto se valida (activo) y se notifica; conservar al
+    // actual no se bloquea aunque hoy esté inactivo.
+    const ownerChanged = dto.ownerUserId !== undefined && dto.ownerUserId !== risk.ownerUserId;
+    if (ownerChanged && dto.ownerUserId !== undefined) {
+      const owner = await this.resolveActiveOwner(dto.ownerUserId);
+      risk.ownerUserId = owner.id;
+      risk.owner = owner.name;
+    }
 
     if (dto.category !== undefined) risk.category = dto.category;
     if (dto.threat !== undefined) risk.threat = dto.threat;
@@ -151,7 +303,6 @@ export class RisksService {
     if (dto.probabilityScore !== undefined) risk.probabilityScore = dto.probabilityScore;
     if (dto.control !== undefined) risk.control = dto.control;
     if (dto.controlEfficacy !== undefined) risk.controlEfficacy = dto.controlEfficacy;
-    if (dto.owner !== undefined) risk.owner = dto.owner;
     if (dto.actionStatus !== undefined) risk.actionStatus = dto.actionStatus;
     if (dto.reportedAt !== undefined) risk.reportedAt = dto.reportedAt;
     if (dto.mitigationStrategy !== undefined) risk.mitigationStrategy = emptyToNull(dto.mitigationStrategy);
@@ -171,7 +322,9 @@ export class RisksService {
     risk.residualRisk = residualRisk;
     risk.updatedBy = user.id;
 
-    return this.toItem(await this.risksRepo.save(risk));
+    const saved = await this.risksRepo.save(risk);
+    if (ownerChanged) await this.notifyOwner(saved, user);
+    return this.toItem(saved);
   }
 
   /** Baja lógica: el registro se conserva y deja de listarse. */

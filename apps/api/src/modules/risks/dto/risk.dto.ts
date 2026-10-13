@@ -6,6 +6,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -82,11 +83,9 @@ export class CreateRiskDto {
   @IsIn([...CONTROL_EFFICACIES], { message: 'La eficacia del control debe ser 0.1, 0.2, 0.3, 0.4 o 0.5.' })
   controlEfficacy!: number;
 
-  @Transform(trim)
-  @IsString()
-  @IsNotEmpty({ message: 'El dueño es obligatorio.' })
-  @MaxLength(200)
-  owner!: string;
+  /** Dueño: usuario activo de la plataforma. El nombre se copia en el servidor. */
+  @IsUUID(undefined, { message: 'El dueño es obligatorio y debe ser un usuario de la plataforma.' })
+  ownerUserId!: string;
 
   @IsIn([...ACTION_STATUSES], { message: 'El estado de la acción no es válido.' })
   actionStatus!: string;

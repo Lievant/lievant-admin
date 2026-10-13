@@ -9,6 +9,11 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * eficacia, a 2 decimales). Los CHECK acotan los rangos por si alguien escribe
  * por SQL.
  *
+ * El dueño es un usuario de la plataforma (`owner_user_id`, FK a auth.users) y
+ * `owner` guarda una copia de su nombre al asignarlo: es el patrón de
+ * `technician_name` / `expense_type_name`, así el historial no cambia si el
+ * usuario se renombra o se da de baja, y la tabla ordena por el nombre.
+ *
  * Borrado lógico por `deleted_at`. Los permisos `sgsi.riesgos.read|write` se
  * asignan solo a SUPER_ADMIN, igual que `sgsi.isobot.write` en la 013.
  *
@@ -46,6 +51,7 @@ export class CreateRiskMatrix1751000000033 implements MigrationInterface {
         mitigation_strategy TEXT,
         actions TEXT,
         estimated_resolution_date DATE,
+        owner_user_id UUID NOT NULL REFERENCES auth.users(id),
         owner VARCHAR(200) NOT NULL,
         action_status VARCHAR(20) NOT NULL DEFAULT 'No iniciado'
           CONSTRAINT chk_risks_action_status CHECK (
@@ -64,6 +70,11 @@ export class CreateRiskMatrix1751000000033 implements MigrationInterface {
     await queryRunner.query(`
       CREATE INDEX IF NOT EXISTS idx_risks_active_updated
         ON sgsi.risks(updated_at DESC) WHERE deleted_at IS NULL
+    `);
+
+    await queryRunner.query(`
+      CREATE INDEX IF NOT EXISTS idx_risks_owner_user
+        ON sgsi.risks(owner_user_id) WHERE deleted_at IS NULL
     `);
 
     await queryRunner.query(`
@@ -103,6 +114,7 @@ export class CreateRiskMatrix1751000000033 implements MigrationInterface {
     await queryRunner.query(`
       DELETE FROM auth.permissions WHERE section = 'sgsi' AND module = 'riesgos'
     `);
+    await queryRunner.query(`DROP INDEX IF EXISTS sgsi.idx_risks_owner_user`);
     await queryRunner.query(`DROP INDEX IF EXISTS sgsi.idx_risks_active_updated`);
     await queryRunner.query(`DROP TABLE IF EXISTS sgsi.risks`);
     // Sin CASCADE: si el schema tuviera otras tablas, se conserva.

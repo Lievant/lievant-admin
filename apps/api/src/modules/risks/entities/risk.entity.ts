@@ -61,6 +61,10 @@ export class Risk {
   @Column({ name: 'estimated_resolution_date', type: 'date', nullable: true })
   estimatedResolutionDate!: string | null;
 
+  /** Dueño: usuario de la plataforma (referencia) y copia de su nombre al asignarlo. */
+  @Column({ name: 'owner_user_id', type: 'uuid' })
+  ownerUserId!: string;
+
   @Column({ type: 'varchar', length: 200 })
   owner!: string;
 

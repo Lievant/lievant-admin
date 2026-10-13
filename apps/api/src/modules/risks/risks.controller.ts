@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -27,6 +28,13 @@ export class RisksController {
   @RequirePermission('sgsi', 'riesgos', 'read')
   list() {
     return this.service.list();
+  }
+
+  /** Candidatos a dueño: solo id, nombre y correo. Va antes de `:id`. */
+  @Get('owner-candidates')
+  @RequirePermission('sgsi', 'riesgos', 'write')
+  ownerCandidates(@Query('q') q?: string) {
+    return this.service.searchOwnerCandidates(q);
   }
 
   @Get(':id')
