@@ -17,6 +17,7 @@ import {
   uploadViaPresignedUrl,
   validateUploadSize,
 } from '@/lib/presigned-upload';
+import { DocumentFileMenu } from './document-file-menu';
 import { SortColumnHeader } from '@/components/ui/sort-column-header';
 import { nextSort } from '@/lib/sort-rows';
 import { type SortDir, type SortKey, sortDocuments } from './sort-documents';
@@ -32,6 +33,7 @@ interface AdminDocument {
   category: string | null;
   fileSize: number | null;
   chunkCount: number;
+  hasFile: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -324,6 +326,12 @@ export function IsobotAdminScreen() {
                     <td className="px-4 py-3 text-slate-500">{formatDate(doc.updatedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        <DocumentFileMenu
+                          documentId={doc.id}
+                          title={doc.title}
+                          fileType={doc.fileType}
+                          hasFile={doc.hasFile}
+                        />
                         <button
                           type="button"
                           onClick={() => setReemplazando(doc)}
