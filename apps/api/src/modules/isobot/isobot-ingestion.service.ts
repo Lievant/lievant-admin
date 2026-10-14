@@ -15,6 +15,12 @@ import { assertKeyInPrefix, MAX_UPLOAD_BYTES } from '../../common/s3-upload.util
 import { decodeCursor, encodeCursor } from '../clients/utils/cursor.util';
 import { getOpenAI } from './openai-client';
 import { toVectorLiteral } from './vector.util';
+import {
+  downloadFileName,
+  FileDisposition,
+  fileTypeOf,
+  MIME_BY_FILE_TYPE,
+} from './isobot-file-url.util';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const CHUNK_TOKENS = 500;
@@ -60,6 +66,8 @@ export interface AdminDocumentItem {
   category: string | null;
   fileSize: number | null;
   chunkCount: number;
+  /** Tiene archivo en S3 (sin exponer la clave). */
+  hasFile: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -556,6 +564,7 @@ export class IsobotIngestionService {
       `SELECT d.id, d.title, d.file_name, d.file_type, d.macroprocess, d.category,
               d.file_size, d.is_active, d.created_at, d.updated_at,
               d.updated_at::text AS cursor_updated_at,
+              (d.s3_key IS NOT NULL) AS has_file,
               (SELECT COUNT(*)::int FROM isobot.document_chunks c WHERE c.document_id = d.id) AS chunk_count
        FROM isobot.documents d
        WHERE ${condicionesPagina.join(' AND ')}
@@ -578,6 +587,7 @@ export class IsobotIngestionService {
         category: (f.category as string) ?? null,
         fileSize: (f.file_size as number) ?? null,
         chunkCount: f.chunk_count as number,
+        hasFile: f.has_file as boolean,
         isActive: f.is_active as boolean,
         createdAt: f.created_at as string,
         updatedAt: f.updated_at as string,
@@ -626,6 +636,41 @@ export class IsobotIngestionService {
 
     await this.chunksRepo.manager.query(`DELETE FROM isobot.document_chunks WHERE document_id = $1`, [id]);
     await this.documentsRepo.delete(id);
+  }
+
+  /**
+   * URL prefirmada de lectura (60 s) para el panel de administración. Solo los
+   * PDF se pueden ver en el navegador; Word y Excel solo se descargan. El nombre
+   * de descarga es el original, con la extensión que corresponde al archivo.
+   */
+  async getAdminFileUrl(
+    id: string,
+    disposition: FileDisposition = 'attachment',
+  ): Promise<{ url: string }> {
+    const document = await this.documentsRepo.findOne({ where: { id } });
+    if (!document) throw new NotFoundException(`Documento ${id} no encontrado`);
+    if (!document.s3Key) {
+      throw new NotFoundException('Este documento no tiene un archivo disponible.');
+    }
+
+    const fileType = fileTypeOf(document.fileType, document.fileName);
+    if (disposition === 'inline' && fileType !== 'pdf') {
+      throw new BadRequestException(
+        'Word y Excel no se pueden previsualizar en el navegador; descárgalo.',
+      );
+    }
+
+    // Un documento retirado conserva la fila, pero su archivo ya se borró de S3.
+    if ((await this.storage.getObjectSize(document.s3Key)) === null) {
+      throw new NotFoundException('El archivo ya no está disponible en el almacenamiento.');
+    }
+
+    const url = await this.storage.getPresignedReadUrl(document.s3Key, {
+      disposition,
+      fileName: downloadFileName(document.fileName, fileType),
+      ...(fileType ? { contentType: MIME_BY_FILE_TYPE[fileType]! } : {}),
+    });
+    return { url };
   }
 
   async getDownloadUrl(id: string): Promise<{ url: string }> {

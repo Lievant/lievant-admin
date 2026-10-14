@@ -24,6 +24,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { ChatDto } from './dto/chat.dto';
 import {
+  DocumentFileQueryDto,
   PresignedUploadDto,
   QueryAdminDocumentsDto,
   RegisterAdminDocumentDto,
@@ -152,6 +153,16 @@ export class IsobotController {
     @Body() dto: RegisterAdminDocumentDto,
   ) {
     return this.ingestionService.registerReplacement(id, dto);
+  }
+
+  /** URL prefirmada de lectura para ver o descargar un documento: { url }. */
+  @Get('admin/documents/:id/file')
+  @RequirePermission('sgsi', 'isobot', 'write')
+  getAdminDocumentFile(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() query: DocumentFileQueryDto,
+  ) {
+    return this.ingestionService.getAdminFileUrl(id, query.disposition);
   }
 
   @Delete('admin/documents/:id')
