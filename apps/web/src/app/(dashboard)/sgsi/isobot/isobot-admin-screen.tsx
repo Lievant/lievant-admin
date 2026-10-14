@@ -17,6 +17,8 @@ import {
   uploadViaPresignedUrl,
   validateUploadSize,
 } from '@/lib/presigned-upload';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
+import { nextSort } from '@/lib/sort-rows';
 import { type SortDir, type SortKey, sortDocuments } from './sort-documents';
 
 // ── tipos ────────────────────────────────────────────────────────────────────
@@ -171,12 +173,7 @@ export function IsobotAdminScreen() {
     })();
   }, []);
 
-  // Clic en el encabezado: la columna nueva arranca ascendente; la misma alterna.
-  function ordenarPor(key: SortKey) {
-    setOrden((actual) =>
-      actual?.key === key ? { key, dir: actual.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
-    );
-  }
+  const ordenarPor = (key: SortKey) => setOrden((actual) => nextSort(actual, key));
 
   // Sobre las filas ya filtradas por el servidor; no modifica `documentos`.
   const filas = useMemo(
@@ -296,12 +293,12 @@ export function IsobotAdminScreen() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <tr>
-                  <HeaderOrdenable label="Documento" columna="title" orden={orden} onOrdenar={ordenarPor} />
-                  <HeaderOrdenable label="Macroproceso" columna="macroprocess" orden={orden} onOrdenar={ordenarPor} />
-                  <HeaderOrdenable label="Tipo" columna="fileType" orden={orden} onOrdenar={ordenarPor} align="center" />
-                  <HeaderOrdenable label="Fragmentos" columna="chunkCount" orden={orden} onOrdenar={ordenarPor} align="right" />
-                  <HeaderOrdenable label="Tamaño" columna="fileSize" orden={orden} onOrdenar={ordenarPor} align="right" />
-                  <HeaderOrdenable label="Actualizado" columna="updatedAt" orden={orden} onOrdenar={ordenarPor} />
+                  <SortColumnHeader label="Documento" column="title" sort={orden} onSort={ordenarPor} />
+                  <SortColumnHeader label="Macroproceso" column="macroprocess" sort={orden} onSort={ordenarPor} />
+                  <SortColumnHeader label="Tipo" column="fileType" sort={orden} onSort={ordenarPor} align="center" />
+                  <SortColumnHeader label="Fragmentos" column="chunkCount" sort={orden} onSort={ordenarPor} align="right" />
+                  <SortColumnHeader label="Tamaño" column="fileSize" sort={orden} onSort={ordenarPor} align="right" />
+                  <SortColumnHeader label="Actualizado" column="updatedAt" sort={orden} onSort={ordenarPor} />
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
@@ -396,40 +393,6 @@ export function IsobotAdminScreen() {
 }
 
 // ── piezas ───────────────────────────────────────────────────────────────────
-
-function HeaderOrdenable({
-  label,
-  columna,
-  orden,
-  onOrdenar,
-  align = 'left',
-}: {
-  label: string;
-  columna: SortKey;
-  orden: { key: SortKey; dir: SortDir } | null;
-  onOrdenar: (key: SortKey) => void;
-  align?: 'left' | 'center' | 'right';
-}) {
-  const activa = orden?.key === columna;
-  const justify = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
-  return (
-    <th
-      className="px-4 py-3"
-      aria-sort={activa ? (orden.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
-    >
-      <button
-        type="button"
-        onClick={() => onOrdenar(columna)}
-        className={`flex w-full items-center gap-1 ${justify} uppercase tracking-wide hover:text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-navy`}
-      >
-        {label}
-        <span aria-hidden="true" className={`text-[10px] leading-none ${activa ? 'text-black' : 'text-slate-300'}`}>
-          {activa ? (orden.dir === 'asc' ? '▲' : '▼') : '⇅'}
-        </span>
-      </button>
-    </th>
-  );
-}
 
 function StatCard({
   icon,
