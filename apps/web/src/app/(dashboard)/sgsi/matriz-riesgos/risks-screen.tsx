@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertIcon, CloseIcon, EyeIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { InfoPopover } from '@/components/info-popover';
 import { SortColumnHeader } from '@/components/ui/sort-column-header';
 import { useCurrentUser } from '@/components/user-provider';
 import { OwnerPicker, type OwnerValue } from './owner-picker';
@@ -392,6 +393,10 @@ function Modal({
 }
 
 const labelClass = 'mb-1 block text-xs font-medium text-slate-500';
+
+/** Aviso de la "i" de los campos con escala (mismo texto en los cuatro). */
+const SCALE_HELP_TEXT =
+  'La descripción que aparece debajo de este campo cambia según la opción que elijas. Léela con atención antes de seleccionar para asignar el valor correcto.';
 const fieldClass =
   'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-navy focus:outline-none disabled:opacity-60';
 
@@ -587,9 +592,14 @@ function ScaleSelect({
   const selected = scale.find((s) => String(s.value) === value);
   return (
     <div>
-      <label htmlFor={id} className={labelClass}>
-        {label}
-      </label>
+      <div className="mb-1 flex items-center">
+        <label htmlFor={id} className="text-xs font-medium text-slate-500">
+          {label}
+        </label>
+        <InfoPopover ariaLabel={`Ayuda sobre ${label}`} width={288}>
+          <p>{SCALE_HELP_TEXT}</p>
+        </InfoPopover>
+      </div>
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
         <option value="">Selecciona…</option>
         {scale.map((s) => (
