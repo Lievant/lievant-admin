@@ -31,6 +31,10 @@ import { PasswordApplication } from './entities/password-application.entity';
 /** Máximo de contraseñas que un usuario puede ver o copiar por hora. */
 const REVEAL_LIMIT_PER_HOUR = 10;
 
+/** 403 genérico: no revela si la persona o la cuenta existen. */
+const NO_ACCESS_PERSON = 'No tienes acceso a la información de esta persona.';
+const NO_ACCESS_ACCOUNT = 'No tienes acceso a esta cuenta.';
+
 /** Días de anticipación con que se avisa al líder. */
 const EXPIRY_NOTICE_DAYS = 3;
 
@@ -187,6 +191,28 @@ export class PasswordsService {
     }));
   }
 
+  /**
+   * Personas cuya información puede ver quien llama: ella misma y sus
+   * subordinados directos activos. Solo id y nombre; nada más sale de aquí.
+   */
+  async getVisiblePeople(userId: string): Promise<{ id: string; fullName: string; isMe: boolean }[]> {
+    const me = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+    if (!me) return [];
+    const team = await this.teamQuery(me.id).orderBy('emp.full_name', 'ASC').getMany();
+    return [
+      { id: me.id, fullName: me.fullName, isMe: true },
+      ...team.map((e) => ({ id: e.id, fullName: e.fullName, isMe: false })),
+    ];
+  }
+
+  /** ¿`employeeId` es un subordinado directo activo de `managerEmployeeId`? */
+  private async isActiveDirectReport(managerEmployeeId: string, employeeId: string): Promise<boolean> {
+    const count = await this.teamQuery(managerEmployeeId)
+      .andWhere('emp.id = :employeeId', { employeeId })
+      .getCount();
+    return count > 0;
+  }
+
   private teamQuery(managerEmployeeId: string) {
     return this.employeesRepo
       .createQueryBuilder('emp')
@@ -202,20 +228,23 @@ export class PasswordsService {
   // ==========================================================================
 
   /**
-   * Cuentas de los colaboradores que reportan directamente a quien llama.
-   * Nunca selecciona password_encrypted.
+   * Cuentas de una persona: por defecto las de quien llama; con `employeeId`,
+   * solo si es ella misma o un subordinado directo activo (si no, 403 genérico
+   * que no revela si la persona existe). El id del cliente nunca se acepta sin
+   * validarlo. Nunca selecciona password_encrypted.
    */
   async list(user: User, query: QueryPasswordsDto) {
     const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
     if (!me) return [];
 
-    const params: unknown[] = [me.id];
-    const where = ['e.direct_report_to_id = $1', 'e.id != $1'];
-
-    if (query.employeeId) {
-      params.push(query.employeeId);
-      where.push(`ap.employee_id = $${params.length}`);
+    const targetId = query.employeeId ?? me.id;
+    if (targetId !== me.id && !(await this.isActiveDirectReport(me.id, targetId))) {
+      throw new ForbiddenException(NO_ACCESS_PERSON);
     }
+
+    const params: unknown[] = [targetId];
+    const where = ['ap.employee_id = $1'];
+
     if (query.applicationId) {
       params.push(query.applicationId);
       where.push(`ap.application_id = $${params.length}`);
@@ -595,12 +624,18 @@ export class PasswordsService {
     return row;
   }
 
-  /** Ve la contraseña: el jefe actual del colaborador, el líder que la asignó o SUPER_ADMIN. */
+  /**
+   * Ve la contraseña: la propia persona, su jefe actual (subordinado directo
+   * activo) o SUPER_ADMIN. Un líder que la asignó pero ya no es su jefe, un par
+   * o un jefe indirecto reciben 403.
+   */
   private async assertCanView(user: User, row: AccessRow): Promise<void> {
     if (this.isSuperAdmin(user)) return;
     const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
-    if (me && (row.employee_manager_id === me.id || row.manager_id === me.id)) return;
-    throw new ForbiddenException('Esta cuenta no pertenece a tu equipo');
+    if (me && (row.employee_id === me.id || (await this.isActiveDirectReport(me.id, row.employee_id)))) {
+      return;
+    }
+    throw new ForbiddenException(NO_ACCESS_ACCOUNT);
   }
 
   /**
