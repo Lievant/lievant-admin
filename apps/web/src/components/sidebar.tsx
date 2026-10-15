@@ -106,9 +106,9 @@ export function Sidebar({ user }: SidebarProps) {
   // cargo. Por eso entra también en showHerramientas —un jefe sin ningún otro
   // módulo de herramientas se quedaría sin la sección y sin el link.
   const showGestionVacaciones = isManager;
-  // Contraseñas (TIC-RE-17) exige las dos cosas: tener equipo y el permiso,
-  // que por defecto solo traen SUPER_ADMIN y DIRECTOR.
-  const showPasswords = isManager && hasModule(user, 'herramientas', 'passwords', 'read');
+  // Contraseñas (TIC-RE-17) es visible para todos: cada quien ve la suya y un
+  // jefe también la de sus subordinados directos; el alcance lo fija el API.
+  const showPasswords = true;
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||

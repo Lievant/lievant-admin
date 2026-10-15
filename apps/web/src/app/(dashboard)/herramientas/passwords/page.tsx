@@ -3,10 +3,12 @@ import {
   listAccountPasswords,
   listPasswordApplications,
   listPasswordTeamEmployees,
+  listPasswordVisiblePeople,
   type AccountPasswordItem,
   type ErrorKind,
   type PasswordApplication,
   type PasswordTeamEmployee,
+  type PasswordVisiblePerson,
 } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { PasswordsScreen } from './passwords-screen';
@@ -17,13 +19,15 @@ export default async function PasswordsPage() {
   let accounts: AccountPasswordItem[] = [];
   let applications: PasswordApplication[] = [];
   let team: PasswordTeamEmployee[] = [];
+  let people: PasswordVisiblePerson[] = [];
   let errorKind: ErrorKind | null = null;
 
   try {
-    [accounts, applications, team] = await Promise.all([
+    [accounts, applications, team, people] = await Promise.all([
       listAccountPasswords(),
       listPasswordApplications(),
       listPasswordTeamEmployees(),
+      listPasswordVisiblePeople(),
     ]);
   } catch (err) {
     errorKind = errorKindOf(err);
@@ -43,6 +47,7 @@ export default async function PasswordsPage() {
         accounts={accounts}
         applications={applications}
         team={team}
+        people={people}
         apiUnavailable={errorKind === 'unavailable'}
       />
     </div>
