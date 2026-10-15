@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type {
   AccountPasswordItem,
   PasswordApplication,
-  PasswordTeamEmployee,
   PasswordVisiblePerson,
 } from '@/lib/api';
 import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
@@ -50,7 +49,6 @@ interface PasswordsScreenProps {
   /** Cuentas de la propia persona (la selección inicial). */
   accounts: AccountPasswordItem[];
   applications: PasswordApplication[];
-  team: PasswordTeamEmployee[];
   /** La propia persona y sus subordinados directos activos. */
   people: PasswordVisiblePerson[];
   apiUnavailable: boolean;
@@ -68,7 +66,6 @@ function canEditCatalog(user: ReturnType<typeof useCurrentUser>): boolean {
 export function PasswordsScreen({
   accounts: initialAccounts,
   applications,
-  team,
   people,
   apiUnavailable,
 }: PasswordsScreenProps) {
@@ -83,14 +80,6 @@ export function PasswordsScreen({
   // Cada persona gestiona las suyas y el jefe las de sus subordinados directos;
   // el API valida el alcance en cada llamada.
   const canManage = people.length > 0;
-  // Para el diálogo: la propia persona y sus subordinados (id y nombre; el área sale del equipo).
-  const dialogPeople: PasswordTeamEmployee[] = people.map((p) => ({
-    id: p.id,
-    fullName: p.fullName,
-    position: '',
-    area: team.find((t) => t.id === p.id)?.area ?? null,
-    corporateEmail: null,
-  }));
   const [applicationFilter, setApplicationFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
@@ -388,7 +377,7 @@ export function PasswordsScreen({
         <PasswordDialog
           account={editing === 'nueva' ? null : editing}
           applications={applications}
-          team={dialogPeople}
+          people={people}
           defaultEmployeeId={selectedPerson?.id ?? ''}
           canAddApplication={canEditCatalog(user)}
           onClose={() => setEditing(null)}

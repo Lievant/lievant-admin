@@ -4891,14 +4891,6 @@ export interface AccountPasswordItem {
   managerName: string | null;
 }
 
-export interface PasswordTeamEmployee {
-  id: string;
-  fullName: string;
-  position: string;
-  area: string | null;
-  corporateEmail: string | null;
-}
-
 /** Persona cuya información puede ver quien llama: ella misma o un subordinado directo activo. */
 export interface PasswordVisiblePerson {
   id: string;
@@ -4927,10 +4919,6 @@ export function listPasswordApplications(): Promise<PasswordApplication[]> {
 
 export function listPasswordVisiblePeople(): Promise<PasswordVisiblePerson[]> {
   return apiFetchWithRetry<PasswordVisiblePerson[]>('/passwords/visible-people');
-}
-
-export function listPasswordTeamEmployees(): Promise<PasswordTeamEmployee[]> {
-  return apiFetchWithRetry<PasswordTeamEmployee[]>('/passwords/team-employees');
 }
 
 export function createAccountPassword(payload: AccountPasswordPayload): Promise<AccountPasswordItem> {
