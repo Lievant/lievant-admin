@@ -29,8 +29,10 @@ import {
 import { PasswordsService } from './passwords.service';
 
 /**
- * TIC-RE-17. El permiso dice qué puede hacer el usuario; el alcance (qué
- * cuentas) lo fija el propio dato: solo las de colaboradores que le reportan.
+ * TIC-RE-17. Cualquier usuario autenticado puede abrir la pantalla: leer y
+ * revelar no piden permiso porque el alcance lo fija el servicio en cada
+ * llamada (las propias y las de sus subordinados directos activos). Crear,
+ * editar y revocar siguen exigiendo `write` y solo valen sobre su equipo.
  */
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('passwords')
@@ -80,6 +82,12 @@ export class PasswordsController {
     return this.service.getTeamEmployees(user.id);
   }
 
+  /** Quién se puede elegir en el selector: la propia persona y sus subordinados directos activos. */
+  @Get('visible-people')
+  getVisiblePeople(@CurrentUser() user: User) {
+    return this.service.getVisiblePeople(user.id);
+  }
+
   // SUPER_ADMIN se valida en el servicio.
   @Get('audit-log')
   getAuditLog(@CurrentUser() user: User) {
@@ -88,14 +96,13 @@ export class PasswordsController {
 
   // ── Contraseñas ────────────────────────────────────────────────────────────
 
+  // Sin permiso: el alcance (propia o subordinado directo) se valida en el servicio.
   @Get()
-  @RequirePermission('herramientas', 'passwords', 'read')
   list(@CurrentUser() user: User, @Query() query: QueryPasswordsDto) {
     return this.service.list(user, query);
   }
 
   @Get(':id/reveal')
-  @RequirePermission('herramientas', 'passwords', 'read')
   reveal(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
