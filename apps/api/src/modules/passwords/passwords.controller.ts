@@ -29,10 +29,11 @@ import {
 import { PasswordsService } from './passwords.service';
 
 /**
- * TIC-RE-17. Cualquier usuario autenticado puede abrir la pantalla: leer y
- * revelar no piden permiso porque el alcance lo fija el servicio en cada
- * llamada (las propias y las de sus subordinados directos activos). Crear,
- * editar y revocar siguen exigiendo `write` y solo valen sobre su equipo.
+ * TIC-RE-17. Cualquier usuario autenticado puede abrir la pantalla. Ver,
+ * revelar, crear, editar y revocar no piden permiso: el alcance lo fija el
+ * servicio en cada llamada y vale para las cuentas propias y las de los
+ * subordinados directos activos. Solo el catálogo de aplicaciones conserva
+ * `herramientas.passwords.write`.
  */
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('passwords')
@@ -113,13 +114,11 @@ export class PasswordsController {
   }
 
   @Post()
-  @RequirePermission('herramientas', 'passwords', 'write')
   create(@CurrentUser() user: User, @Body() dto: CreateAccountPasswordDto) {
     return this.service.create(user, dto);
   }
 
   @Patch(':id')
-  @RequirePermission('herramientas', 'passwords', 'write')
   update(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
@@ -129,7 +128,6 @@ export class PasswordsController {
   }
 
   @Delete(':id')
-  @RequirePermission('herramientas', 'passwords', 'write')
   @HttpCode(HttpStatus.NO_CONTENT)
   revoke(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.revoke(user, id);

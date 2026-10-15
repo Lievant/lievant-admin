@@ -266,7 +266,7 @@ export class PasswordsService {
 
   async create(user: User, dto: CreateAccountPasswordDto) {
     const me = await this.requireEmployee(user.id);
-    await this.assertDirectReport(me.id, dto.employeeId);
+    await this.assertCanManagePerson(me.id, dto.employeeId, NO_ACCESS_PERSON);
     await this.assertActiveApplication(dto.applicationId);
     const key = this.encryptionKey();
 
@@ -310,10 +310,8 @@ export class PasswordsService {
     };
 
     if (dto.employeeId !== undefined && dto.employeeId !== row.employee_id) {
-      // SUPER_ADMIN sin expediente no tiene "equipo" contra el cual validar;
-      // basta con que el colaborador exista.
-      if (me) await this.assertDirectReport(me.id, dto.employeeId);
-      else await this.assertEmployeeExists(dto.employeeId);
+      // Solo se puede pasar la cuenta a alguien de tu alcance: tú o un subordinado directo.
+      await this.assertCanManagePerson(me.id, dto.employeeId, NO_ACCESS_PERSON);
       push('employee_id = ?', dto.employeeId);
     }
     if (dto.applicationId !== undefined) {
@@ -625,48 +623,36 @@ export class PasswordsService {
   }
 
   /**
-   * Ve la contraseña: la propia persona, su jefe actual (subordinado directo
-   * activo) o SUPER_ADMIN. Un líder que la asignó pero ya no es su jefe, un par
-   * o un jefe indirecto reciben 403.
+   * Ve la contraseña: la propia persona o su jefe actual (subordinado directo
+   * activo). Un líder que la asignó pero ya no es su jefe, un par, un jefe
+   * indirecto o un usuario sin expediente reciben 403; el rol no da atajos.
    */
   private async assertCanView(user: User, row: AccessRow): Promise<void> {
-    if (this.isSuperAdmin(user)) return;
     const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
-    if (me && (row.employee_id === me.id || (await this.isActiveDirectReport(me.id, row.employee_id)))) {
-      return;
-    }
-    throw new ForbiddenException(NO_ACCESS_ACCOUNT);
+    if (!me) throw new ForbiddenException(NO_ACCESS_ACCOUNT);
+    await this.assertCanManagePerson(me.id, row.employee_id, NO_ACCESS_ACCOUNT);
+  }
+
+  /** Titular propio o subordinado directo activo; si no, 403 genérico. */
+  private async assertCanManagePerson(meId: string, targetId: string, message: string): Promise<void> {
+    if (targetId === meId) return;
+    if (!(await this.isActiveDirectReport(meId, targetId))) throw new ForbiddenException(message);
   }
 
   /**
-   * Edita o revoca: mismo alcance que ver. Devuelve el expediente de quien
-   * llama (null para un SUPER_ADMIN sin expediente).
+   * Edita o revoca: mismo alcance que ver (la propia persona o su jefe actual).
+   * Devuelve el expediente de quien llama.
    */
-  private async assertCanManage(user: User, row: AccessRow): Promise<EmployeeRecord | null> {
-    const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
-    if (this.isSuperAdmin(user)) return me;
-    if (me && (row.manager_id === me.id || row.employee_manager_id === me.id)) return me;
-    throw new ForbiddenException('Solo el líder asignado puede modificar esta cuenta');
+  private async assertCanManage(user: User, row: AccessRow): Promise<EmployeeRecord> {
+    const me = await this.requireEmployee(user.id);
+    await this.assertCanManagePerson(me.id, row.employee_id, NO_ACCESS_ACCOUNT);
+    return me;
   }
 
   private async requireEmployee(userId: string): Promise<EmployeeRecord> {
     const me = await this.employeesRepo.findOne({ where: { authUserId: userId } });
     if (!me) throw new ForbiddenException('Tu usuario no está vinculado a un expediente de empleado');
     return me;
-  }
-
-  private async assertDirectReport(managerEmployeeId: string, employeeId: string): Promise<void> {
-    const count = await this.teamQuery(managerEmployeeId)
-      .andWhere('emp.id = :employeeId', { employeeId })
-      .getCount();
-    if (count === 0) {
-      throw new ForbiddenException('Solo puedes asignar cuentas a colaboradores que te reportan directamente');
-    }
-  }
-
-  private async assertEmployeeExists(employeeId: string): Promise<void> {
-    const exists = await this.employeesRepo.exists({ where: { id: employeeId } });
-    if (!exists) throw new BadRequestException('Colaborador no encontrado');
   }
 
   private async assertActiveApplication(applicationId: string): Promise<void> {
