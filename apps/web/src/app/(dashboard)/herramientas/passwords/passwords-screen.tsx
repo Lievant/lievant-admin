@@ -56,8 +56,8 @@ interface PasswordsScreenProps {
   apiUnavailable: boolean;
 }
 
-/** Escribir (crear, editar, revocar) exige este permiso y, además, que sea un subordinado. */
-function canWritePasswords(user: ReturnType<typeof useCurrentUser>): boolean {
+/** Alta de aplicaciones nuevas en el catálogo: sigue exigiendo el permiso de escritura. */
+function canEditCatalog(user: ReturnType<typeof useCurrentUser>): boolean {
   if (!user) return false;
   if (user.roles.some((r) => r.name === 'SUPER_ADMIN')) return true;
   return user.permissions.some(
@@ -79,10 +79,18 @@ export function PasswordsScreen({
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const selectedPerson = people.find((p) => p.id === personId) ?? me;
-  // Las cuentas propias las asignó el jefe: la persona solo las lee. Un jefe
-  // gestiona las de sus subordinados (si además tiene el permiso de escritura).
   const isOwnView = selectedPerson?.isMe ?? true;
-  const canManage = !isOwnView && canWritePasswords(user);
+  // Cada persona gestiona las suyas y el jefe las de sus subordinados directos;
+  // el API valida el alcance en cada llamada.
+  const canManage = people.length > 0;
+  // Para el diálogo: la propia persona y sus subordinados (id y nombre; el área sale del equipo).
+  const dialogPeople: PasswordTeamEmployee[] = people.map((p) => ({
+    id: p.id,
+    fullName: p.fullName,
+    position: '',
+    area: team.find((t) => t.id === p.id)?.area ?? null,
+    corporateEmail: null,
+  }));
   const [applicationFilter, setApplicationFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
@@ -187,8 +195,6 @@ export function PasswordsScreen({
             <button
               type="button"
               onClick={() => setEditing('nueva')}
-              disabled={team.length === 0}
-              title={team.length === 0 ? 'No tienes colaboradores a cargo' : undefined}
               className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
             >
               <PlusIcon className="h-4 w-4" />
@@ -218,9 +224,12 @@ export function PasswordsScreen({
       )}
 
       {people.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
-          Tu usuario no está vinculado a un expediente de empleado, así que no hay información que mostrar.
-        </div>
+        apiUnavailable ? null : (
+          <div className="rounded-xl border border-dashed border-slate-200 px-6 py-12 text-center text-sm text-slate-500">
+            Tu usuario no está vinculado a un expediente de empleado. Pide a Recursos Humanos o a TI que lo
+            vinculen para poder gestionar tus contraseñas.
+          </div>
+        )
       ) : (
         <>
       <div className="space-y-1">
@@ -231,14 +240,6 @@ export function PasswordsScreen({
           onChange={selectPerson}
           disabled={loadingAccounts}
         />
-        {!isOwnView && !canManage && (
-          <p className="text-xs text-slate-500">Solo lectura.</p>
-        )}
-        {isOwnView && (
-          <p className="text-xs text-slate-500">
-            Cuentas que tu líder te asignó. Solo puedes consultarlas.
-          </p>
-        )}
       </div>
 
       {loadError && (
@@ -387,7 +388,9 @@ export function PasswordsScreen({
         <PasswordDialog
           account={editing === 'nueva' ? null : editing}
           applications={applications}
-          team={team}
+          team={dialogPeople}
+          defaultEmployeeId={selectedPerson?.id ?? ''}
+          canAddApplication={canEditCatalog(user)}
           onClose={() => setEditing(null)}
           onSaved={(text) => {
             setEditing(null);

@@ -1,59 +1,59 @@
-# Spec — Herramientas › Gestión de Contraseñas (TIC-RE-17): visible para todos, alcance por jerarquía, sin exportar
+# Spec — Herramientas › Gestión de Contraseñas (TIC-RE-17): visible para todos, cada quien gestiona lo suyo
 
 **Módulo:** Herramientas › Gestión de Contraseñas (`/herramientas/passwords`)
 **Autor:** Leonardo Cancino (Databeans)
-**Fecha:** 2026-10-15
+**Fecha:** 2026-10-15 (revisada el mismo día)
 **Estado:** En implementación
 
 ## 1. Qué existía
 
-- Es una bóveda **administrada por el líder** (migración `…027`): el líder registra las cuentas (aplicación, usuario, contraseña cifrada) de sus **subordinados directos**; solo él crea, edita, revoca y revela la contraseña (tope de 10 por hora, bitácora en `passwords.reveal_log` y log de seguridad).
-- La persona dueña de la cuenta no veía nada: `list` filtraba por `employee.direct_report_to_id = yo`.
-- La opción del menú exigía ser jefe **y** el permiso `herramientas.passwords.read` (sembrado solo para SUPER_ADMIN y DIRECTOR).
-- "Exportar Excel" era solo cliente (`exportExcel` en `passwords-screen.tsx`, librería `xlsx`); no hay endpoint. Ningún otro módulo lo usa.
-- La jerarquía ya vive en el propio servicio (`teamQuery`: `direct_report_to_id`, activos, sin auto-referencia); Vacaciones usa el mismo campo.
+- Bóveda **administrada por el líder** (migración `…027`): el líder registraba las cuentas (aplicación, usuario, contraseña cifrada) de sus subordinados directos; solo él creaba, editaba, revocaba y revelaba (tope de 10 por hora, bitácora en `passwords.reveal_log` y log de seguridad).
+- La opción del menú exigía ser jefe **y** el permiso `herramientas.passwords.read` (solo SUPER_ADMIN y DIRECTOR).
+- "Exportar Excel" era solo cliente (sin endpoint); ya se eliminó.
+- Primera revisión de esta spec (commits `3a99a21`, `a72c502`): leer y revelar pasaron a alcance por servicio (propia + subordinados directos activos), pero crear, editar y revocar seguían siendo solo del jefe.
 
-## 2. Decisiones (confirmadas con el usuario)
+## 2. Decisiones
 
 | # | Decisión |
 |---|---|
-| D1 | **El jefe sigue gestionando** las cuentas de sus subordinados directos (crear, editar, revocar, revelar). La persona **lee las suyas** (las que su jefe le asignó) y puede revelarlas con el mismo tope y bitácora; sin botones de escritura. |
-| D2 | Alcance: **propia + subordinados directos activos** (un nivel). Pares, indirectos e inactivos: 403. |
-| D3 | Se quita el permiso de `GET /passwords` y `GET /passwords/:id/reveal`; el alcance lo fija el servicio. Los endpoints de escritura conservan `herramientas.passwords.write`. Sin migración. |
-| D4 | Se elimina "Exportar Excel" (botón, función y la importación de `xlsx` de esta pantalla). La librería `xlsx` se conserva: otras pantallas la usan. |
-| D5 | Ver una contraseña: la propia persona, su jefe actual (subordinado directo **activo**) o SUPER_ADMIN. Se retira el acceso del "líder que la asignó" cuando ya no es su jefe. |
+| D1 | **Cada persona gestiona sus propias cuentas** (ver, crear, editar, revocar, revelar) y **el jefe, además, las de sus subordinados directos activos**. |
+| D2 | Alcance en el API, nunca por el cliente: el titular de la cuenta es el propio usuario (por su expediente) o un subordinado directo activo; cualquier otra persona (par, indirecto, inactivo, ajeno) recibe **403 genérico** que no revela si existe. |
+| D3 | Los endpoints de cuentas (`GET`, `POST`, `PATCH`, `DELETE`, `reveal`) dejan de exigir `herramientas.passwords.read/write`. Solo el catálogo de aplicaciones conserva `write`. El permiso **no se borra** de la BD ni de su migración; solo deja de usarse en las cuentas (decidir con Paulo si se retira). |
+| D4 | **Sin atajo por rol:** SUPER_ADMIN y DIRECTOR no ganan acceso a cuentas ajenas. Se retira el atajo de SUPER_ADMIN que existía en ver/revelar/editar/revocar y el del "líder que la asignó" cuando ya no es jefe. |
+| D5 | Un usuario sin expediente de empleado ligado ve un estado vacío (lectura) y recibe 403 al escribir. |
+| D6 | Se conservan: tope de revelado (10 por hora, el mismo para propias y ajenas), bitácora de cada revelado con actor y titular, cifrado actual y que nunca se registre una contraseña. |
+| D7 | En las cuentas propias, `manager_id` (quien la asigna) es la propia persona; los avisos de vencimiento le llegan a ella una sola vez. |
 
 ## 3. Matriz de acceso
 
-| Quien llama | Lista / revela sus propias cuentas | Lista / revela las de un subordinado directo activo | Pares, indirectos, inactivos u otros | Crear / editar / revocar |
+| Endpoint | Propia persona | Jefe sobre subordinado directo activo | Par, indirecto, inactivo o ajeno | Sin expediente |
 |---|---|---|---|---|
-| Colaborador | Sí (solo lectura) | — | 403 | No |
-| Jefe | Sí (solo lectura) | Sí | 403 | Sí, sobre sus subordinados, con `write` |
-| SUPER_ADMIN | Sí | Revelar sí (sin cambio); listar solo su alcance | — | Sin cambio |
-| Sin registro de empleado | `[]` (estado vacío) | `[]` | — | 403 (sin cambio) |
+| `GET /passwords` | Sus cuentas | Las del subordinado (`?employeeId=`) | 403 | `[]` |
+| `GET /passwords/visible-people` | Ella misma (`isMe`) | Ella + sus subordinados | — | `[]` |
+| `GET /passwords/:id/reveal` | Sí | Sí | 403 | 403 |
+| `POST /passwords` | Sí (a su nombre) | Sí (a nombre del subordinado) | 403 | 403 |
+| `PATCH /passwords/:id` | Sí | Sí | 403 | 403 |
+| `DELETE /passwords/:id` (revocar) | Sí | Sí | 403 | 403 |
+| Catálogo de aplicaciones (crear/editar/desactivar) | `herramientas.passwords.write` | ídem | ídem | ídem |
 
 ## 4. Contrato de API
 
-- `GET /passwords?employeeId=` (sin permiso): por defecto la propia persona; con `employeeId` solo si es ella misma o un subordinado directo activo, si no **403** genérico ("No tienes acceso a la información de esta persona.").
-- `GET /passwords/visible-people` (nuevo): `[{ id, fullName, isMe }]` con la propia persona y sus subordinados directos activos. Nada más.
-- `GET /passwords/:id/reveal` (sin permiso): según D5.
-- Sin cambios: `team-employees`, `is-manager`, `applications`, escritura.
+Sin cambios de forma. Antes: crear/editar/revocar exigían `herramientas.passwords.write` y solo valían sobre subordinados directos; ver/revelar según la revisión previa. Después: ninguno exige permiso y todos valen para el titular propio o un subordinado directo activo (D2).
 
 ## 5. Criterios de aceptación
 
-1. Colaborador y jefe ven "Gestión de Contraseñas" en Herramientas.
-2. Un colaborador solo obtiene su información; pedir la de otra persona devuelve 403 aunque el id se mande a mano.
-3. Un jefe ve la suya y la de sus subordinados directos activos, y no a pares, indirectos ni inactivos.
-4. Selector con búsqueda; por defecto "Yo"; sin subordinados solo el nombre.
-5. En "Yo" la pantalla es de solo lectura; en un subordinado conserva las acciones del jefe.
-6. No existe "Exportar Excel".
-7. Vacaciones y otros módulos igual; `tsc`, pruebas y build pasan.
+1. Con el usuario ligado a un expediente la pantalla no muestra "no vinculado" y permite crear, editar, revocar y revelar las cuentas propias.
+2. Un subordinado directo activo aparece en el selector y se gestionan sus cuentas; un par o ajeno no aparece y su id a mano devuelve 403.
+3. Un usuario sin subordinados ve solo su nombre, sin lista, y gestiona lo propio.
+4. Un usuario sin expediente ve el estado vacío con el texto que dice qué hacer y no puede escribir (403).
+5. Tope de revelado, bitácora (actor y titular) y cifrado funcionan igual; no se registra ninguna contraseña.
+6. No existe "Exportar Excel"; Vacaciones y otros módulos igual; `tsc`, pruebas y build pasan.
 
 ## 6. Archivos a tocar
 
-Backend: `passwords.controller.ts`, `passwords.service.ts`, `dto/password.dto.ts` (sin cambios de forma), `passwords.service.spec.ts` (nuevo).
-Frontend: `herramientas/passwords/page.tsx`, `passwords-screen.tsx`, `person-select.tsx` (nuevo), `components/sidebar.tsx`, `lib/api.ts`, proxy `api/passwords/visible-people/route.ts`.
+Backend: `passwords.controller.ts`, `passwords.service.ts`, `passwords.service.spec.ts`.
+Frontend: `herramientas/passwords/page.tsx`, `passwords-screen.tsx`, `password-dialog.tsx`, `person-select.tsx`.
 
 ## 7. Fuera de alcance
 
-Cambiar cómo se guardan o cifran las contraseñas, jerarquía de varios niveles, exportaciones, vistas masivas, cambios en Vacaciones.
+Cambiar cómo se guardan o cifran las contraseñas, jerarquía de varios niveles, acceso por rol a datos de otras personas, exportaciones, cambios en Vacaciones.
