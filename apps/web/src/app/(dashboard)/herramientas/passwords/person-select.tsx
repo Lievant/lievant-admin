@@ -13,7 +13,7 @@ function normalize(text: string): string {
 }
 
 function labelOf(person: PasswordVisiblePerson): string {
-  return person.isMe ? `Yo (${person.fullName})` : person.fullName;
+  return person.isMe ? `${person.fullName} (Yo)` : person.fullName;
 }
 
 /**

@@ -1,13 +1,14 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import type { AccountPasswordItem, PasswordApplication, PasswordTeamEmployee } from '@/lib/api';
+import type { AccountPasswordItem, PasswordApplication, PasswordVisiblePerson } from '@/lib/api';
 import { AlertIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon } from '@/components/icons';
 import {
   createAccountPasswordAction,
   createPasswordApplicationAction,
   updateAccountPasswordAction,
 } from './actions';
+import { PersonSelect } from './person-select';
 import { generatePassword, isValidEmail, passwordStrength, todayIso, type PasswordStrength } from './utils';
 
 const STRENGTH_META: Record<PasswordStrength, { label: string; bar: string; text: string; width: string }> = {
@@ -24,9 +25,9 @@ interface PasswordDialogProps {
   account: AccountPasswordItem | null;
   applications: PasswordApplication[];
   /** La propia persona y sus subordinados directos activos. */
-  team: PasswordTeamEmployee[];
-  /** Persona preseleccionada al crear (la que se está viendo). */
-  defaultEmployeeId?: string;
+  people: PasswordVisiblePerson[];
+  /** Titular preseleccionado al crear: la persona elegida en el selector de la pantalla. */
+  defaultEmployeeId: string;
   /** Agregar aplicaciones al catálogo exige el permiso de escritura del catálogo. */
   canAddApplication?: boolean;
   onClose: () => void;
@@ -36,8 +37,8 @@ interface PasswordDialogProps {
 export function PasswordDialog({
   account,
   applications,
-  team,
-  defaultEmployeeId = '',
+  people,
+  defaultEmployeeId,
   canAddApplication = false,
   onClose,
   onSaved,
@@ -55,15 +56,12 @@ export function PasswordDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Al editar, el colaborador y la aplicación actuales pueden ya no estar en
-  // las listas (cambió de jefe, app desactivada); se agregan para no perderlos.
-  const teamOptions = useMemo(() => {
-    if (!account || team.some((e) => e.id === account.employee.id)) return team;
-    return [
-      ...team,
-      { id: account.employee.id, fullName: account.employee.fullName, position: account.employee.position, area: account.employee.area, corporateEmail: null },
-    ];
-  }, [team, account]);
+  // Solo hay que elegir titular al crear y si hay más de una persona a la vista
+  // (un jefe con subordinados). Sin subordinados la cuenta es de quien la crea; al
+  // editar, el titular no cambia.
+  const chooseOwner = !isEdit && people.length > 1;
+  // Al editar, la aplicación actual puede ya no estar en la lista (desactivada);
+  // se agrega para no perderla.
   const appOptions = useMemo(() => {
     if (!account || apps.some((a) => a.id === account.application.id)) return apps;
     return [
@@ -76,7 +74,7 @@ export function PasswordDialog({
 
   function handleSave() {
     if (!applicationId) return setError('Selecciona la aplicación.');
-    if (!employeeId) return setError('Selecciona al colaborador.');
+    if (!employeeId) return setError('No se pudo determinar de quién es la cuenta.');
     if (!isValidEmail(username)) return setError('El usuario debe ser un correo válido.');
     if (!isEdit && !password) return setError('Escribe o genera la contraseña.');
     if (expiryDate && expiryDate < assignedDate) {
@@ -86,7 +84,6 @@ export function PasswordDialog({
 
     const payload = {
       applicationId,
-      employeeId,
       username: username.trim(),
       assignedDate,
       expiryDate: expiryDate || null,
@@ -95,9 +92,10 @@ export function PasswordDialog({
     };
 
     startTransition(async () => {
+      // El titular solo viaja al crear; al editar no se cambia.
       const res = isEdit
         ? await updateAccountPasswordAction(account.id, payload)
-        : await createAccountPasswordAction(payload);
+        : await createAccountPasswordAction({ ...payload, employeeId });
       if (res.success) onSaved(isEdit ? 'Cuenta actualizada.' : 'Cuenta registrada.');
       else setError(res.error ?? 'No se pudo guardar la cuenta.');
     });
@@ -122,23 +120,16 @@ export function PasswordDialog({
             />
           </Section>
 
-          <Section title="Colaborador">
-            <select
-              aria-label="Colaborador"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className={`${fieldClass} bg-white`}
-            >
-              <option value="">Selecciona un colaborador…</option>
-              {teamOptions.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.fullName}
-                  {emp.area ? ` · ${emp.area}` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-400">Puedes elegirte a ti o a los colaboradores que te reportan directamente.</p>
-          </Section>
+          {chooseOwner && (
+            <Section title="Colaborador">
+              <PersonSelect people={people} value={employeeId} onChange={setEmployeeId} disabled={isPending} />
+            </Section>
+          )}
+          {isEdit && (
+            <p className="text-xs text-slate-500">
+              Titular de la cuenta: <span className="font-medium text-navy">{account.employee.fullName}</span>
+            </p>
+          )}
 
           <Section title="Credenciales">
             <div className="flex flex-col gap-1">
