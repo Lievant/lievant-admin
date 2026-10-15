@@ -3,6 +3,14 @@ import { ForbiddenException } from '@nestjs/common';
 import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
 import { PasswordsController } from './passwords.controller';
 import { PasswordsService } from './passwords.service';
+import { ArgumentMetadata, ValidationPipe } from '@nestjs/common';
+// Lógica pura del formulario "Nueva cuenta" (frontend): se prueba aquí con el API real.
+import {
+  buildAccountPayload,
+  resolveOwnerId,
+  validateAccountForm,
+} from '../../../../web/src/app/(dashboard)/herramientas/passwords/account-form';
+import { CreateAccountPasswordDto } from './dto/password.dto';
 
 // Todos los ids son uuid-like; la jerarquía de las pruebas:
 //   BOSS ── SUB1 (activo)
@@ -418,5 +426,100 @@ describe('PasswordsController (permisos y exportación)', () => {
   it('ya no existe un endpoint para exportar a Excel', () => {
     const methods = Object.getOwnPropertyNames(PasswordsController.prototype);
     expect(methods.filter((m) => /export|excel|xlsx/i.test(m))).toEqual([]);
+  });
+});
+
+describe('Formulario "Nueva cuenta" → API', () => {
+  const people = [
+    { id: BOSS, isMe: true },
+    { id: SUB1, isMe: false },
+  ];
+  const base = {
+    isEdit: false,
+    applicationId: '0db5a2f5-865b-47e5-a9b3-512efe50c627',
+    people,
+    username: 'cuenta@cliente.com',
+    password: 'Clave-de-prueba-1',
+    assignedDate: '2026-10-15',
+    expiryDate: '',
+    notes: '',
+  };
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  const meta: ArgumentMetadata = { type: 'body', metatype: CreateAccountPasswordDto };
+
+  // Los ids del servicio de prueba no son UUID; para el DTO se usan los reales de las pruebas.
+  const UUID_ME = 'e462ac26-5a51-41dc-b781-93cecef73e27';
+  const UUID_SUB = 'cb1ba3e6-c74b-4645-a2e9-637a86d294e5';
+
+  it('con "Yo" preseleccionado el formulario es válido y envía el titular propio', () => {
+    const form = { ...base, employeeId: BOSS };
+    expect(validateAccountForm(form)).toBeNull();
+    const payload = buildAccountPayload(form);
+    expect(payload.employeeId).toBe(BOSS);
+    expect(payload).toMatchObject({ expiryDate: null, notes: null, username: 'cuenta@cliente.com' });
+  });
+
+  it('el cuerpo del formulario (con expiryDate y notes en null) pasa la validación del API', async () => {
+    const form = { ...base, people: [{ id: UUID_ME, isMe: true }, { id: UUID_SUB, isMe: false }], employeeId: UUID_ME };
+    const body = buildAccountPayload(form);
+    await expect(pipe.transform(body, meta)).resolves.toBeDefined();
+  });
+
+  it('un titular vacío o desfasado se resuelve a la propia persona, no a un valor en blanco', () => {
+    for (const stale of ['', 'e-borrado', 'id-de-un-ajeno']) {
+      const form = { ...base, employeeId: stale };
+      expect(resolveOwnerId(people, stale)).toBe(BOSS);
+      expect(validateAccountForm(form)).toBeNull();
+      expect(buildAccountPayload(form).employeeId).toBe(BOSS);
+    }
+  });
+
+  it('para un subordinado envía el titular del subordinado', () => {
+    const payload = buildAccountPayload({ ...base, employeeId: SUB1 });
+    expect(payload.employeeId).toBe(SUB1);
+  });
+
+  it('nunca envía un titular que no esté entre las personas visibles', () => {
+    expect(buildAccountPayload({ ...base, employeeId: ALIEN }).employeeId).toBe(BOSS);
+  });
+
+  it('sin personas visibles (sin expediente) no se puede guardar y lo dice', () => {
+    expect(validateAccountForm({ ...base, people: [], employeeId: '' })).toBe(
+      'No se pudo determinar de quién es la cuenta.',
+    );
+  });
+
+  it('al editar no se pide ni se envía el titular', () => {
+    const form = { ...base, isEdit: true, people: [], employeeId: '', password: '' };
+    expect(validateAccountForm(form)).toBeNull();
+    expect(buildAccountPayload(form)).not.toHaveProperty('employeeId');
+    expect(buildAccountPayload(form)).not.toHaveProperty('password');
+  });
+
+  it.each([
+    [{ applicationId: '' }, 'Selecciona la aplicación.'],
+    [{ username: 'sin-arroba' }, 'El usuario debe ser un correo válido.'],
+    [{ password: '' }, 'Escribe o genera la contraseña.'],
+    [{ expiryDate: '2026-01-01' }, 'El vencimiento no puede ser anterior a la fecha de asignación.'],
+  ])('mensajes de validación: %p', (override, message) => {
+    expect(validateAccountForm({ ...base, employeeId: BOSS, ...override })).toBe(message);
+  });
+
+  it('end to end: el cuerpo del formulario con "Yo" crea la cuenta propia en el servicio', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(BOSS)] });
+    const body = buildAccountPayload({ ...base, employeeId: BOSS }) as any;
+    await expect(service.create(userOf('u-boss'), body)).resolves.toBeDefined();
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(BOSS); // titular: la propia persona
+    expect(insert.params[2]).toBe(BOSS); // quien la asigna
+  });
+
+  it('end to end: el cuerpo del formulario para un subordinado crea la cuenta del subordinado', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    const body = buildAccountPayload({ ...base, employeeId: SUB1 }) as any;
+    await expect(service.create(userOf('u-boss'), body)).resolves.toBeDefined();
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(SUB1);
+    expect(insert.params[2]).toBe(BOSS);
   });
 });
