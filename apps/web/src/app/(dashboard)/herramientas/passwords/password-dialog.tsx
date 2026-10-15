@@ -23,16 +23,29 @@ const labelClass = 'text-xs font-semibold uppercase tracking-wide text-slate-500
 interface PasswordDialogProps {
   account: AccountPasswordItem | null;
   applications: PasswordApplication[];
+  /** La propia persona y sus subordinados directos activos. */
   team: PasswordTeamEmployee[];
+  /** Persona preseleccionada al crear (la que se está viendo). */
+  defaultEmployeeId?: string;
+  /** Agregar aplicaciones al catálogo exige el permiso de escritura del catálogo. */
+  canAddApplication?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }
 
-export function PasswordDialog({ account, applications, team, onClose, onSaved }: PasswordDialogProps) {
+export function PasswordDialog({
+  account,
+  applications,
+  team,
+  defaultEmployeeId = '',
+  canAddApplication = false,
+  onClose,
+  onSaved,
+}: PasswordDialogProps) {
   const isEdit = account !== null;
   const [apps, setApps] = useState<PasswordApplication[]>(applications);
   const [applicationId, setApplicationId] = useState(account?.application.id ?? '');
-  const [employeeId, setEmployeeId] = useState(account?.employee.id ?? '');
+  const [employeeId, setEmployeeId] = useState(account?.employee.id ?? defaultEmployeeId);
   const [username, setUsername] = useState(account?.username ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -101,6 +114,7 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
               applications={appOptions}
               value={applicationId}
               onChange={setApplicationId}
+              canAdd={canAddApplication}
               onCreated={(app) => {
                 setApps((prev) => [...prev, app]);
                 setApplicationId(app.id);
@@ -123,7 +137,7 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
                 </option>
               ))}
             </select>
-            <p className="text-xs text-slate-400">Solo aparecen los colaboradores que te reportan directamente.</p>
+            <p className="text-xs text-slate-400">Puedes elegirte a ti o a los colaboradores que te reportan directamente.</p>
           </Section>
 
           <Section title="Credenciales">
@@ -279,11 +293,13 @@ function ApplicationCombobox({
   applications,
   value,
   onChange,
+  canAdd,
   onCreated,
 }: {
   applications: PasswordApplication[];
   value: string;
   onChange: (id: string) => void;
+  canAdd: boolean;
   onCreated: (app: PasswordApplication) => void;
 }) {
   const selected = applications.find((a) => a.id === value) ?? null;
@@ -390,7 +406,7 @@ function ApplicationCombobox({
             Cancelar
           </button>
         </div>
-      ) : (
+      ) : canAdd ? (
         <button
           type="button"
           onClick={() => {
@@ -402,7 +418,7 @@ function ApplicationCombobox({
           <PlusIcon className="h-3.5 w-3.5" />
           Agregar aplicación
         </button>
-      )}
+      ) : null}
       {addError && <p className="text-xs text-rose-600">{addError}</p>}
     </div>
   );
