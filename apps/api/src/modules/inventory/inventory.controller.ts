@@ -203,8 +203,8 @@ export class InventoryController {
 
   @Get('equipment')
   @RequirePermission('transformacion', 'inventario', 'read')
-  findAll(@Query() query: QueryEquipmentDto) {
-    return this.service.findAll(query);
+  findAll(@Query() query: QueryEquipmentDto, @CurrentUser() user: User) {
+    return this.service.findAll(query, user);
   }
 
   @Get('equipment/:id')
