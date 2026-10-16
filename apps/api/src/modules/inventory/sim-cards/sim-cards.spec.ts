@@ -252,11 +252,12 @@ interface Call {
   params: unknown[];
 }
 
-function setup(initial: Record<string, unknown> = {}, opts: { failInsertWith?: unknown; planSims?: number } = {}) {
+function setup(initial: Record<string, unknown> = {}, opts: { failInsertWith?: unknown; planSims?: number; dupRows?: unknown[] } = {}) {
   const state = { row: simRow(initial) as Record<string, any> };
   const calls: Call[] = [];
   const query = jest.fn(async (sql: string, params: unknown[] = []) => {
     calls.push({ sql, params });
+    if (/SELECT phone_number, iccid FROM inventory\.sim_cards/.test(sql)) return opts.dupRows ?? [];
     if (/nextval\('inventory\.sim_card_code_seq'\)/.test(sql)) return [{ n: '7' }];
     if (/FROM inventory\.sim_plans WHERE id/.test(sql) && /is_active/.test(sql)) {
       return [{ id: PLAN_ID, currency: 'USD', is_active: true }];
@@ -367,6 +368,22 @@ describe('SimCardsService · alta', () => {
     await expect(
       service.create({ phoneNumber: '4771234567', planId: PLAN_ID, iccid: '8952140000000000001' } as any, superAdmin),
     ).rejects.toThrow(new ConflictException('Ya existe una línea con ese ICCID.'));
+  });
+
+  it('un número repetido se detecta antes de pedir el código (sin huecos en la secuencia)', async () => {
+    const { service, calls } = setup({}, { dupRows: [{ phone_number: '4771234567', iccid: null }] });
+    await expect(service.create({ phoneNumber: '477 123 4567', planId: PLAN_ID } as any, superAdmin)).rejects.toThrow(
+      new ConflictException('Ya existe una línea con ese número.'),
+    );
+    expect(calls.some((c) => /sim_card_code_seq/.test(c.sql))).toBe(false);
+  });
+
+  it('un ICCID repetido también se detecta antes de pedir el código', async () => {
+    const { service, calls } = setup({}, { dupRows: [{ phone_number: '4770000000', iccid: '8952140000000000001' }] });
+    await expect(
+      service.create({ phoneNumber: '4771234567', planId: PLAN_ID, iccid: '8952140000000000001' } as any, superAdmin),
+    ).rejects.toThrow(new ConflictException('Ya existe una línea con ese ICCID.'));
+    expect(calls.some((c) => /sim_card_code_seq/.test(c.sql))).toBe(false);
   });
 
   it('un error de base que no es de unicidad se propaga tal cual', async () => {

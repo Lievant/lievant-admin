@@ -547,6 +547,19 @@ export class SimCardsService {
         if (dto.employeeId) await this.assertEmployee(m, dto.employeeId);
         if (dto.equipmentId) await this.assertEquipment(m, dto.equipmentId);
 
+        // Se revisan los duplicados antes de pedir el código: la secuencia no hace
+        // rollback, y cada intento repetido dejaría un hueco en SIM-001, SIM-002…
+        // Los índices únicos siguen siendo la defensa ante dos altas simultáneas.
+        const dups = (await m.query(
+          `SELECT phone_number, iccid FROM inventory.sim_cards
+           WHERE deleted_at IS NULL AND (phone_number = $1 OR ($2::text IS NOT NULL AND iccid = $2))`,
+          [phone, iccid],
+        )) as { phone_number: string; iccid: string | null }[];
+        if (dups.some((d) => d.phone_number === phone)) {
+          throw new ConflictException('Ya existe una línea con ese número.');
+        }
+        if (dups.length > 0) throw new ConflictException('Ya existe una línea con ese ICCID.');
+
         const seq = (await m.query(`SELECT nextval('inventory.sim_card_code_seq') AS n`)) as { n: string }[];
         const simCode = `SIM-${String(seq[0]?.n ?? '0').padStart(3, '0')}`;
         const assignedDate = dto.employeeId ? (dto.assignedDate ?? today) : null;
