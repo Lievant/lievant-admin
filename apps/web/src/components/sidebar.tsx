@@ -24,6 +24,7 @@ import {
   LogoutIcon,
   MegaphoneIcon,
   PeopleIcon,
+  PhoneIcon,
   PlaneIcon,
   ReportMoneyIcon,
   RobotIcon,
@@ -81,6 +82,7 @@ export function Sidebar({ user }: SidebarProps) {
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
+  const showSimCards = hasModule(user, 'transformacion', 'sim-cards', 'read');
   const showMedios = hasSection(user, 'medios');
   // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
@@ -357,6 +359,15 @@ export function Sidebar({ user }: SidebarProps) {
                   <IdCardIcon className="h-4 w-4" />
                   Colaboradores y Responsivas
                 </NavSubLink>
+                {showSimCards && (
+                  <NavSubLink
+                    href="/transformacion/sim-cards"
+                    active={pathname.startsWith('/transformacion/sim-cards')}
+                  >
+                    <PhoneIcon className="h-4 w-4" />
+                    Líneas Telefónicas
+                  </NavSubLink>
+                )}
                 <NavSubLink
                   href="/transformacion/tickets"
                   active={pathname.startsWith('/transformacion/tickets')}
