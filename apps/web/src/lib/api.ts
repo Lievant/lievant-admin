@@ -4948,3 +4948,120 @@ export function createPasswordApplication(payload: {
     body: JSON.stringify(payload),
   });
 }
+
+// ── Líneas telefónicas (SIMs) ────────────────────────────────────────────────
+
+export type SimStatus = 'activa' | 'suspendida' | 'cancelada';
+export type SimDeviceType = 'smartphone' | 'tablet' | 'modem' | 'otro';
+export type SimExpiryStatus = 'vigente' | 'por_vencer' | 'vencida' | 'sin_fecha';
+export type SimCurrency = 'MXN' | 'USD';
+
+export interface SimCard {
+  id: string;
+  simCode: string;
+  phoneNumber: string;
+  /** Solo viene si el usuario tiene `sim-cards.write`. */
+  iccid?: string | null;
+  plan: { id: string; name: string; monthlyCost: number; currency: SimCurrency };
+  provider: { id: string; name: string } | null;
+  employee: { id: string; fullName: string } | null;
+  equipment: { id: string; displayId: string; label: string } | null;
+  /** Costo propio de la línea; null = rige el del plan. */
+  ownMonthlyCost: number | null;
+  /** Costo que aplica (propio o del plan) y su moneda. */
+  monthlyCost: number;
+  currency: SimCurrency;
+  termMonths: number | null;
+  contractEndDate: string | null;
+  expiryStatus: SimExpiryStatus;
+  activationDate: string | null;
+  assignedDate: string | null;
+  status: SimStatus;
+  deviceType: SimDeviceType;
+  notes: string | null;
+  warnings: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SimCardHistoryEntry {
+  id: string;
+  simCardId: string;
+  simCode: string;
+  phoneNumber: string;
+  action: 'asignacion' | 'desasignacion';
+  employee: { id: string; fullName: string } | null;
+  equipment: { id: string; displayId: string } | null;
+  assignedDate: string | null;
+  returnedDate: string | null;
+  notes: string | null;
+  changedByName: string | null;
+  createdAt: string;
+}
+
+export interface SimCardDetail extends SimCard {
+  history: SimCardHistoryEntry[];
+}
+
+export interface SimCardPage {
+  data: SimCard[];
+  nextCursor: string | null;
+  total: number;
+}
+
+export interface SimCardStats {
+  active: number;
+  unassigned: number;
+  expiring: number;
+  expired: number;
+  monthlyCostMXN: number;
+  monthlyCostUSD: number;
+}
+
+export interface SimPlan {
+  id: string;
+  name: string;
+  vendor: { id: string; name: string | null };
+  monthlyCost: number;
+  currency: SimCurrency;
+  description: string | null;
+  isActive: boolean;
+  simCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ListSimCardsParams {
+  cursor?: string;
+  limit?: number;
+  search?: string;
+  status?: string;
+  planId?: string;
+  providerId?: string;
+  unassigned?: boolean;
+  assigned?: boolean;
+  expiry?: string;
+}
+
+export function listSimCards(params: ListSimCardsParams = {}): Promise<SimCardPage> {
+  const q = new URLSearchParams();
+  if (params.cursor) q.set('cursor', params.cursor);
+  if (params.limit) q.set('limit', String(params.limit));
+  if (params.search) q.set('search', params.search);
+  if (params.status) q.set('status', params.status);
+  if (params.planId) q.set('planId', params.planId);
+  if (params.providerId) q.set('providerId', params.providerId);
+  if (params.unassigned) q.set('unassigned', 'true');
+  if (params.assigned) q.set('assigned', 'true');
+  if (params.expiry) q.set('expiry', params.expiry);
+  const qs = q.toString();
+  return apiFetchWithRetry<SimCardPage>(`/sim-cards${qs ? `?${qs}` : ''}`);
+}
+
+export function getSimCardStats(): Promise<SimCardStats> {
+  return apiFetchWithRetry<SimCardStats>('/sim-cards/stats');
+}
+
+export function listSimPlans(): Promise<SimPlan[]> {
+  return apiFetchWithRetry<SimPlan[]>('/sim-cards/plans');
+}

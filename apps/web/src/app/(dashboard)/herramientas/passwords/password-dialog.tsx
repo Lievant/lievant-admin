@@ -8,6 +8,7 @@ import {
   createPasswordApplicationAction,
   updateAccountPasswordAction,
 } from './actions';
+import { buildAccountPayload, resolveOwnerId, validateAccountForm } from './account-form';
 import { PersonSelect } from './person-select';
 import { generatePassword, isValidEmail, passwordStrength, todayIso, type PasswordStrength } from './utils';
 
@@ -73,29 +74,18 @@ export function PasswordDialog({
   const strength = password ? passwordStrength(password) : null;
 
   function handleSave() {
-    if (!applicationId) return setError('Selecciona la aplicación.');
-    if (!employeeId) return setError('No se pudo determinar de quién es la cuenta.');
-    if (!isValidEmail(username)) return setError('El usuario debe ser un correo válido.');
-    if (!isEdit && !password) return setError('Escribe o genera la contraseña.');
-    if (expiryDate && expiryDate < assignedDate) {
-      return setError('El vencimiento no puede ser anterior a la fecha de asignación.');
-    }
+    const form = { isEdit, applicationId, employeeId, people, username, password, assignedDate, expiryDate, notes };
+    const problem = validateAccountForm(form);
+    if (problem) return setError(problem);
     setError(null);
 
-    const payload = {
-      applicationId,
-      username: username.trim(),
-      assignedDate,
-      expiryDate: expiryDate || null,
-      notes: notes.trim() || null,
-      ...(password ? { password } : {}),
-    };
+    const payload = buildAccountPayload(form);
 
     startTransition(async () => {
       // El titular solo viaja al crear; al editar no se cambia.
       const res = isEdit
         ? await updateAccountPasswordAction(account.id, payload)
-        : await createAccountPasswordAction({ ...payload, employeeId });
+        : await createAccountPasswordAction({ ...payload, employeeId: resolveOwnerId(people, employeeId) });
       if (res.success) onSaved(isEdit ? 'Cuenta actualizada.' : 'Cuenta registrada.');
       else setError(res.error ?? 'No se pudo guardar la cuenta.');
     });
@@ -122,7 +112,12 @@ export function PasswordDialog({
 
           {chooseOwner && (
             <Section title="Colaborador">
-              <PersonSelect people={people} value={employeeId} onChange={setEmployeeId} disabled={isPending} />
+              <PersonSelect
+                people={people}
+                value={resolveOwnerId(people, employeeId)}
+                onChange={setEmployeeId}
+                disabled={isPending}
+              />
             </Section>
           )}
           {isEdit && (
@@ -245,7 +240,11 @@ export function PasswordDialog({
           </Section>
         </div>
 
-        {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-3 text-xs font-medium text-rose-600">
+            {error}
+          </p>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
