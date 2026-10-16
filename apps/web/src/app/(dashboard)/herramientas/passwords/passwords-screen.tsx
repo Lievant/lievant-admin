@@ -10,7 +10,10 @@ import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
 import { StatCard } from '@/components/stat-card';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
+import { nextSortCycle, sortRows, type SortDir } from '@/lib/sort-rows';
 import { revokeAccountPasswordAction } from './actions';
+import { STATUS_LABEL, accountSortValue, type AccountSortKey, type DisplayStatus } from './account-sort';
 import { PasswordDialog } from './password-dialog';
 import { PersonSelect } from './person-select';
 import { daysUntil, formatDate } from './utils';
@@ -20,14 +23,13 @@ const REVEAL_SECONDS = 30;
 const MASK = '••••••••';
 const SOON_DAYS = 30;
 
-type DisplayStatus = 'activa' | 'por_vencer' | 'vencida' | 'revocada';
 type StatusFilter = 'todas' | DisplayStatus;
 
 const STATUS_META: Record<DisplayStatus, { label: string; className: string }> = {
-  activa: { label: 'Activa', className: 'bg-emerald-100 text-emerald-700' },
-  por_vencer: { label: 'Por vencer', className: 'bg-amber-100 text-amber-700' },
-  vencida: { label: 'Vencida', className: 'bg-rose-100 text-rose-700' },
-  revocada: { label: 'Revocada', className: 'bg-slate-100 text-slate-500' },
+  activa: { label: STATUS_LABEL.activa, className: 'bg-emerald-100 text-emerald-700' },
+  por_vencer: { label: STATUS_LABEL.por_vencer, className: 'bg-amber-100 text-amber-700' },
+  vencida: { label: STATUS_LABEL.vencida, className: 'bg-rose-100 text-rose-700' },
+  revocada: { label: STATUS_LABEL.revocada, className: 'bg-slate-100 text-slate-500' },
 };
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -82,6 +84,8 @@ export function PasswordsScreen({
   const canManage = people.length > 0;
   const [applicationFilter, setApplicationFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
+  // Un clic ordena ascendente, otro descendente y otro quita el orden. No se guarda entre visitas.
+  const [sort, setSort] = useState<{ key: AccountSortKey; dir: SortDir } | null>(null);
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
   const [revoking, setRevoking] = useState<AccountPasswordItem | null>(null);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
@@ -144,6 +148,13 @@ export function PasswordsScreen({
       ),
     [withStatus, applicationFilter, statusFilter],
   );
+
+  // El orden se aplica sobre lo ya filtrado (no hay paginación: es todo el conjunto).
+  const sorted = useMemo(
+    () => (sort ? sortRows(filtered, (r) => accountSortValue(r, sort.key), sort.dir) : filtered),
+    [filtered, sort],
+  );
+  const onSort = (key: AccountSortKey) => setSort((current) => nextSortCycle(current, key));
 
   // El filtro de aplicación ofrece también las desactivadas que siguen en uso.
   const applicationOptions = useMemo(() => {
@@ -289,20 +300,20 @@ export function PasswordsScreen({
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 text-left">No.</th>
-                  <th className="px-4 py-3 text-left">Aplicación</th>
-                  <th className="px-4 py-3 text-left">Colaborador</th>
-                  <th className="px-4 py-3 text-left">Área</th>
-                  <th className="px-4 py-3 text-left">Usuario / Correo</th>
+                  <SortColumnHeader label="No." column="recordNumber" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Aplicación" column="application" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Colaborador" column="employee" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Área" column="area" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Usuario / Correo" column="username" sort={sort} onSort={onSort} />
                   <th className="px-4 py-3 text-left">Contraseña</th>
-                  <th className="px-4 py-3 text-left">Asignación</th>
-                  <th className="px-4 py-3 text-left">Vencimiento</th>
-                  <th className="px-4 py-3 text-left">Estado</th>
+                  <SortColumnHeader label="Asignación" column="assignedDate" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Vencimiento" column="expiryDate" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Estado" column="status" sort={sort} onSort={onSort} />
                   {canManage && <th className="px-4 py-3 text-right">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(({ account: a, status }) => (
+                {sorted.map(({ account: a, status }) => (
                   <tr key={a.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-slate-500">{a.recordNumber}</td>
                     <td className="px-4 py-3">
