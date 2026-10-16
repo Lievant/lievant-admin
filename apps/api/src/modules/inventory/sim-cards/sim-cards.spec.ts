@@ -617,6 +617,15 @@ describe('SimCardsService · lectura, ICCID y permisos', () => {
     expect(q.sql).not.toContain('José');
   });
 
+  it('los filtros asignada / sin asignar se traducen a employee_id', async () => {
+    const { service, calls } = setup();
+    await service.list({ assigned: true }, reader);
+    await service.list({ unassigned: true }, reader);
+    const queries = calls.filter((c) => /SELECT s\.id/.test(c.sql));
+    expect(queries[0]!.sql).toContain('s.employee_id IS NOT NULL');
+    expect(queries[1]!.sql).toContain('s.employee_id IS NULL');
+  });
+
   it('un cursor mal formado se rechaza', async () => {
     const { service } = setup();
     await expect(service.list({ cursor: 'basura' }, reader)).rejects.toThrow(BadRequestException);

@@ -346,6 +346,7 @@ export class SimCardsService {
     if (query.planId) where.push(`s.plan_id = ${add(query.planId)}`);
     if (query.providerId) where.push(`p.vendor_id = ${add(query.providerId)}`);
     if (query.unassigned) where.push('s.employee_id IS NULL');
+    if (query.assigned) where.push('s.employee_id IS NOT NULL');
     if (query.expiry) {
       const t = add(today);
       where.push(EXPIRING_CLAUSE);

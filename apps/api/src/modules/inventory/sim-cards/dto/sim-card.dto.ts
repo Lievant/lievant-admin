@@ -305,6 +305,12 @@ export class QuerySimCardsDto {
   @IsBoolean()
   unassigned?: boolean;
 
+  /** Solo las que ya tienen persona asignada (lo opuesto a `unassigned`). */
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === 'true')
+  @IsBoolean()
+  assigned?: boolean;
+
   @IsOptional()
   @IsIn(SIM_EXPIRY_FILTERS)
   expiry?: (typeof SIM_EXPIRY_FILTERS)[number];
