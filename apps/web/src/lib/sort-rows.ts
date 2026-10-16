@@ -43,3 +43,16 @@ export function nextSort<K extends string>(
 ): { key: K; dir: SortDir } {
   return current?.key === key ? { key, dir: current.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' };
 }
+
+/**
+ * Ciclo de tres estados, como una tabla de Power BI: la columna nueva arranca
+ * ascendente; la misma pasa a descendente y luego a sin orden (null, el orden
+ * original). Es aparte de `nextSort` para no cambiar las tablas que ya lo usan.
+ */
+export function nextSortCycle<K extends string>(
+  current: { key: K; dir: SortDir } | null,
+  key: K,
+): { key: K; dir: SortDir } | null {
+  if (current?.key !== key) return { key, dir: 'asc' };
+  return current.dir === 'asc' ? { key, dir: 'desc' } : null;
+}
