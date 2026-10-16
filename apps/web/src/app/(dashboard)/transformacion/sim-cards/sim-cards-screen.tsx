@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
+import { nextSort, sortRows, type SortDir } from '@/lib/sort-rows';
 import type { ErrorKind, SimCard, SimCardPage, SimCardStats, SimPlan } from '@/lib/api';
 import {
   SIM_EXPIRY_LABEL,
@@ -22,6 +24,7 @@ import { SimAssignDialog } from './sim-assign-dialog';
 import { SimDetailDrawer } from './sim-detail-drawer';
 import { SimFormDialog } from './sim-form-dialog';
 import { SimPlansDialog } from './sim-plans-dialog';
+import { simSortValue, type SimSortKey } from './sim-sort';
 import { useSimPermissions } from './use-sim-permissions';
 
 interface Filters {
@@ -108,6 +111,9 @@ export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor,
   const [removeTarget, setRemoveTarget] = useState<SimCard | null>(null);
   const [removing, setRemoving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Mismo ciclo que Inventario Tecnológico (ascendente ↔ descendente) y, como allí, ordena
+  // las filas de la página cargada. Se conserva al cambiar un filtro.
+  const [sort, setSort] = useState<{ key: SimSortKey; dir: SortDir } | null>(null);
 
   useEffect(() => {
     setSearch(filters.search);
@@ -177,6 +183,11 @@ export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor,
   }
 
   const isFirstPage = !cursor;
+  const rows = useMemo(
+    () => (sort ? sortRows(page.data, (sim) => simSortValue(sim, sort.key), sort.dir) : page.data),
+    [page.data, sort],
+  );
+  const onSort = (key: SimSortKey) => setSort((current) => nextSort(current, key));
   const expiringFilterOn = filters.expiry === 'por_vencer';
 
   async function confirmRemove() {
@@ -337,16 +348,16 @@ export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor,
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <th className="px-4 py-3">ID Línea</th>
-                <th className="px-4 py-3">Proveedor</th>
-                <th className="px-4 py-3">Número</th>
-                <th className="px-4 py-3">Plan</th>
-                <th className="px-4 py-3">Valor del plan</th>
-                <th className="px-4 py-3">Plazo</th>
-                <th className="px-4 py-3">Vencimiento</th>
-                <th className="px-4 py-3">Asignado a</th>
-                <th className="px-4 py-3">Fecha de asignación</th>
-                <th className="px-4 py-3">Estado</th>
+                <SortColumnHeader label="ID Línea" column="simCode" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Proveedor" column="provider" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Número" column="phoneNumber" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Plan" column="plan" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Valor del plan" column="planValue" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Plazo" column="termMonths" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Vencimiento" column="contractEndDate" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Asignado a" column="employee" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Fecha de asignación" column="assignedDate" sort={sort} onSort={onSort} />
+                <SortColumnHeader label="Estado" column="status" sort={sort} onSort={onSort} />
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
@@ -358,7 +369,7 @@ export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor,
                   </td>
                 </tr>
               ) : (
-                page.data.map((sim) => (
+                rows.map((sim) => (
                   <tr key={sim.id} className="hover:bg-slate-50">
                     <td className="px-4 py-3">
                       <button
