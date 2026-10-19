@@ -13,6 +13,15 @@ export class CreateTicketDto {
   @IsString()
   behalfReason?: string;
 
+  /**
+   * Expediente (employees.employee_records.id) de la persona en cuyo nombre se
+   * abre el ticket. Solo lo acepta el personal de TD; esa persona queda como
+   * solicitante.
+   */
+  @IsOptional()
+  @IsUUID()
+  onBehalfOfEmployeeId?: string;
+
   @IsString()
   @MaxLength(50)
   category!: string;

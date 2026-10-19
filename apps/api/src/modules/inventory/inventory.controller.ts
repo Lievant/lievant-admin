@@ -24,6 +24,8 @@ import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { userHasPermission } from '../auth/permissions.util';
+import { isTdUser } from '../helpdesk/td-user.util';
 import { AssignEmployeeDto } from './dto/assign-employee.dto';
 import { CreateEquipmentDto } from './dto/create-equipment.dto';
 import { CreateMaintenanceDto } from './dto/create-maintenance.dto';
@@ -176,13 +178,24 @@ export class InventoryController {
     @Query('q') q?: string,
     @Query('assignedTo') assignedTo?: string,
   ) {
+    // Los equipos de OTRA persona solo los puede consultar quien tiene permiso: TD
+    // (para abrir tickets en nombre de alguien) o quien gestiona inventario o
+    // líneas telefónicas (el modal de asignar línea). Para los demás, aunque
+    // manipulen la petición, se devuelven solo los suyos.
+    const asksForOthers = assignedTo !== undefined && assignedTo !== 'me';
+    const mayAskForOthers =
+      isTdUser(user) ||
+      userHasPermission(user, 'transformacion', 'inventario', 'read') ||
+      userHasPermission(user, 'transformacion', 'sim-cards', 'write');
+    const effective = asksForOthers && !mayAskForOthers ? 'me' : assignedTo;
+
     // 'me' se resuelve contra el expediente del usuario en sesión, para que el
     // frontend no tenga que conocer su employeeId.
     const employeeId =
-      assignedTo === 'me' ? await this.service.findEmployeeIdByEmail(user.email) : assignedTo;
+      effective === 'me' ? await this.service.findEmployeeIdByEmail(user.email) : effective;
 
     // Pidió sus equipos y no tiene expediente: mejor vacío que la lista de todos.
-    if (assignedTo === 'me' && !employeeId) return [];
+    if (effective === 'me' && !employeeId) return [];
 
     return this.service.searchEquipment(q, employeeId ?? undefined);
   }
