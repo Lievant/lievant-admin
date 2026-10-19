@@ -29,31 +29,38 @@ function setup() {
 const sqls = (w: { sql: string }[]) => w.map((x) => x.sql);
 
 describe('Tickets · filtro por asignado', () => {
-  it('por persona: t.assigned_to = :assignedTo con el UUID', async () => {
+  it('por persona: t.assignedTo = :assignedTo con el UUID', async () => {
     const { service, wheres } = setup();
     await service.findAll({ assignedTo: ASSIGNEE }, true, USER);
-    const w = wheres.find((x) => x.sql.includes('t.assigned_to ='));
+    const w = wheres.find((x) => x.sql.includes('t.assignedTo ='));
     expect(w?.params).toEqual({ assignedTo: ASSIGNEE });
   });
 
-  it('"sin_asignar": t.assigned_to IS NULL', async () => {
+  it('"sin_asignar": t.assignedTo IS NULL', async () => {
     const { service, wheres } = setup();
     await service.findAll({ assignedTo: 'sin_asignar' }, true, USER);
-    expect(sqls(wheres)).toContain('t.assigned_to IS NULL');
-    expect(sqls(wheres).some((s) => s.includes('t.assigned_to ='))).toBe(false);
+    expect(sqls(wheres)).toContain('t.assignedTo IS NULL');
+    expect(sqls(wheres).some((s) => s.includes('t.assignedTo ='))).toBe(false);
+  });
+
+  it('usa la propiedad de la entidad: la columna real es assignee_id y assigned_to no existe', async () => {
+    const { service, wheres } = setup();
+    await service.findAll({ assignedTo: ASSIGNEE }, true, USER);
+    await service.findAll({ assignedTo: 'sin_asignar' }, true, USER);
+    expect(sqls(wheres).some((s) => /assigned_to/.test(s))).toBe(false);
   });
 
   it('sin filtro no agrega ninguna condición de asignado', async () => {
     const { service, wheres } = setup();
     await service.findAll({}, true, USER);
-    expect(sqls(wheres).some((s) => s.includes('assigned_to'))).toBe(false);
+    expect(sqls(wheres).some((s) => s.includes('assignedTo'))).toBe(false);
   });
 
   it('se combina con AND con los demás filtros', async () => {
     const { service, wheres } = setup();
     await service.findAll({ assignedTo: ASSIGNEE, status: 'abierto', priority: 'P1', category: 'equipos', search: 'laptop' }, true, USER);
     const all = sqls(wheres).join(' | ');
-    for (const part of ['t.status =', 't.priority =', 't.category =', 't.assigned_to =', 't.display_id ILIKE']) {
+    for (const part of ['t.status =', 't.priority =', 't.category =', 't.assignedTo =', 't.display_id ILIKE']) {
       expect(all).toContain(part);
     }
   });
@@ -62,7 +69,7 @@ describe('Tickets · filtro por asignado', () => {
     const { service, wheres } = setup();
     await service.findAll({ assignedTo: 'sin_asignar' }, false, USER);
     expect(wheres.find((x) => x.sql.includes('t.requester_id'))?.params).toEqual({ uid: USER });
-    expect(sqls(wheres)).toContain('t.assigned_to IS NULL');
+    expect(sqls(wheres)).toContain('t.assignedTo IS NULL');
   });
 
   it('el filtro por SLA del API sigue funcionando aunque la pantalla ya no lo envíe', async () => {

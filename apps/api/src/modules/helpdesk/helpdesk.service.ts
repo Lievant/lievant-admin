@@ -76,9 +76,10 @@ export class HelpdeskService {
     if (query.priority) qb.andWhere('t.priority = :priority', { priority: query.priority });
     if (query.category) qb.andWhere('t.category = :category', { category: query.category });
     if (query.area) qb.andWhere('t.requester_area ILIKE :area', { area: `%${query.area}%` });
-    // Se combina con AND con la restricción por solicitante de arriba: no amplía lo que el usuario ve.
-    if (query.assignedTo === UNASSIGNED_FILTER) qb.andWhere('t.assigned_to IS NULL');
-    else if (query.assignedTo) qb.andWhere('t.assigned_to = :assignedTo', { assignedTo: query.assignedTo });
+    // Se usa la propiedad de la entidad (t.assignedTo), no el nombre de la columna: la columna real es
+    // assignee_id y `t.assigned_to` no existe. Se combina con AND con la restricción por solicitante.
+    if (query.assignedTo === UNASSIGNED_FILTER) qb.andWhere('t.assignedTo IS NULL');
+    else if (query.assignedTo) qb.andWhere('t.assignedTo = :assignedTo', { assignedTo: query.assignedTo });
     if (query.search) {
       qb.andWhere(
         '(t.display_id ILIKE :s OR t.requester_name ILIKE :s OR t.description ILIKE :s)',
