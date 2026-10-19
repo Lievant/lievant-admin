@@ -8,7 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
-import { QueryTicketsDto } from './dto/query-tickets.dto';
+import { QueryTicketsDto, UNASSIGNED_FILTER } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { UpsertCategoryDto, UpsertSubcategoryDto } from './dto/helpdesk-catalog.dto';
@@ -76,7 +76,9 @@ export class HelpdeskService {
     if (query.priority) qb.andWhere('t.priority = :priority', { priority: query.priority });
     if (query.category) qb.andWhere('t.category = :category', { category: query.category });
     if (query.area) qb.andWhere('t.requester_area ILIKE :area', { area: `%${query.area}%` });
-    if (query.assignedTo) qb.andWhere('t.assigned_to = :assignedTo', { assignedTo: query.assignedTo });
+    // Se combina con AND con la restricción por solicitante de arriba: no amplía lo que el usuario ve.
+    if (query.assignedTo === UNASSIGNED_FILTER) qb.andWhere('t.assigned_to IS NULL');
+    else if (query.assignedTo) qb.andWhere('t.assigned_to = :assignedTo', { assignedTo: query.assignedTo });
     if (query.search) {
       qb.andWhere(
         '(t.display_id ILIKE :s OR t.requester_name ILIKE :s OR t.description ILIKE :s)',

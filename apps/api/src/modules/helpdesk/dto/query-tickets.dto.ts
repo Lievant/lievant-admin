@@ -1,5 +1,9 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+
+/** Valor reservado de `assignedTo` para los tickets sin persona asignada. */
+export const UNASSIGNED_FILTER = 'sin_asignar';
+const UUID_OR_UNASSIGNED = /^(sin_asignar|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export class QueryTicketsDto {
   @IsOptional()
@@ -29,8 +33,9 @@ export class QueryTicketsDto {
   @IsString()
   area?: string;
 
+  /** UUID de la persona asignada (helpdesk.ticket_assignees) o `sin_asignar`. */
   @IsOptional()
-  @IsString()
+  @Matches(UUID_OR_UNASSIGNED, { message: 'assignedTo debe ser un UUID o sin_asignar' })
   assignedTo?: string;
 
   @IsOptional()
