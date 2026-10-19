@@ -32,7 +32,12 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   const priority = asString(sp.priority);
   const category = asString(sp.category);
   const search = asString(sp.search);
-  const slaStatus = asString(sp.slaStatus) as 'ok' | 'warning' | 'overdue' | undefined;
+  // UUID de la persona asignada o 'sin_asignar'; cualquier otro valor se ignora.
+  const rawAssigned = asString(sp.assignedTo);
+  const assignedTo =
+    rawAssigned && /^(sin_asignar|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(rawAssigned)
+      ? rawAssigned
+      : undefined;
   const cursor = asString(sp.cursor);
   const cursors = asString(sp.cursors);
 
@@ -41,7 +46,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   if (priority) query.priority = priority;
   if (category) query.category = category;
   if (search) query.search = search;
-  if (slaStatus) query.slaStatus = slaStatus;
+  if (assignedTo) query.assignedTo = assignedTo;
   if (cursor) query.cursor = cursor;
 
   const [ticketPageResult, categoriesResult, currentUserResult] = await Promise.all([
@@ -62,7 +67,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
         page={ticketPageResult.data ?? { data: [], nextCursor: null, total: 0 }}
         categories={categoriesResult.data ?? []}
         isTd={isTd}
-        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', slaStatus: slaStatus ?? '' }}
+        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', assignedTo: assignedTo ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
         errorKind={ticketPageResult.errorKind}

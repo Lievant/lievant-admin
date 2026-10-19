@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
+import { sortByColumn, type SortDir } from '@/lib/sort-by-column';
 
-export type SortDir = 'asc' | 'desc';
+export type { SortDir };
 
-export function useSortableColumns<T>(items: T[]) {
+export function useSortableColumns<T>(items: T[], options?: { emptyLastKeys?: readonly string[] }) {
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -17,12 +18,8 @@ export function useSortableColumns<T>(items: T[]) {
 
   const sorted = useMemo(() => {
     if (!sortKey) return items;
-    return [...items].sort((a, b) => {
-      const va = String((a as Record<string, unknown>)[sortKey] ?? '');
-      const vb = String((b as Record<string, unknown>)[sortKey] ?? '');
-      const cmp = va.localeCompare(vb, 'es', { numeric: true });
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
+    return sortByColumn(items, sortKey, sortDir, options?.emptyLastKeys);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, sortKey, sortDir]);
 
   return { sorted, sortKey, sortDir, handleSort };
