@@ -2021,6 +2021,8 @@ export interface TicketDetail extends TicketSummary {
   openedByTd: boolean;
   openedOnBehalfOf: string | null;
   behalfReason: string | null;
+  /** Quien abrió el ticket cuando fue TD en nombre de otra persona (el solicitante es la otra persona). */
+  openedByName?: string | null;
   diagnosis: string | null;
   solution: string | null;
   internalNotes: string | null;
@@ -2100,6 +2102,8 @@ export interface CreateTicketPayload {
   openedByTd?: boolean | undefined;
   openedOnBehalfOf?: string | undefined;
   behalfReason?: string | undefined;
+  /** Expediente de la persona en cuyo nombre se abre (solo TD); esa persona queda como solicitante. */
+  onBehalfOfEmployeeId?: string | undefined;
   estimatedDelivery?: string | undefined;
   assignedTo?: string | undefined;
 }

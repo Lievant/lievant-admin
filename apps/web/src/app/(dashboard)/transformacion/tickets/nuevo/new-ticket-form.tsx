@@ -27,10 +27,13 @@ interface EmployeeSuggestion {
 function EmployeeSearch({
   value,
   onSelect,
+  onClear,
   placeholder,
 }: {
   value: string;
   onSelect: (emp: EmployeeSuggestion) => void;
+  /** Se llama al editar o borrar el texto cuando ya había una persona elegida. */
+  onClear: () => void;
   placeholder: string;
 }) {
   const [query, setQuery] = useState(value);
@@ -72,6 +75,8 @@ function EmployeeSearch({
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const q = e.target.value;
     setQuery(q);
+    // Escribir sobre una persona ya elegida (o borrarla) la deselecciona.
+    if (value) onClear();
     if (debounce.current) clearTimeout(debounce.current);
     debounce.current = setTimeout(() => void search(q), 350);
   }
@@ -131,6 +136,8 @@ interface FormState {
   description: string;
   impact: TicketImpact;
   openedOnBehalfOf: string;
+  /** Expediente de la persona elegida; es quien queda como solicitante. */
+  onBehalfOfEmployeeId: string;
   behalfReason: string;
   assignedTo: string;
 }
@@ -145,6 +152,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
     description: '',
     impact: 'medio',
     openedOnBehalfOf: '',
+    onBehalfOfEmployeeId: '',
     behalfReason: '',
     assignedTo: '',
   });
@@ -180,8 +188,14 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
     }
   }
 
+  /** Cambiar o borrar a la persona deja sin efecto el equipo elegido: era de otra. */
+  function onEmployeeClear() {
+    setForm((prev) => ({ ...prev, openedOnBehalfOf: '', onBehalfOfEmployeeId: '', behalfReason: '', equipmentId: '' }));
+    setOpenTicketsCount(null);
+  }
+
   async function onEmployeeSelect(emp: EmployeeSuggestion) {
-    set('openedOnBehalfOf', emp.fullName);
+    setForm((prev) => ({ ...prev, openedOnBehalfOf: emp.fullName, onBehalfOfEmployeeId: emp.id, equipmentId: '' }));
     setOpenTicketsCount(null);
     try {
       const res = await fetch(
@@ -202,7 +216,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
       setError('La descripción debe tener al menos 20 caracteres.');
       return;
     }
-    if (isTd && form.openedOnBehalfOf && !form.behalfReason.trim()) {
+    if (isTd && form.onBehalfOfEmployeeId && !form.behalfReason.trim()) {
       setError('El motivo de apertura por TD es obligatorio.');
       return;
     }
@@ -216,8 +230,9 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
       equipmentId: form.equipmentId || undefined,
       description: form.description,
       impact: form.impact,
-      ...(isTd && form.openedOnBehalfOf
-        ? { openedByTd: true, openedOnBehalfOf: form.openedOnBehalfOf, behalfReason: form.behalfReason }
+      // El servidor decide el solicitante (la persona elegida) y valida el permiso de TD.
+      ...(isTd && form.onBehalfOfEmployeeId
+        ? { onBehalfOfEmployeeId: form.onBehalfOfEmployeeId, behalfReason: form.behalfReason }
         : {}),
       assignedTo: form.assignedTo || undefined,
     });
@@ -255,7 +270,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
             type="button"
             onClick={() => {
               setResult(null);
-              setForm({ category: '', subcategory: '', equipmentId: '', description: '', impact: 'medio', openedOnBehalfOf: '', behalfReason: '', assignedTo: '' });
+              setForm({ category: '', subcategory: '', equipmentId: '', description: '', impact: 'medio', openedOnBehalfOf: '', onBehalfOfEmployeeId: '', behalfReason: '', assignedTo: '' });
               setSubcategories([]);
               setOpenTicketsCount(null);
             }}
@@ -286,6 +301,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
             <EmployeeSearch
               value={form.openedOnBehalfOf}
               onSelect={onEmployeeSelect}
+              onClear={onEmployeeClear}
               placeholder="Escribe el nombre del colaborador…"
             />
             <p className="mt-1 text-xs text-slate-400">
@@ -298,7 +314,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
               </div>
             )}
           </div>
-          {form.openedOnBehalfOf && (
+          {form.onBehalfOfEmployeeId && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
                 Motivo de apertura por TD <span className="text-red-500">*</span>
@@ -308,7 +324,7 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
                 value={form.behalfReason}
                 onChange={(e) => set('behalfReason', e.target.value)}
                 placeholder="Ej: Colaborador sin acceso al sistema…"
-                required={Boolean(form.openedOnBehalfOf)}
+                required={Boolean(form.onBehalfOfEmployeeId)}
                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm focus:border-black focus:outline-none"
               />
             </div>
@@ -354,12 +370,17 @@ export function NewTicketForm({ categories, isTd }: NewTicketFormProps) {
       {/* Equipo (siempre opcional) */}
       <div>
         <label className="mb-1.5 block text-sm font-medium text-slate-700">Equipo</label>
+        {/* key: al cambiar de persona el selector se reinicia y no queda un equipo de otra. */}
         <EquipmentPicker
+          key={form.onBehalfOfEmployeeId || 'propios'}
           value={form.equipmentId}
           onChange={(legacyId) => set('equipmentId', legacyId)}
+          employeeId={form.onBehalfOfEmployeeId}
         />
         <p className="mt-1 text-xs text-slate-400">
-          Tus equipos aparecen arriba; si el problema es de otro, búscalo por ID, marca o modelo.
+          {form.onBehalfOfEmployeeId
+            ? 'Los equipos de la persona elegida aparecen arriba; si el problema es de otro, búscalo por ID, marca o modelo.'
+            : 'Tus equipos aparecen arriba; si el problema es de otro, búscalo por ID, marca o modelo.'}
         </p>
       </div>
 
