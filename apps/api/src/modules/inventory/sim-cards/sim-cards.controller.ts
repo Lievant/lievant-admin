@@ -91,6 +91,13 @@ export class SimCardsController {
     return this.service.byEmployee(employeeId, user);
   }
 
+  /** Tarjeta informativa del detalle del equipo: líneas del equipo y de su empleado, sin ICCID. */
+  @Get('for-equipment/:equipmentId')
+  @RequirePermission('transformacion', 'sim-cards', 'read')
+  forEquipmentDetail(@Param('equipmentId', ParseUUIDPipe) equipmentId: string) {
+    return this.service.forEquipmentDetail(equipmentId);
+  }
+
   @Get('by-equipment/:equipmentId')
   @RequirePermission('transformacion', 'sim-cards', 'read')
   byEquipment(@Param('equipmentId', ParseUUIDPipe) equipmentId: string, @CurrentUser() user: User) {

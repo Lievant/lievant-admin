@@ -483,6 +483,30 @@ export class SimCardsService {
     return rows.map((r) => this.toView(r, canWrite));
   }
 
+  /**
+   * Líneas que se muestran en el detalle de un equipo (pestaña Asignación, solo
+   * informativa): las ligadas a este equipo y todas las del empleado al que está
+   * asignado, sin duplicar, en una sola consulta. Si el equipo no tiene empleado,
+   * solo las ligadas a él. Vivas siempre; nunca incluye el ICCID, ni siquiera
+   * para quien puede escribir líneas.
+   */
+  async forEquipmentDetail(equipmentId: string): Promise<SimCardView[]> {
+    const rows = (await this.dataSource.manager.query(
+      `${SIM_SELECT}
+       WHERE s.deleted_at IS NULL
+         AND (
+           s.equipment_id = $1
+           OR s.employee_id = (
+             SELECT e.assigned_to_employee_id FROM inventory.equipment e
+             WHERE e.id = $1 AND e.deleted_at IS NULL
+           )
+         )
+       ORDER BY s.sim_code ASC`,
+      [equipmentId],
+    )) as SimRow[];
+    return rows.map((r) => this.toView(r, false));
+  }
+
   /** Líneas aún sin equipo, para el selector "Asociar línea" de la pestaña Asignación. */
   async withoutEquipment(user: User): Promise<SimCardView[]> {
     const rows = (await this.dataSource.manager.query(
