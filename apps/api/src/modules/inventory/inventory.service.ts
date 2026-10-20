@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, Repository, SelectQueryBuilder } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { userHasPermission } from '../auth/permissions.util';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
@@ -13,7 +13,6 @@ import { UpdateEquipmentDto } from './dto/update-equipment.dto';
 import { UpdateMaintenanceDto } from './dto/update-maintenance.dto';
 import { EquipmentBrand } from './entities/equipment-brand.entity';
 import { InventoryStorageService } from './inventory-storage.service';
-import { buildLineKeysSelect, LINE_ROWS_SQL, lineRowPlan, toLineRow, type LineRowRaw } from './inventory-line-rows';
 import { EquipmentHistory } from './entities/equipment-history.entity';
 import { EquipmentMaintenance } from './entities/equipment-maintenance.entity';
 import { EquipmentStatus } from './entities/equipment-status.entity';
@@ -320,15 +319,6 @@ export class InventoryService {
            SELECT 1 FROM inventory.sim_cards sc WHERE sc.equipment_id = e.id AND sc.deleted_at IS NULL)`,
       );
     }
-    // Con permiso de líneas, las líneas vivas sin equipo entran como filas propias:
-    // se mezclan en SQL (UNION ALL) para que el orden, el total y la paginación
-    // sigan siendo del servidor. Sin permiso, o con filtros que no aplican a una
-    // línea, se sigue por el camino de siempre.
-    if (canSeeSims) {
-      const plan = lineRowPlan(query);
-      if (plan.includeLines) return this.findAllWithLines(query, qb, limit, plan.onlyLines);
-    }
-
     // El conteo se toma antes de aplicar el cursor: es el total de la consulta
     // filtrada, no el tamaño de la página. Antes se devolvía data.length, así
     // que el pie de tabla siempre mostraba "20 de 20+".
@@ -354,18 +344,6 @@ export class InventoryService {
         ? Buffer.from(`${last.createdAt.toISOString()}|${last.id}`).toString('base64url')
         : null;
 
-    const enriched = await this.enrichEquipmentPage(data, canSeeSims);
-
-    return { data: enriched, nextCursor, total };
-  }
-
-
-  /**
-   * Datos derivados de una página de equipos: garantía (cálculo en memoria),
-   * semáforo de mantenimiento, proveedor financiero y, con permiso de líneas, su
-   * conteo. Todo en consultas por lote para la página completa, nunca por fila.
-   */
-  private async enrichEquipmentPage(data: Equipment[], canSeeSims: boolean) {
     // El listado lleva el estado de garantía —es un cálculo en memoria— pero no
     // la URL firmada de la factura: firmar una por fila serían 20 llamadas a S3
     // por página para un dato que solo se usa en el detalle.
@@ -378,7 +356,7 @@ export class InventoryService {
       canSeeSims ? this.simCardsByEquipmentIds(data.map((d) => d.id)) : Promise.resolve(null),
     ]);
 
-    return data.map((item) => {
+    const enriched = data.map((item) => {
       const maint =
         maintByEquipment.get(item.id) ??
         ({ lastMaintenanceDate: null, nextMaintenanceDate: null, maintenanceStatus: 'sin_mantenimiento' } as DerivedMaintenance);
@@ -403,85 +381,8 @@ export class InventoryService {
         ),
       };
     });
-  }
 
-  /**
-   * Lista de equipos con las líneas telefónicas sin equipo como filas propias.
-   * Primero se unen solo las claves (id, tipo de fila, marca de tiempo) de ambos
-   * conjuntos, ya filtradas; sobre esa unión se cuenta, se aplica el cursor, se
-   * ordena y se pagina. Después se hidrata solo la página: una consulta para los
-   * equipos y otra para las líneas.
-   */
-  private async findAllWithLines(
-    query: QueryEquipmentDto,
-    qb: SelectQueryBuilder<Equipment>,
-    limit: number,
-    onlyLines: boolean,
-  ) {
-    let equipmentSql = '';
-    let equipmentParams: unknown[] = [];
-    if (!onlyLines) {
-      // Mismos filtros y joins que la lista de equipos, pero solo con las claves.
-      const keys = qb
-        .clone()
-        .select('e.id', 'id')
-        .addSelect("'equipment'", 'kind')
-        .addSelect(InventoryService.CURSOR_MS_EXPR, 'ts')
-        .orderBy();
-      [equipmentSql, equipmentParams] = keys.getQueryAndParameters();
-    }
-    const lines = buildLineKeysSelect(query, equipmentParams.length);
-    const union = onlyLines ? `(${lines.sql})` : `(${equipmentSql}) UNION ALL (${lines.sql})`;
-    const params: unknown[] = [...equipmentParams, ...lines.params];
-
-    const countRows = (await this.equipmentRepo.query(`SELECT count(*) AS total FROM (${union}) u`, params)) as { total: string }[];
-    const total = Number(countRows[0]?.total ?? 0);
-
-    let cursorSql = '';
-    const dataParams = [...params];
-    if (query.cursor) {
-      const [cursorDate = '', cursorId = ''] = Buffer.from(query.cursor, 'base64url').toString().split('|');
-      if (!cursorDate || !/^[0-9a-f-]{36}$/i.test(cursorId) || Number.isNaN(new Date(cursorDate).getTime())) {
-        throw new BadRequestException('Cursor inválido.');
-      }
-      dataParams.push(cursorDate, cursorId);
-      const cd = `$${dataParams.length - 1}::timestamptz`;
-      const ci = `$${dataParams.length}::uuid`;
-      cursorSql = `WHERE (u.ts < ${cd} OR (u.ts = ${cd} AND u.id < ${ci}))`;
-    }
-
-    const keyRows = (await this.equipmentRepo.query(
-      `SELECT u.kind, u.id, u.ts FROM (${union}) u ${cursorSql} ORDER BY u.ts DESC, u.id DESC LIMIT ${limit + 1}`,
-      dataParams,
-    )) as { kind: 'equipment' | 'line'; id: string; ts: Date | string }[];
-    const hasMore = keyRows.length > limit;
-    const pageKeys = hasMore ? keyRows.slice(0, limit) : keyRows;
-    const last = pageKeys.at(-1);
-    const nextCursor =
-      hasMore && last ? Buffer.from(`${new Date(last.ts).toISOString()}|${last.id}`).toString('base64url') : null;
-
-    const equipmentIds = pageKeys.filter((k) => k.kind === 'equipment').map((k) => k.id);
-    const lineIds = pageKeys.filter((k) => k.kind === 'line').map((k) => k.id);
-    const [equipment, lineRaw] = await Promise.all([
-      equipmentIds.length > 0
-        ? this.equipmentRepo
-            .createQueryBuilder('e')
-            .leftJoinAndSelect('e.assignedEmployee', 'emp')
-            .where('e.id IN (:...ids)', { ids: equipmentIds })
-            .getMany()
-        : Promise.resolve([] as Equipment[]),
-      lineIds.length > 0
-        ? (this.equipmentRepo.query(LINE_ROWS_SQL, [lineIds]) as Promise<LineRowRaw[]>)
-        : Promise.resolve([] as LineRowRaw[]),
-    ]);
-
-    const enrichedEquipment = await this.enrichEquipmentPage(equipment, true);
-    const byId = new Map<string, unknown>();
-    for (const e of enrichedEquipment) byId.set(e.id, e);
-    for (const l of lineRaw) byId.set(l.id, toLineRow(l));
-
-    const data = pageKeys.map((k) => byId.get(k.id)).filter((row) => row !== undefined);
-    return { data, nextCursor, total };
+    return { data: enriched, nextCursor, total };
   }
 
   // -------------------------------------------------------------------------
