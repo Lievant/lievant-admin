@@ -44,8 +44,6 @@ interface SimCardsScreenProps {
   filters: Filters;
   cursor: string;
   cursorsStack: string[];
-  /** Abre el detalle de esta línea al cargar. */
-  initialDetailId?: string | null;
 }
 
 const BASE_PATH = '/transformacion/sim-cards';
@@ -102,13 +100,13 @@ function ExpiryBadge({ sim }: { sim: SimCard }) {
   );
 }
 
-export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor, cursorsStack, initialDetailId = null }: SimCardsScreenProps) {
+export function SimCardsScreen({ page, stats, plans, errorKind, filters, cursor, cursorsStack }: SimCardsScreenProps) {
   const router = useRouter();
   const { canWrite } = useSimPermissions();
   const [search, setSearch] = useState(filters.search);
   const [formTarget, setFormTarget] = useState<SimCard | 'new' | null>(null);
   const [assignTarget, setAssignTarget] = useState<SimCard | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(initialDetailId);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [plansOpen, setPlansOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<SimCard | null>(null);
   const [removing, setRemoving] = useState(false);

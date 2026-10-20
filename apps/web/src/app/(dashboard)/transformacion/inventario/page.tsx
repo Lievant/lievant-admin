@@ -40,7 +40,6 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
   const status = asString(params.status);
   const location = asString(params.location);
   const area = asString(params.area);
-  const simLine = asString(params.simLine);
 
   const query: ListEquipmentParams = { limit: 20 };
   if (cursor) query.cursor = cursor;
@@ -50,7 +49,6 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
   if (status) query.status = status;
   if (location) query.location = location;
   if (area) query.area = area;
-  if (simLine === 'con' || simLine === 'sin') query.simLine = simLine;
 
   const [pageResult, statsResult, typesResult, brandsResult, statusesResult] = await Promise.all([
     safe(listEquipment(query)),
@@ -76,7 +74,6 @@ export default async function InventarioPage({ searchParams }: InventarioPagePro
           status: status ?? '',
           location: location ?? '',
           area: area ?? '',
-          simLine: simLine ?? '',
         }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}

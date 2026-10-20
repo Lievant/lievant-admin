@@ -2333,8 +2333,6 @@ export interface EquipmentHistoryEntry {
 }
 
 export interface EquipmentSummary {
-  /** Las filas de equipo no traen `rowKind`; el campo existe solo para distinguirlas de las de línea. */
-  rowKind?: undefined;
   id: string;
   displayId: string;
   legacyId: string | null;
@@ -2358,9 +2356,6 @@ export interface EquipmentSummary {
   purchaseDate: string | null;
   /** DECIMAL serializado como string; null = sin valor capturado. */
   purchaseValue: string | null;
-  /** Líneas telefónicas vivas del equipo. Solo llegan con `sim-cards.read`; nunca incluyen el ICCID. */
-  simCardCount?: number;
-  simCardPhones?: string[];
   // ── Información financiera ────────────────────────────────────────────────
   financialProviderId: string | null;
   invoiceNumber: string | null;
@@ -2478,40 +2473,8 @@ export interface EquipmentDetail extends EquipmentSummary {
   } | null;
 }
 
-/**
- * Línea telefónica sin equipo mostrada como fila de Inventario (solo con
- * `sim-cards.read`). Comparte los campos planos con el equipo para ordenar y
- * pintar sin casos especiales; las filas de equipo no llevan `rowKind`.
- */
-export interface InventoryLineRow {
-  rowKind: 'line';
-  id: string;
-  displayId: string;
-  legacyId: null;
-  equipmentType: string;
-  /** Compañía y plan de la línea. */
-  brand: string | null;
-  model: string | null;
-  assignedToEmployeeId: string | null;
-  assignedEmployeeName: string | null;
-  assignedEmployeeEmail: string | null;
-  area: string | null;
-  location: string | null;
-  status: string;
-  simCardCount: number;
-  simCardPhones: string[];
-  createdAt: string;
-  line: {
-    simCode: string;
-    phoneNumber: string;
-    providerName: string | null;
-    planName: string;
-    status: 'activa' | 'suspendida' | 'cancelada';
-  };
-}
-
 export interface EquipmentPage {
-  data: (EquipmentSummary | InventoryLineRow)[];
+  data: EquipmentSummary[];
   nextCursor: string | null;
   total: number;
 }
@@ -2549,8 +2512,6 @@ export interface ListEquipmentParams {
   area?: string;
   assignedToEmployeeId?: string;
   search?: string;
-  /** 'con' | 'sin' línea telefónica; solo surte efecto con `sim-cards.read`. */
-  simLine?: string;
 }
 
 export interface CreateEquipmentPayload {
@@ -2634,7 +2595,6 @@ export function listEquipment(params: ListEquipmentParams = {}): Promise<Equipme
   if (params.area) q.set('area', params.area);
   if (params.assignedToEmployeeId) q.set('assignedToEmployeeId', params.assignedToEmployeeId);
   if (params.search) q.set('search', params.search);
-  if (params.simLine) q.set('simLine', params.simLine);
   const qs = q.toString();
   return apiFetchWithRetry<EquipmentPage>(`/inventory/equipment${qs ? `?${qs}` : ''}`);
 }

@@ -7,11 +7,9 @@ import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
-import type { EquipmentBrandCatalog, EquipmentPage, InventoryLineRow, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
+import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
-import { SIM_STATUS_STYLE, formatPhone } from '../sim-cards/constants';
-import { useSimPermissions } from '../sim-cards/use-sim-permissions';
 import { MAINTENANCE_STATUS_LABEL, MAINTENANCE_STATUS_STYLE, statusBadgeStyle, typeIcon } from './constants';
 
 interface Filters {
@@ -21,7 +19,6 @@ interface Filters {
   status: string;
   location: string;
   area: string;
-  simLine: string;
 }
 
 interface Catalogs {
@@ -62,16 +59,6 @@ function WarrantyBadge({ status }: { status?: string }) {
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${WARRANTY_STYLE[status] ?? ''}`}>
       {WARRANTY_LABEL[status] ?? status}
-    </span>
-  );
-}
-
-/** Cuenta de líneas del equipo; los números completos van en el tooltip. Nunca el ICCID. */
-function SimLinesCell({ count, phones }: { count?: number | undefined; phones?: string[] | undefined }) {
-  if (!count) return <span className="text-slate-300">—</span>;
-  return (
-    <span className="text-slate-700" title={(phones ?? []).map(formatPhone).join('\n')}>
-      {count} {count === 1 ? 'línea' : 'líneas'}
     </span>
   );
 }
@@ -125,55 +112,6 @@ function EmployeeAvatar({ name, email }: { name: string | null; email: string | 
   );
 }
 
-/**
- * Línea telefónica sin equipo como fila de solo lectura: ni responsiva, ni baja,
- * ni mantenimientos. "Ver" abre su detalle en Líneas Telefónicas. Nunca muestra el ICCID.
- */
-function LineRow({ item }: { item: InventoryLineRow }) {
-  return (
-    <tr className="hover:bg-slate-50">
-      <td className="px-4 py-3">
-        <Link
-          href={`/transformacion/sim-cards?ver=${item.id}`}
-          className="font-mono text-xs font-semibold text-black hover:underline"
-        >
-          {item.displayId}
-        </Link>
-      </td>
-      <td className="px-4 py-3 font-mono text-xs text-slate-500">—</td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5">
-          <i className="ti ti-device-mobile text-slate-400" />
-          <span className="text-slate-700">{item.equipmentType}</span>
-          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500">Línea</span>
-        </div>
-      </td>
-      <td className="px-4 py-3">
-        <span className="font-medium text-navy">{item.brand ?? '—'}</span>
-        {item.model && <span className="ml-1 text-slate-500">· {item.model}</span>}
-      </td>
-      <td className="px-4 py-3">
-        <EmployeeAvatar name={item.assignedEmployeeName} email={item.assignedEmployeeEmail} />
-      </td>
-      <td className="px-4 py-3 text-slate-600">{item.area ?? '—'}</td>
-      <td className="px-4 py-3 text-slate-600">{item.location ?? '—'}</td>
-      <td className="px-4 py-3">
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${SIM_STATUS_STYLE[item.line.status]}`}>
-          {item.status}
-        </span>
-      </td>
-      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-navy">{formatPhone(item.line.phoneNumber)}</td>
-      <td className="px-4 py-3"><span className="text-slate-300">—</span></td>
-      <td className="px-4 py-3"><span className="text-slate-300">—</span></td>
-      <td className="px-4 py-3">
-        <Link href={`/transformacion/sim-cards?ver=${item.id}`} className="text-xs font-medium text-black hover:underline">
-          Ver
-        </Link>
-      </td>
-    </tr>
-  );
-}
-
 export function InventoryScreen({
   page,
   stats,
@@ -186,9 +124,6 @@ export function InventoryScreen({
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
   const [warrantyFilter, setWarrantyFilter] = useState<string | null>(null);
-  const { canRead: canReadSims } = useSimPermissions();
-  // La columna y el filtro solo existen si el API devolvió datos de líneas (requiere sim-cards.read).
-  const showSims = canReadSims && (page.data.length === 0 || page.data.some((e) => e.simCardCount !== undefined));
 
   useEffect(() => { setSearch(filters.search); }, [filters.search]);
 
@@ -208,7 +143,6 @@ export function InventoryScreen({
     if (filters.status) sp.set('status', filters.status);
     if (filters.location) sp.set('location', filters.location);
     if (filters.area) sp.set('area', filters.area);
-    if (filters.simLine) sp.set('simLine', filters.simLine);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -259,10 +193,10 @@ export function InventoryScreen({
   // Filtro de garantía en cliente: el badge ya viene en cada fila, así que no
   // hace falta ir al servidor para acotar lo que se está viendo.
   const warrantyNeedsAttention = page.data.filter(
-    (e) => e.rowKind !== 'line' && (e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida'),
+    (e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida',
   ).length;
   const visible = warrantyFilter
-    ? sorted.filter((e) => e.rowKind !== 'line' && (e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida'))
+    ? sorted.filter((e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida')
     : sorted;
   // La primera página es exactamente la que no lleva cursor.
   const isFirstPage = !cursor;
@@ -344,7 +278,6 @@ export function InventoryScreen({
           {catalogs.types.map((t) => (
             <option key={t.id} value={t.name}>{t.name}</option>
           ))}
-          {showSims && <option value="Línea Telefónica">Línea Telefónica</option>}
         </select>
 
         <select
@@ -379,18 +312,6 @@ export function InventoryScreen({
             <option key={loc} value={loc}>{loc}</option>
           ))}
         </select>
-
-        {showSims && (
-          <select
-            value={filters.simLine}
-            onChange={(e) => updateParams({ simLine: e.target.value || null })}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
-          >
-            <option value="">Línea telefónica: Todos</option>
-            <option value="con">Con línea telefónica</option>
-            <option value="sin">Sin línea telefónica</option>
-          </select>
-        )}
       </div>
 
       {/* Tabla */}
@@ -407,9 +328,6 @@ export function InventoryScreen({
               <SortableHeader label="Área" sortKey="area" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Ubicación" sortKey="location" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Estatus" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              {showSims && (
-                <SortableHeader label="Líneas Telefónicas" sortKey="simCardCount" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              )}
               <th className="px-4 py-3">Garantía</th>
               <th className="px-4 py-3">Mantenimiento</th>
               <th className="px-4 py-3"></th>
@@ -418,15 +336,12 @@ export function InventoryScreen({
           <tbody className="divide-y divide-slate-100">
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={showSims ? 12 : 11} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-slate-400">
                   No se encontraron equipos con los filtros aplicados.
                 </td>
               </tr>
             ) : (
-              visible.map((item) =>
-                item.rowKind === 'line' ? (
-                  <LineRow key={item.id} item={item} />
-                ) : (
+              visible.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <Link
@@ -472,11 +387,6 @@ export function InventoryScreen({
                       {item.status}
                     </span>
                   </td>
-                  {showSims && (
-                    <td className="px-4 py-3">
-                      <SimLinesCell count={item.simCardCount} phones={item.simCardPhones} />
-                    </td>
-                  )}
                   <td className="px-4 py-3">
                     <WarrantyBadge status={item.warrantyStatus} />
                   </td>
@@ -492,8 +402,7 @@ export function InventoryScreen({
                     </Link>
                   </td>
                 </tr>
-                ),
-              )
+              ))
             )}
           </tbody>
         </table>
