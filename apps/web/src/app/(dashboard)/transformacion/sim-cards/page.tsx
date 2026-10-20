@@ -38,10 +38,6 @@ export default async function SimCardsPage({ searchParams }: SimCardsPageProps) 
   const providerId = asString(params.providerId);
   const assignment = asString(params.assignment); // 'sin_asignar' | 'asignada'
   const expiry = asString(params.expiry);
-  // Enlace directo al detalle de una línea (desde las filas de línea de Inventario).
-  const rawVer = asString(params.ver);
-  const ver =
-    rawVer && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawVer) ? rawVer : undefined;
 
   const query: ListSimCardsParams = { limit: 20 };
   if (cursor) query.cursor = cursor;
@@ -85,7 +81,6 @@ export default async function SimCardsPage({ searchParams }: SimCardsPageProps) 
           expiry: expiry ?? '',
         }}
         cursor={cursor ?? ''}
-        initialDetailId={ver ?? null}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
       />
     </div>
