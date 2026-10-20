@@ -343,8 +343,8 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
         </div>
       )}
 
-      {/* Líneas telefónicas asociadas: se oculta solo si no hay permiso de lectura */}
-      <EquipmentSimsSection equipmentId={equipment.id} />
+      {/* Líneas telefónicas: solo informativa; se oculta si no hay permiso de lectura */}
+      <EquipmentSimsSection equipmentId={equipment.id} employeeName={empName} />
     </div>
   );
 }
