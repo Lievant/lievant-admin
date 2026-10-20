@@ -7,10 +7,10 @@ import { avatarColor, initials } from '@/lib/avatar';
 import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
-import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
+import type { EquipmentBrandCatalog, EquipmentPage, InventoryLineRow, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
-import { formatPhone } from '../sim-cards/constants';
+import { SIM_STATUS_STYLE, formatPhone } from '../sim-cards/constants';
 import { useSimPermissions } from '../sim-cards/use-sim-permissions';
 import { MAINTENANCE_STATUS_LABEL, MAINTENANCE_STATUS_STYLE, statusBadgeStyle, typeIcon } from './constants';
 
@@ -125,6 +125,55 @@ function EmployeeAvatar({ name, email }: { name: string | null; email: string | 
   );
 }
 
+/**
+ * Línea telefónica sin equipo como fila de solo lectura: ni responsiva, ni baja,
+ * ni mantenimientos. "Ver" abre su detalle en Líneas Telefónicas. Nunca muestra el ICCID.
+ */
+function LineRow({ item }: { item: InventoryLineRow }) {
+  return (
+    <tr className="hover:bg-slate-50">
+      <td className="px-4 py-3">
+        <Link
+          href={`/transformacion/sim-cards?ver=${item.id}`}
+          className="font-mono text-xs font-semibold text-black hover:underline"
+        >
+          {item.displayId}
+        </Link>
+      </td>
+      <td className="px-4 py-3 font-mono text-xs text-slate-500">—</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <i className="ti ti-device-mobile text-slate-400" />
+          <span className="text-slate-700">{item.equipmentType}</span>
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500">Línea</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className="font-medium text-navy">{item.brand ?? '—'}</span>
+        {item.model && <span className="ml-1 text-slate-500">· {item.model}</span>}
+      </td>
+      <td className="px-4 py-3">
+        <EmployeeAvatar name={item.assignedEmployeeName} email={item.assignedEmployeeEmail} />
+      </td>
+      <td className="px-4 py-3 text-slate-600">{item.area ?? '—'}</td>
+      <td className="px-4 py-3 text-slate-600">{item.location ?? '—'}</td>
+      <td className="px-4 py-3">
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${SIM_STATUS_STYLE[item.line.status]}`}>
+          {item.status}
+        </span>
+      </td>
+      <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-navy">{formatPhone(item.line.phoneNumber)}</td>
+      <td className="px-4 py-3"><span className="text-slate-300">—</span></td>
+      <td className="px-4 py-3"><span className="text-slate-300">—</span></td>
+      <td className="px-4 py-3">
+        <Link href={`/transformacion/sim-cards?ver=${item.id}`} className="text-xs font-medium text-black hover:underline">
+          Ver
+        </Link>
+      </td>
+    </tr>
+  );
+}
+
 export function InventoryScreen({
   page,
   stats,
@@ -210,10 +259,10 @@ export function InventoryScreen({
   // Filtro de garantía en cliente: el badge ya viene en cada fila, así que no
   // hace falta ir al servidor para acotar lo que se está viendo.
   const warrantyNeedsAttention = page.data.filter(
-    (e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida',
+    (e) => e.rowKind !== 'line' && (e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida'),
   ).length;
   const visible = warrantyFilter
-    ? sorted.filter((e) => e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida')
+    ? sorted.filter((e) => e.rowKind !== 'line' && (e.warrantyStatus === 'por_vencer' || e.warrantyStatus === 'vencida'))
     : sorted;
   // La primera página es exactamente la que no lleva cursor.
   const isFirstPage = !cursor;
@@ -295,6 +344,7 @@ export function InventoryScreen({
           {catalogs.types.map((t) => (
             <option key={t.id} value={t.name}>{t.name}</option>
           ))}
+          {showSims && <option value="Línea Telefónica">Línea Telefónica</option>}
         </select>
 
         <select
@@ -373,7 +423,10 @@ export function InventoryScreen({
                 </td>
               </tr>
             ) : (
-              visible.map((item) => (
+              visible.map((item) =>
+                item.rowKind === 'line' ? (
+                  <LineRow key={item.id} item={item} />
+                ) : (
                 <tr key={item.id} className="hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <Link
@@ -439,7 +492,8 @@ export function InventoryScreen({
                     </Link>
                   </td>
                 </tr>
-              ))
+                ),
+              )
             )}
           </tbody>
         </table>

@@ -2333,6 +2333,8 @@ export interface EquipmentHistoryEntry {
 }
 
 export interface EquipmentSummary {
+  /** Las filas de equipo no traen `rowKind`; el campo existe solo para distinguirlas de las de línea. */
+  rowKind?: undefined;
   id: string;
   displayId: string;
   legacyId: string | null;
@@ -2476,8 +2478,40 @@ export interface EquipmentDetail extends EquipmentSummary {
   } | null;
 }
 
+/**
+ * Línea telefónica sin equipo mostrada como fila de Inventario (solo con
+ * `sim-cards.read`). Comparte los campos planos con el equipo para ordenar y
+ * pintar sin casos especiales; las filas de equipo no llevan `rowKind`.
+ */
+export interface InventoryLineRow {
+  rowKind: 'line';
+  id: string;
+  displayId: string;
+  legacyId: null;
+  equipmentType: string;
+  /** Compañía y plan de la línea. */
+  brand: string | null;
+  model: string | null;
+  assignedToEmployeeId: string | null;
+  assignedEmployeeName: string | null;
+  assignedEmployeeEmail: string | null;
+  area: string | null;
+  location: string | null;
+  status: string;
+  simCardCount: number;
+  simCardPhones: string[];
+  createdAt: string;
+  line: {
+    simCode: string;
+    phoneNumber: string;
+    providerName: string | null;
+    planName: string;
+    status: 'activa' | 'suspendida' | 'cancelada';
+  };
+}
+
 export interface EquipmentPage {
-  data: EquipmentSummary[];
+  data: (EquipmentSummary | InventoryLineRow)[];
   nextCursor: string | null;
   total: number;
 }
