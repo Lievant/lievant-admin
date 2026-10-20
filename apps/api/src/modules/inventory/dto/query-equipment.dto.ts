@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class QueryEquipmentDto {
   @IsOptional()
@@ -40,12 +40,4 @@ export class QueryEquipmentDto {
   @IsOptional()
   @IsString()
   search?: string;
-
-  /**
-   * Con o sin línea telefónica asociada. Solo se aplica a quien tiene
-   * `transformacion.sim-cards.read`; para los demás se ignora.
-   */
-  @IsOptional()
-  @IsIn(['con', 'sin'])
-  simLine?: 'con' | 'sin';
 }

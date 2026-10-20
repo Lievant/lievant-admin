@@ -2356,9 +2356,6 @@ export interface EquipmentSummary {
   purchaseDate: string | null;
   /** DECIMAL serializado como string; null = sin valor capturado. */
   purchaseValue: string | null;
-  /** Líneas telefónicas vivas del equipo. Solo llegan con `sim-cards.read`; nunca incluyen el ICCID. */
-  simCardCount?: number;
-  simCardPhones?: string[];
   // ── Información financiera ────────────────────────────────────────────────
   financialProviderId: string | null;
   invoiceNumber: string | null;
@@ -2515,8 +2512,6 @@ export interface ListEquipmentParams {
   area?: string;
   assignedToEmployeeId?: string;
   search?: string;
-  /** 'con' | 'sin' línea telefónica; solo surte efecto con `sim-cards.read`. */
-  simLine?: string;
 }
 
 export interface CreateEquipmentPayload {
@@ -2600,7 +2595,6 @@ export function listEquipment(params: ListEquipmentParams = {}): Promise<Equipme
   if (params.area) q.set('area', params.area);
   if (params.assignedToEmployeeId) q.set('assignedToEmployeeId', params.assignedToEmployeeId);
   if (params.search) q.set('search', params.search);
-  if (params.simLine) q.set('simLine', params.simLine);
   const qs = q.toString();
   return apiFetchWithRetry<EquipmentPage>(`/inventory/equipment${qs ? `?${qs}` : ''}`);
 }

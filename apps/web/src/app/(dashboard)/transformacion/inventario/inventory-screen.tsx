@@ -10,8 +10,6 @@ import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import type { EquipmentBrandCatalog, EquipmentPage, EquipmentStats, EquipmentStatusCatalog, EquipmentTypeCatalog, ErrorKind } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
-import { formatPhone } from '../sim-cards/constants';
-import { useSimPermissions } from '../sim-cards/use-sim-permissions';
 import { MAINTENANCE_STATUS_LABEL, MAINTENANCE_STATUS_STYLE, statusBadgeStyle, typeIcon } from './constants';
 
 interface Filters {
@@ -21,7 +19,6 @@ interface Filters {
   status: string;
   location: string;
   area: string;
-  simLine: string;
 }
 
 interface Catalogs {
@@ -62,16 +59,6 @@ function WarrantyBadge({ status }: { status?: string }) {
   return (
     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${WARRANTY_STYLE[status] ?? ''}`}>
       {WARRANTY_LABEL[status] ?? status}
-    </span>
-  );
-}
-
-/** Cuenta de líneas del equipo; los números completos van en el tooltip. Nunca el ICCID. */
-function SimLinesCell({ count, phones }: { count?: number; phones?: string[] }) {
-  if (!count) return <span className="text-slate-300">—</span>;
-  return (
-    <span className="text-slate-700" title={(phones ?? []).map(formatPhone).join('\n')}>
-      {count} {count === 1 ? 'línea' : 'líneas'}
     </span>
   );
 }
@@ -137,9 +124,6 @@ export function InventoryScreen({
   const router = useRouter();
   const [search, setSearch] = useState(filters.search);
   const [warrantyFilter, setWarrantyFilter] = useState<string | null>(null);
-  const { canRead: canReadSims } = useSimPermissions();
-  // La columna y el filtro solo existen si el API devolvió datos de líneas (requiere sim-cards.read).
-  const showSims = canReadSims && (page.data.length === 0 || page.data.some((e) => e.simCardCount !== undefined));
 
   useEffect(() => { setSearch(filters.search); }, [filters.search]);
 
@@ -159,7 +143,6 @@ export function InventoryScreen({
     if (filters.status) sp.set('status', filters.status);
     if (filters.location) sp.set('location', filters.location);
     if (filters.area) sp.set('area', filters.area);
-    if (filters.simLine) sp.set('simLine', filters.simLine);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -329,18 +312,6 @@ export function InventoryScreen({
             <option key={loc} value={loc}>{loc}</option>
           ))}
         </select>
-
-        {showSims && (
-          <select
-            value={filters.simLine}
-            onChange={(e) => updateParams({ simLine: e.target.value || null })}
-            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
-          >
-            <option value="">Línea telefónica: Todos</option>
-            <option value="con">Con línea telefónica</option>
-            <option value="sin">Sin línea telefónica</option>
-          </select>
-        )}
       </div>
 
       {/* Tabla */}
@@ -357,9 +328,6 @@ export function InventoryScreen({
               <SortableHeader label="Área" sortKey="area" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Ubicación" sortKey="location" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <SortableHeader label="Estatus" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              {showSims && (
-                <SortableHeader label="Líneas Telefónicas" sortKey="simCardCount" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              )}
               <th className="px-4 py-3">Garantía</th>
               <th className="px-4 py-3">Mantenimiento</th>
               <th className="px-4 py-3"></th>
@@ -368,7 +336,7 @@ export function InventoryScreen({
           <tbody className="divide-y divide-slate-100">
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={showSims ? 12 : 11} className="px-4 py-12 text-center text-sm text-slate-400">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-slate-400">
                   No se encontraron equipos con los filtros aplicados.
                 </td>
               </tr>
@@ -419,11 +387,6 @@ export function InventoryScreen({
                       {item.status}
                     </span>
                   </td>
-                  {showSims && (
-                    <td className="px-4 py-3">
-                      <SimLinesCell count={item.simCardCount} phones={item.simCardPhones} />
-                    </td>
-                  )}
                   <td className="px-4 py-3">
                     <WarrantyBadge status={item.warrantyStatus} />
                   </td>

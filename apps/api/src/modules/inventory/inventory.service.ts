@@ -1,8 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
-import { User } from '../auth/entities/user.entity';
-import { userHasPermission } from '../auth/permissions.util';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { TicketAssignee } from '../helpdesk/entities/ticket-assignee.entity';
 import { AssignEmployeeDto } from './dto/assign-employee.dto';
@@ -280,10 +278,8 @@ export class InventoryService {
   // Lista paginada con filtros
   // -------------------------------------------------------------------------
 
-  async findAll(query: QueryEquipmentDto, user?: Pick<User, 'roles' | 'userPermissions'>) {
+  async findAll(query: QueryEquipmentDto) {
     const limit = query.limit ?? 20;
-    // Los datos de líneas telefónicas (y su filtro) solo existen para quien puede leerlas.
-    const canSeeSims = user ? userHasPermission(user, 'transformacion', 'sim-cards', 'read') : false;
     const qb = this.equipmentRepo
       .createQueryBuilder('e')
       .leftJoinAndSelect('e.assignedEmployee', 'emp')
@@ -311,12 +307,6 @@ export class InventoryService {
       qb.andWhere(
         '(e.display_id ILIKE :s OR e.legacy_id ILIKE :s OR e.model ILIKE :s OR e.serial_number ILIKE :s OR e.brand ILIKE :s OR emp.fullName ILIKE :s OR emp.corporateEmail ILIKE :s)',
         { s: `%${query.search}%` },
-      );
-    }
-    if (canSeeSims && query.simLine) {
-      qb.andWhere(
-        `${query.simLine === 'con' ? 'EXISTS' : 'NOT EXISTS'} (
-           SELECT 1 FROM inventory.sim_cards sc WHERE sc.equipment_id = e.id AND sc.deleted_at IS NULL)`,
       );
     }
     // El conteo se toma antes de aplicar el cursor: es el total de la consulta
@@ -349,11 +339,9 @@ export class InventoryService {
     // por página para un dato que solo se usa en el detalle.
     // El semáforo de mantenimiento se calcula para toda la página en una sola
     // consulta (el último preventivo por equipo), no una por fila.
-    const [maintByEquipment, financialProviders, simsByEquipment] = await Promise.all([
+    const [maintByEquipment, financialProviders] = await Promise.all([
       this.deriveMaintenanceForEquipmentIds(data.map((d) => d.id)),
       this.vendorNames(data.map((d) => d.financialProviderId)),
-      // Una sola consulta agregada para toda la página, no una por equipo.
-      canSeeSims ? this.simCardsByEquipmentIds(data.map((d) => d.id)) : Promise.resolve(null),
     ]);
 
     const enriched = data.map((item) => {
@@ -366,13 +354,6 @@ export class InventoryService {
         assignedEmployeeEmail: item.assignedEmployee?.corporateEmail ?? null,
         assignedEmployeePosition: item.assignedEmployee?.position ?? null,
         warrantyStatus: this.warrantyStatus(item.warrantyExpiryDate),
-        // Campos opcionales: sin permiso de líneas no se incluyen (el contrato no cambia).
-        ...(simsByEquipment
-          ? {
-              simCardCount: simsByEquipment.get(item.id)?.count ?? 0,
-              simCardPhones: simsByEquipment.get(item.id)?.phones ?? [],
-            }
-          : {}),
         maintenanceStatus: maint.maintenanceStatus,
         nextMaintenanceDate: maint.nextMaintenanceDate,
         financialInfo: deriveFinancialInfo(
@@ -1159,31 +1140,6 @@ export class InventoryService {
    * conjunto de ids que se pida (listado o detalle). Los equipos sin preventivo
    * simplemente no aparecen en el mapa → el llamador asume `sin_mantenimiento`.
    */
-  /**
-   * Líneas telefónicas vivas por equipo, para toda una página en una sola
-   * consulta agregada. Devuelve solo cuenta y números: nunca el ICCID.
-   */
-  private async simCardsByEquipmentIds(
-    ids: string[],
-  ): Promise<Map<string, { count: number; phones: string[] }>> {
-    const map = new Map<string, { count: number; phones: string[] }>();
-    if (ids.length === 0) return map;
-
-    const rows = (await this.equipmentRepo.query(
-      `
-      SELECT equipment_id, count(*) AS cnt, array_agg(phone_number ORDER BY sim_code) AS phones
-      FROM inventory.sim_cards
-      WHERE deleted_at IS NULL
-        AND equipment_id = ANY($1::uuid[])
-      GROUP BY equipment_id
-      `,
-      [ids],
-    )) as { equipment_id: string; cnt: string; phones: string[] }[];
-
-    for (const r of rows) map.set(r.equipment_id, { count: Number(r.cnt), phones: r.phones });
-    return map;
-  }
-
   private async deriveMaintenanceForEquipmentIds(
     ids: string[],
   ): Promise<Map<string, DerivedMaintenance>> {
