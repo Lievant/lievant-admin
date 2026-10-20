@@ -67,7 +67,7 @@ function WarrantyBadge({ status }: { status?: string }) {
 }
 
 /** Cuenta de líneas del equipo; los números completos van en el tooltip. Nunca el ICCID. */
-function SimLinesCell({ count, phones }: { count?: number | undefined; phones?: string[] | undefined }) {
+function SimLinesCell({ count, phones }: { count?: number; phones?: string[] }) {
   if (!count) return <span className="text-slate-300">—</span>;
   return (
     <span className="text-slate-700" title={(phones ?? []).map(formatPhone).join('\n')}>
