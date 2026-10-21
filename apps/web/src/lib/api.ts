@@ -5069,3 +5069,155 @@ export function getSimCardStats(): Promise<SimCardStats> {
 export function listSimPlans(): Promise<SimPlan[]> {
   return apiFetchWithRetry<SimPlan[]>('/sim-cards/plans');
 }
+
+// ── Auditoría de Equipos (TIC-RE-18) ─────────────────────────────────────────
+
+export type EquipmentAuditStatus = 'en_progreso' | 'completada' | 'con_observaciones';
+
+export interface EquipmentAuditEquipmentItem {
+  id: string;
+  equipmentId: string;
+  equipmentCode: string | null;
+  brand: string | null;
+  model: string | null;
+  type: string | null;
+  macEligible: boolean;
+  physicallyPresent: boolean | null;
+  labelMarked: boolean | null;
+  macAddress: string | null;
+  inventoryMacAddress: string | null;
+  macSyncedToInventory: boolean;
+  unassignedDuringAudit: boolean;
+  notPresentReason: string | null;
+  simVerified: boolean | null;
+  simCard: { id: string; simCode: string | null; phoneNumber: string | null; plan: string | null } | null;
+  simNotes: string | null;
+  equipmentNotes: string | null;
+}
+
+export interface EquipmentAuditLicenseItem {
+  id: string;
+  assignmentId: string;
+  toolName: string | null;
+  toolCode: string | null;
+  licensePresent: boolean | null;
+  missingNotes: string | null;
+}
+
+export interface EquipmentAuditMaintenance {
+  maintenanceBlower: boolean | null;
+  maintenanceKeyboardCleaning: boolean | null;
+  maintenanceScreenCleaning: boolean | null;
+  maintenanceLogicalUnit: boolean | null;
+  maintenanceDriversUpdated: boolean | null;
+  maintenanceAntivirusRemoved: boolean | null;
+  maintenanceCacheCleaned: boolean | null;
+  maintenanceBitlockerActive: boolean | null;
+  maintenanceBrowserPasswordsCleared: boolean | null;
+  maintenanceOnedriveSynced: boolean | null;
+  maintenanceOnedriveBackup: boolean | null;
+  maintenanceNoCRootFolders: boolean | null;
+  maintenanceSharedAccounts: string | null;
+  maintenanceNotes: string | null;
+}
+
+export interface EquipmentAuditSurvey {
+  surveyEquipmentScore: number | null;
+  surveyEquipmentNotes: string | null;
+  surveyItServiceScore: number | null;
+  surveyItServiceNotes: string | null;
+  surveyPlatformScore: number | null;
+  surveyPlatformNotes: string | null;
+}
+
+export interface EquipmentAuditDetail {
+  id: string;
+  auditCode: string;
+  auditDate: string;
+  status: EquipmentAuditStatus;
+  completedAt: string | null;
+  generalNotes: string | null;
+  employee: {
+    id: string;
+    fullName: string;
+    area: string | null;
+    position: string | null;
+    email: string | null;
+    photoUrl: string | null;
+  };
+  technician: { id: string; fullName: string };
+  maintenanceTicket: { id: string; displayId: string | null } | null;
+  maintenanceApplies: boolean;
+  equipmentItems: EquipmentAuditEquipmentItem[];
+  licenseItems: EquipmentAuditLicenseItem[];
+  maintenanceSection: EquipmentAuditMaintenance;
+  surveySection: EquipmentAuditSurvey;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EquipmentAuditSummary {
+  id: string;
+  auditCode: string;
+  auditDate: string;
+  technician: { id: string; fullName: string };
+  employee: { id: string; fullName: string; area: string | null };
+  status: EquipmentAuditStatus;
+  completedAt: string | null;
+  equipmentCount: number;
+}
+
+export interface EquipmentAuditPage {
+  data: EquipmentAuditSummary[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface EquipmentAuditStats {
+  total: number;
+  completadas: number;
+  enProgreso: number;
+  conObservaciones: number;
+  thisMonth: number;
+  equiposSinPresencia: number;
+  macsSincronizadas: number;
+}
+
+export interface EquipmentAuditTechnician {
+  userId: string;
+  name: string;
+  email: string;
+}
+
+export interface ListEquipmentAuditsParams {
+  page?: number | undefined;
+  limit?: number | undefined;
+  employeeId?: string | undefined;
+  technicianId?: string | undefined;
+  status?: string | undefined;
+  dateFrom?: string | undefined;
+  dateTo?: string | undefined;
+}
+
+export function listEquipmentAudits(params: ListEquipmentAuditsParams = {}): Promise<EquipmentAuditPage> {
+  const q = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') q.set(key, String(value));
+  }
+  const qs = q.toString();
+  return apiFetchWithRetry<EquipmentAuditPage>(`/audits/equipment${qs ? `?${qs}` : ''}`);
+}
+
+export function getEquipmentAuditStats(): Promise<EquipmentAuditStats> {
+  return apiFetchWithRetry<EquipmentAuditStats>('/audits/equipment/stats');
+}
+
+export function getEquipmentAudit(id: string): Promise<EquipmentAuditDetail> {
+  return apiFetchWithRetry<EquipmentAuditDetail>(`/audits/equipment/${id}`);
+}
+
+export function listEquipmentAuditTechnicians(): Promise<EquipmentAuditTechnician[]> {
+  return apiFetchWithRetry<EquipmentAuditTechnician[]>('/audits/equipment/technicians');
+}

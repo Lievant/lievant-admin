@@ -8,6 +8,7 @@ import {
   AlertIcon,
   BellIcon,
   BuildingIcon,
+  CheckIcon,
   ChartDotsIcon,
   CreditCardIcon,
   CpuIcon,
@@ -83,6 +84,7 @@ export function Sidebar({ user }: SidebarProps) {
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
   const showSimCards = hasModule(user, 'transformacion', 'sim-cards', 'read');
+  const showAuditoriaEquipos = hasModule(user, 'transformacion', 'auditoria-equipos', 'read');
   const showMedios = hasSection(user, 'medios');
   // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
@@ -366,6 +368,15 @@ export function Sidebar({ user }: SidebarProps) {
                   >
                     <PhoneIcon className="h-4 w-4" />
                     Líneas Telefónicas
+                  </NavSubLink>
+                )}
+                {showAuditoriaEquipos && (
+                  <NavSubLink
+                    href="/transformacion/auditoria-equipos"
+                    active={pathname.startsWith('/transformacion/auditoria-equipos')}
+                  >
+                    <CheckIcon className="h-4 w-4" />
+                    Auditoría de Equipos
                   </NavSubLink>
                 )}
                 <NavSubLink
