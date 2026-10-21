@@ -24,6 +24,7 @@ import {
   LogoutIcon,
   MegaphoneIcon,
   PeopleIcon,
+  PhoneIcon,
   PlaneIcon,
   ReportMoneyIcon,
   RobotIcon,
@@ -81,6 +82,7 @@ export function Sidebar({ user }: SidebarProps) {
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
+  const showSimCards = hasModule(user, 'transformacion', 'sim-cards', 'read');
   const showMedios = hasSection(user, 'medios');
   // SGSI es un módulo, no una herramienta: administrar el sistema de gestión no
   // es lo mismo que consultarlo desde ISOBOT, y su permiso vive fuera de 'admin'
@@ -106,9 +108,9 @@ export function Sidebar({ user }: SidebarProps) {
   // cargo. Por eso entra también en showHerramientas —un jefe sin ningún otro
   // módulo de herramientas se quedaría sin la sección y sin el link.
   const showGestionVacaciones = isManager;
-  // Contraseñas (TIC-RE-17) exige las dos cosas: tener equipo y el permiso,
-  // que por defecto solo traen SUPER_ADMIN y DIRECTOR.
-  const showPasswords = isManager && hasModule(user, 'herramientas', 'passwords', 'read');
+  // Contraseñas (TIC-RE-17) es visible para todos: cada quien ve la suya y un
+  // jefe también la de sus subordinados directos; el alcance lo fija el API.
+  const showPasswords = true;
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||
@@ -357,6 +359,15 @@ export function Sidebar({ user }: SidebarProps) {
                   <IdCardIcon className="h-4 w-4" />
                   Colaboradores y Responsivas
                 </NavSubLink>
+                {showSimCards && (
+                  <NavSubLink
+                    href="/transformacion/sim-cards"
+                    active={pathname.startsWith('/transformacion/sim-cards')}
+                  >
+                    <PhoneIcon className="h-4 w-4" />
+                    Líneas Telefónicas
+                  </NavSubLink>
+                )}
                 <NavSubLink
                   href="/transformacion/tickets"
                   active={pathname.startsWith('/transformacion/tickets')}

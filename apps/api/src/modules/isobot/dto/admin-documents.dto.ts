@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class QueryAdminDocumentsDto {
   @IsOptional()
@@ -86,4 +86,11 @@ export class RegisterAdminDocumentDto extends UploadAdminDocumentDto {
   @IsString()
   @MaxLength(255)
   fileType?: string;
+}
+
+/** Ver el documento en el navegador (`inline`) o descargarlo (`attachment`, por defecto). */
+export class DocumentFileQueryDto {
+  @IsOptional()
+  @IsIn(['inline', 'attachment'])
+  disposition?: 'inline' | 'attachment';
 }

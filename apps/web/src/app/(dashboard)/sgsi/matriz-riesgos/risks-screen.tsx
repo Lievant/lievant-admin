@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertIcon, CloseIcon, EyeIcon, PlusIcon, TrashIcon } from '@/components/icons';
+import { InfoPopover } from '@/components/info-popover';
 import { SortColumnHeader } from '@/components/ui/sort-column-header';
 import { useCurrentUser } from '@/components/user-provider';
 import { OwnerPicker, type OwnerValue } from './owner-picker';
@@ -392,6 +393,10 @@ function Modal({
 }
 
 const labelClass = 'mb-1 block text-xs font-medium text-slate-500';
+
+/** Aviso de la "i" de los campos con escala (mismo texto en los cuatro). */
+const SCALE_HELP_TEXT =
+  'La descripción que aparece debajo de este campo cambia según la opción que elijas. Léela con atención antes de seleccionar para asignar el valor correcto.';
 const fieldClass =
   'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-navy placeholder:text-slate-400 focus:border-navy focus:outline-none disabled:opacity-60';
 
@@ -409,12 +414,18 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function ViewModal({ risk, onClose }: { risk: Risk; onClose: () => void }) {
-  const scores: [string, ScaleOption[], number][] = [
-    ['Vulnerabilidad', VULNERABILITY_SCALE, risk.vulnerabilityScore],
-    ['Severidad', SEVERITY_SCALE, risk.severityScore],
-    ['Probabilidad', PROBABILITY_SCALE, risk.probabilityScore],
-    ['Eficacia del control', EFFICACY_SCALE, risk.controlEfficacy],
-  ];
+  const scoreField = (label: string, scale: ScaleOption[], value: number) => {
+    const option = scaleOf(scale, value);
+    return (
+      <div key={label}>
+        <p className={labelClass}>{label}</p>
+        <p className="text-sm text-navy">
+          {value} — {option?.label ?? '—'}
+        </p>
+        {option && <p className="mt-0.5 text-xs text-slate-500">{option.description}</p>}
+      </div>
+    );
+  };
   return (
     <Modal title="Detalle del riesgo" onClose={onClose} wide>
       <div className="grid gap-4 md:grid-cols-2">
@@ -426,33 +437,28 @@ function ViewModal({ risk, onClose }: { risk: Risk; onClose: () => void }) {
           <Field label="Riesgo">{risk.risk}</Field>
         </div>
 
-        {scores.map(([label, scale, value]) => {
-          const option = scaleOf(scale, value);
-          return (
-            <div key={label}>
-              <p className={labelClass}>{label}</p>
-              <p className="text-sm text-navy">
-                {value} — {option?.label ?? '—'}
-              </p>
-              {option && <p className="mt-0.5 text-xs text-slate-500">{option.description}</p>}
-            </div>
-          );
-        })}
-
-        <div className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-4 py-3 md:col-span-2">
-          <p className="text-sm text-slate-600">
-            Valor de riesgo: <span className="font-semibold text-navy">{risk.riskValue}</span>
-          </p>
-          <p className="text-sm text-slate-600">
-            Riesgo residual: <span className="font-semibold text-navy">{formatNumber(risk.residualRisk)}</span>
-          </p>
-          <LevelBadge level={risk.level} />
-          <p className="text-xs text-slate-500">{LEVEL_DESCRIPTION[risk.level]}</p>
+        {scoreField('Vulnerabilidad', VULNERABILITY_SCALE, risk.vulnerabilityScore)}
+        {scoreField('Severidad', SEVERITY_SCALE, risk.severityScore)}
+        {scoreField('Probabilidad', PROBABILITY_SCALE, risk.probabilityScore)}
+        <div>
+          <p className={labelClass}>Valor de riesgo</p>
+          <p className="text-sm font-semibold text-navy">{risk.riskValue}</p>
         </div>
 
         <div className="md:col-span-2">
           <Field label="Control">{risk.control}</Field>
         </div>
+
+        {scoreField('Eficacia del control', EFFICACY_SCALE, risk.controlEfficacy)}
+        <div>
+          <p className={labelClass}>Riesgo residual</p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-navy">{formatNumber(risk.residualRisk)}</span>
+            <LevelBadge level={risk.level} />
+          </div>
+          <p className="mt-0.5 text-xs text-slate-500">{LEVEL_DESCRIPTION[risk.level]}</p>
+        </div>
+
         <Field label="Fecha de reporte">{formatDate(risk.reportedAt)}</Field>
         <Field label="Fecha estimada de solución">{formatDate(risk.estimatedResolutionDate)}</Field>
         <div className="md:col-span-2">
@@ -586,9 +592,14 @@ function ScaleSelect({
   const selected = scale.find((s) => String(s.value) === value);
   return (
     <div>
-      <label htmlFor={id} className={labelClass}>
-        {label}
-      </label>
+      <div className="mb-1 flex items-center">
+        <label htmlFor={id} className="text-xs font-medium text-slate-500">
+          {label}
+        </label>
+        <InfoPopover ariaLabel={`Ayuda sobre ${label}`} width={288}>
+          <p>{SCALE_HELP_TEXT}</p>
+        </InfoPopover>
+      </div>
       <select id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={fieldClass}>
         <option value="">Selecciona…</option>
         {scale.map((s) => (
@@ -723,26 +734,30 @@ function FormModal({
         <ScaleSelect id="risk-vuln-score" label="Vulnerabilidad (1–5)" value={form.vulnerabilityScore} onChange={set('vulnerabilityScore')} scale={VULNERABILITY_SCALE} disabled={saving} />
         <ScaleSelect id="risk-severity" label="Severidad (1–5)" value={form.severityScore} onChange={set('severityScore')} scale={SEVERITY_SCALE} disabled={saving} />
         <ScaleSelect id="risk-probability" label="Probabilidad (1–5)" value={form.probabilityScore} onChange={set('probabilityScore')} scale={PROBABILITY_SCALE} disabled={saving} />
-        <ScaleSelect id="risk-efficacy" label="Eficacia del control" value={form.controlEfficacy} onChange={set('controlEfficacy')} scale={EFFICACY_SCALE} disabled={saving} format={(v) => v.toFixed(1)} />
 
-        <div
-          className="flex flex-wrap items-center gap-4 rounded-lg bg-slate-50 px-4 py-3 md:col-span-2"
-          aria-live="polite"
-        >
-          <p className="text-sm text-slate-600">
-            Valor de riesgo: <span className="font-semibold text-navy">{preview ? preview.riskValue : '—'}</span>
-          </p>
-          <p className="text-sm text-slate-600">
-            Riesgo residual:{' '}
-            <span className="font-semibold text-navy">{preview ? formatNumber(preview.residual) : '—'}</span>
-          </p>
-          {preview && <LevelBadge level={preview.level} />}
-          <p className="text-xs text-slate-400">Se recalcula al guardar.</p>
+        {/* Calculado: solo lectura, no recibe foco. Se recalcula al guardar en el servidor. */}
+        <div aria-live="polite">
+          <p className={labelClass}>Valor de riesgo</p>
+          <div className="rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-navy">
+            {preview ? preview.riskValue : '—'}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">Vulnerabilidad × Severidad × Probabilidad.</p>
         </div>
 
         <div className="md:col-span-2">
           <label htmlFor="risk-control" className={labelClass}>Control</label>
           <textarea id="risk-control" rows={3} value={form.control} disabled={saving} onChange={(e) => set('control')(e.target.value)} className={fieldClass} />
+        </div>
+
+        <ScaleSelect id="risk-efficacy" label="Eficacia del control" value={form.controlEfficacy} onChange={set('controlEfficacy')} scale={EFFICACY_SCALE} disabled={saving} format={(v) => v.toFixed(1)} />
+
+        <div aria-live="polite">
+          <p className={labelClass}>Riesgo residual</p>
+          <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2">
+            <span className="text-sm font-semibold text-navy">{preview ? formatNumber(preview.residual) : '—'}</span>
+            {preview && <LevelBadge level={preview.level} />}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">Valor de riesgo × Eficacia del control. Se recalcula al guardar.</p>
         </div>
 
         <div>

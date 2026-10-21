@@ -28,17 +28,7 @@ import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { ALLOWED_ATTACHMENT_MIME_TYPES } from './helpdesk-storage.service';
 import { UpsertCategoryDto, UpsertSubcategoryDto } from './dto/helpdesk-catalog.dto';
 import { HelpdeskService } from './helpdesk.service';
-
-function isTdUser(user: User): boolean {
-  return (
-    user.roles?.some((r) => r.name === 'SUPER_ADMIN') ||
-    user.userPermissions?.some((up) => up.granted && up.permission?.module === 'tickets.gestion') ||
-    user.roles?.some((r) =>
-      r.permissions?.some((p) => p.module === 'tickets.gestion'),
-    ) ||
-    false
-  );
-}
+import { isTdUser } from './td-user.util';
 
 @UseGuards(JwtAuthGuard)
 @Controller('helpdesk')
@@ -141,7 +131,7 @@ export class HelpdeskController {
 
   @Post('tickets')
   create(@Body() dto: CreateTicketDto, @CurrentUser() user: User) {
-    return this.service.create(dto, user);
+    return this.service.create(dto, user, isTdUser(user));
   }
 
   @Patch('tickets/:id')

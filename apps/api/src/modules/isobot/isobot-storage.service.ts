@@ -9,6 +9,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { buildUploadKey, UPLOAD_URL_TTL_SECONDS } from '../../common/s3-upload.util';
+import { buildContentDisposition, FileDisposition, READ_URL_TTL_SECONDS } from './isobot-file-url.util';
 
 @Injectable()
 export class IsobotStorageService {
@@ -92,6 +93,28 @@ export class IsobotStorageService {
   /** Borra el objeto al reemplazar o retirar un documento. */
   async deleteDocument(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  /**
+   * URL prefirmada de lectura y vida corta para ver o descargar un documento.
+   * `ResponseContentDisposition` y `ResponseContentType` los fija esta firma, no
+   * lo que quedó guardado en el objeto (el navegador lo subió con su propio tipo).
+   * La URL no se guarda ni se registra.
+   */
+  async getPresignedReadUrl(
+    key: string,
+    options: { disposition: FileDisposition; fileName: string; contentType?: string },
+  ): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        ResponseContentDisposition: buildContentDisposition(options.disposition, options.fileName),
+        ...(options.contentType ? { ResponseContentType: options.contentType } : {}),
+      }),
+      { expiresIn: READ_URL_TTL_SECONDS },
+    );
   }
 
   async getPresignedUrl(key: string, fileName?: string, expiresIn = 3600): Promise<string> {

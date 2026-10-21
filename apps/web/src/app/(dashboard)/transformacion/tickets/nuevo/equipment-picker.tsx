@@ -7,6 +7,12 @@ interface EquipmentPickerProps {
   /** legacy_id del equipo elegido; '' si no hay ninguno. */
   value: string;
   onChange: (legacyId: string) => void;
+  /**
+   * Expediente de la persona cuyos equipos se ofrecen como atajo (TD abriendo en
+   * nombre de alguien). Vacío = los del usuario en sesión. El servidor solo lo
+   * respeta para quien tiene permiso; para los demás devuelve siempre los suyos.
+   */
+  employeeId?: string;
 }
 
 function label(e: EquipmentSearchItem): string {
@@ -26,8 +32,9 @@ function label(e: EquipmentSearchItem): string {
  * tickets el equipo con problema es uno de los suyos, así que la ruta corta es
  * un clic y no una búsqueda.
  */
-export function EquipmentPicker({ value, onChange }: EquipmentPickerProps) {
+export function EquipmentPicker({ value, onChange, employeeId = '' }: EquipmentPickerProps) {
   const [mine, setMine] = useState<EquipmentSearchItem[]>([]);
+  const [mineLoading, setMineLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<EquipmentSearchItem[]>([]);
   const [selected, setSelected] = useState<EquipmentSearchItem | null>(null);
@@ -36,18 +43,23 @@ export function EquipmentPicker({ value, onChange }: EquipmentPickerProps) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/inventory/equipment/search?assignedTo=me')
+    setMineLoading(true);
+    setMine([]);
+    fetch(`/api/inventory/equipment/search?assignedTo=${encodeURIComponent(employeeId || 'me')}`)
       .then((res) => (res.ok ? (res.json() as Promise<EquipmentSearchItem[]>) : []))
       .then((data) => {
         if (!cancelled) setMine(data);
       })
       .catch(() => {
         if (!cancelled) setMine([]);
+      })
+      .finally(() => {
+        if (!cancelled) setMineLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [employeeId]);
 
   const search = useCallback(async (q: string) => {
     if (q.trim().length < 2) {
@@ -110,6 +122,12 @@ export function EquipmentPicker({ value, onChange }: EquipmentPickerProps) {
 
   return (
     <div className="space-y-2">
+      {mineLoading && <p className="text-xs text-slate-400">Cargando equipos…</p>}
+
+      {!mineLoading && employeeId && mine.length === 0 && (
+        <p className="text-xs text-slate-400">Este colaborador no tiene equipos asignados</p>
+      )}
+
       {mine.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {mine.map((e) => (

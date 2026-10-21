@@ -29,6 +29,7 @@ import { FamilyTab } from './family-tab';
 import { DocumentsTab } from './documents-tab';
 import { EquipmentLicensesTab } from './equipment-licenses-tab';
 import { PhotosTab } from './photos-tab';
+import { SimCardsTab } from './sim-cards-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
 
@@ -41,6 +42,7 @@ const ALL_TABS = [
   { id: 'documents',    label: 'Documentos',         badge: null },
   { id: 'photos',       label: 'Fotos',              badge: null },
   { id: 'equipos-licencias', label: 'Equipos y Licencias', badge: null },
+  { id: 'lineas-telefonicas', label: 'Líneas Telefónicas', badge: null },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -56,6 +58,7 @@ const TAB_ALIASES: Record<string, TabId> = {
   familia: 'family',
   documentos: 'documents',
   fotos: 'photos',
+  lineas: 'lineas-telefonicas',
 };
 
 function resolveTabParam(value: string | null): TabId | null {
@@ -116,6 +119,7 @@ export function EmployeeDetailScreen({
   const canViewEquipos       = usePermission('rrhh', 'empleados.equipos', 'read');
   const canViewLicencias     = usePermission('rrhh', 'empleados.licencias', 'read');
   const canViewVacations     = usePermission('rrhh', 'empleados.vacaciones', 'read');
+  const canViewSimCards      = usePermission('rrhh', 'empleados', 'read');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
     if (tab.id === 'personal' || tab.id === 'family') return canViewPersonal;
@@ -123,6 +127,7 @@ export function EmployeeDetailScreen({
     if (tab.id === 'compensation') return canViewCompensation;
     if (tab.id === 'documents') return canViewDocuments;
     if (tab.id === 'equipos-licencias') return canViewEquipos || canViewLicencias;
+    if (tab.id === 'lineas-telefonicas') return canViewSimCards;
     return true; // general, photos
   });
 
@@ -271,6 +276,7 @@ export function EmployeeDetailScreen({
             canViewLicencias={canViewLicencias}
           />
         )}
+        {effectiveTab === 'lineas-telefonicas' && <SimCardsTab employeeId={employee.id} />}
       </div>
 
       {isEditOpen && <EditEmployeeDialog employee={employee} catalogs={catalogs} onClose={() => setEditOpen(false)} />}
