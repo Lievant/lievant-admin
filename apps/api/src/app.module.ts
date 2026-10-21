@@ -13,6 +13,7 @@ import { ExpensesModule } from './modules/expenses/expenses.module';
 import { HelpdeskModule } from './modules/helpdesk/helpdesk.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { SimCardsModule } from './modules/inventory/sim-cards/sim-cards.module';
+import { AuditsModule } from './modules/audits/audits.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { MediaModule } from './modules/media/media.module';
@@ -68,6 +69,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     HelpdeskModule,
     InventoryModule,
     SimCardsModule,
+    AuditsModule,
     ProjectsModule,
     IsobotModule,
     RisksModule,
