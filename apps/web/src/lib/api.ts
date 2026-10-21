@@ -4925,15 +4925,22 @@ export function listPasswordVisiblePeople(): Promise<PasswordVisiblePerson[]> {
   return apiFetchWithRetry<PasswordVisiblePerson[]>('/passwords/visible-people');
 }
 
-export function createAccountPassword(payload: AccountPasswordPayload): Promise<AccountPasswordItem> {
-  return apiFetch<AccountPasswordItem>('/passwords', { method: 'POST', body: JSON.stringify(payload) });
+/** Lo que devuelve crear/editar: la cuenta más la evaluación de la contraseña (solo informa). */
+export interface AccountPasswordSaved extends AccountPasswordItem {
+  /** null al editar sin cambiar la contraseña. */
+  passwordStrength: 'debil' | 'media' | 'fuerte' | null;
+  passwordWarnings: string[];
+}
+
+export function createAccountPassword(payload: AccountPasswordPayload): Promise<AccountPasswordSaved> {
+  return apiFetch<AccountPasswordSaved>('/passwords', { method: 'POST', body: JSON.stringify(payload) });
 }
 
 export function updateAccountPassword(
   id: string,
   payload: Partial<AccountPasswordPayload>,
-): Promise<AccountPasswordItem> {
-  return apiFetch<AccountPasswordItem>(`/passwords/${id}`, {
+): Promise<AccountPasswordSaved> {
+  return apiFetch<AccountPasswordSaved>(`/passwords/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
@@ -4941,16 +4948,6 @@ export function updateAccountPassword(
 
 export function revokeAccountPassword(id: string): Promise<void> {
   return apiFetch<void>(`/passwords/${id}`, { method: 'DELETE' });
-}
-
-export function createPasswordApplication(payload: {
-  name: string;
-  category?: string;
-}): Promise<PasswordApplication> {
-  return apiFetch<PasswordApplication>('/passwords/applications', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
 }
 
 // ── Líneas telefónicas (SIMs) ────────────────────────────────────────────────
