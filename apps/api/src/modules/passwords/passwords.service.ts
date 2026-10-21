@@ -31,6 +31,10 @@ import { PasswordApplication } from './entities/password-application.entity';
 /** Máximo de contraseñas que un usuario puede ver o copiar por hora. */
 const REVEAL_LIMIT_PER_HOUR = 10;
 
+/** 403 genérico: no revela si la persona o la cuenta existen. */
+const NO_ACCESS_PERSON = 'No tienes acceso a la información de esta persona.';
+const NO_ACCESS_ACCOUNT = 'No tienes acceso a esta cuenta.';
+
 /** Días de anticipación con que se avisa al líder. */
 const EXPIRY_NOTICE_DAYS = 3;
 
@@ -187,6 +191,28 @@ export class PasswordsService {
     }));
   }
 
+  /**
+   * Personas cuya información puede ver quien llama: ella misma y sus
+   * subordinados directos activos. Solo id y nombre; nada más sale de aquí.
+   */
+  async getVisiblePeople(userId: string): Promise<{ id: string; fullName: string; isMe: boolean }[]> {
+    const me = await this.employeesRepo.findOne({ where: { authUserId: userId } });
+    if (!me) return [];
+    const team = await this.teamQuery(me.id).orderBy('emp.full_name', 'ASC').getMany();
+    return [
+      { id: me.id, fullName: me.fullName, isMe: true },
+      ...team.map((e) => ({ id: e.id, fullName: e.fullName, isMe: false })),
+    ];
+  }
+
+  /** ¿`employeeId` es un subordinado directo activo de `managerEmployeeId`? */
+  private async isActiveDirectReport(managerEmployeeId: string, employeeId: string): Promise<boolean> {
+    const count = await this.teamQuery(managerEmployeeId)
+      .andWhere('emp.id = :employeeId', { employeeId })
+      .getCount();
+    return count > 0;
+  }
+
   private teamQuery(managerEmployeeId: string) {
     return this.employeesRepo
       .createQueryBuilder('emp')
@@ -202,20 +228,23 @@ export class PasswordsService {
   // ==========================================================================
 
   /**
-   * Cuentas de los colaboradores que reportan directamente a quien llama.
-   * Nunca selecciona password_encrypted.
+   * Cuentas de una persona: por defecto las de quien llama; con `employeeId`,
+   * solo si es ella misma o un subordinado directo activo (si no, 403 genérico
+   * que no revela si la persona existe). El id del cliente nunca se acepta sin
+   * validarlo. Nunca selecciona password_encrypted.
    */
   async list(user: User, query: QueryPasswordsDto) {
     const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
     if (!me) return [];
 
-    const params: unknown[] = [me.id];
-    const where = ['e.direct_report_to_id = $1', 'e.id != $1'];
-
-    if (query.employeeId) {
-      params.push(query.employeeId);
-      where.push(`ap.employee_id = $${params.length}`);
+    const targetId = query.employeeId ?? me.id;
+    if (targetId !== me.id && !(await this.isActiveDirectReport(me.id, targetId))) {
+      throw new ForbiddenException(NO_ACCESS_PERSON);
     }
+
+    const params: unknown[] = [targetId];
+    const where = ['ap.employee_id = $1'];
+
     if (query.applicationId) {
       params.push(query.applicationId);
       where.push(`ap.application_id = $${params.length}`);
@@ -237,7 +266,7 @@ export class PasswordsService {
 
   async create(user: User, dto: CreateAccountPasswordDto) {
     const me = await this.requireEmployee(user.id);
-    await this.assertDirectReport(me.id, dto.employeeId);
+    await this.assertCanManagePerson(me.id, dto.employeeId, NO_ACCESS_PERSON);
     await this.assertActiveApplication(dto.applicationId);
     const key = this.encryptionKey();
 
@@ -281,10 +310,8 @@ export class PasswordsService {
     };
 
     if (dto.employeeId !== undefined && dto.employeeId !== row.employee_id) {
-      // SUPER_ADMIN sin expediente no tiene "equipo" contra el cual validar;
-      // basta con que el colaborador exista.
-      if (me) await this.assertDirectReport(me.id, dto.employeeId);
-      else await this.assertEmployeeExists(dto.employeeId);
+      // Solo se puede pasar la cuenta a alguien de tu alcance: tú o un subordinado directo.
+      await this.assertCanManagePerson(me.id, dto.employeeId, NO_ACCESS_PERSON);
       push('employee_id = ?', dto.employeeId);
     }
     if (dto.applicationId !== undefined) {
@@ -595,43 +622,37 @@ export class PasswordsService {
     return row;
   }
 
-  /** Ve la contraseña: el jefe actual del colaborador, el líder que la asignó o SUPER_ADMIN. */
+  /**
+   * Ve la contraseña: la propia persona o su jefe actual (subordinado directo
+   * activo). Un líder que la asignó pero ya no es su jefe, un par, un jefe
+   * indirecto o un usuario sin expediente reciben 403; el rol no da atajos.
+   */
   private async assertCanView(user: User, row: AccessRow): Promise<void> {
-    if (this.isSuperAdmin(user)) return;
     const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
-    if (me && (row.employee_manager_id === me.id || row.manager_id === me.id)) return;
-    throw new ForbiddenException('Esta cuenta no pertenece a tu equipo');
+    if (!me) throw new ForbiddenException(NO_ACCESS_ACCOUNT);
+    await this.assertCanManagePerson(me.id, row.employee_id, NO_ACCESS_ACCOUNT);
+  }
+
+  /** Titular propio o subordinado directo activo; si no, 403 genérico. */
+  private async assertCanManagePerson(meId: string, targetId: string, message: string): Promise<void> {
+    if (targetId === meId) return;
+    if (!(await this.isActiveDirectReport(meId, targetId))) throw new ForbiddenException(message);
   }
 
   /**
-   * Edita o revoca: mismo alcance que ver. Devuelve el expediente de quien
-   * llama (null para un SUPER_ADMIN sin expediente).
+   * Edita o revoca: mismo alcance que ver (la propia persona o su jefe actual).
+   * Devuelve el expediente de quien llama.
    */
-  private async assertCanManage(user: User, row: AccessRow): Promise<EmployeeRecord | null> {
-    const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
-    if (this.isSuperAdmin(user)) return me;
-    if (me && (row.manager_id === me.id || row.employee_manager_id === me.id)) return me;
-    throw new ForbiddenException('Solo el líder asignado puede modificar esta cuenta');
+  private async assertCanManage(user: User, row: AccessRow): Promise<EmployeeRecord> {
+    const me = await this.requireEmployee(user.id);
+    await this.assertCanManagePerson(me.id, row.employee_id, NO_ACCESS_ACCOUNT);
+    return me;
   }
 
   private async requireEmployee(userId: string): Promise<EmployeeRecord> {
     const me = await this.employeesRepo.findOne({ where: { authUserId: userId } });
     if (!me) throw new ForbiddenException('Tu usuario no está vinculado a un expediente de empleado');
     return me;
-  }
-
-  private async assertDirectReport(managerEmployeeId: string, employeeId: string): Promise<void> {
-    const count = await this.teamQuery(managerEmployeeId)
-      .andWhere('emp.id = :employeeId', { employeeId })
-      .getCount();
-    if (count === 0) {
-      throw new ForbiddenException('Solo puedes asignar cuentas a colaboradores que te reportan directamente');
-    }
-  }
-
-  private async assertEmployeeExists(employeeId: string): Promise<void> {
-    const exists = await this.employeesRepo.exists({ where: { id: employeeId } });
-    if (!exists) throw new BadRequestException('Colaborador no encontrado');
   }
 
   private async assertActiveApplication(applicationId: string): Promise<void> {

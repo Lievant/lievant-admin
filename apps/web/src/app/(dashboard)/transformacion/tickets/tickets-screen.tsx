@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { ErrorKind, HelpdeskCategorySummary, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import type { ErrorKind, HelpdeskCategorySummary, TicketAssignee, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { deleteTicketAction } from './actions';
@@ -68,7 +68,8 @@ interface Filters {
   priority: string;
   category: string;
   search: string;
-  slaStatus: string;
+  /** UUID de la persona asignada o 'sin_asignar'. */
+  assignedTo: string;
 }
 
 interface TicketsScreenProps {
@@ -96,8 +97,19 @@ export function TicketsScreen({
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; displayId: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [search, setSearch] = useState(filters.search);
+  const [assignees, setAssignees] = useState<TicketAssignee[]>([]);
 
   useEffect(() => { setSearch(filters.search); }, [filters.search]);
+
+  // Mismo catálogo que el selector "Asignar a" del detalle del ticket. Solo lo ve
+  // el personal de TD: el resto no ve la columna ni puede asignar.
+  useEffect(() => {
+    if (!isTd) return;
+    fetch('/api/helpdesk/assignees')
+      .then((r) => r.json() as Promise<TicketAssignee[]>)
+      .then((list) => setAssignees(Array.isArray(list) ? list : []))
+      .catch(() => {});
+  }, [isTd]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -113,7 +125,7 @@ export function TicketsScreen({
     if (filters.priority) sp.set('priority', filters.priority);
     if (filters.category) sp.set('category', filters.category);
     if (filters.search) sp.set('search', filters.search);
-    if (filters.slaStatus) sp.set('slaStatus', filters.slaStatus);
+    if (filters.assignedTo) sp.set('assignedTo', filters.assignedTo);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -149,7 +161,7 @@ export function TicketsScreen({
     router.push(`/transformacion/tickets?${sp.toString()}`);
   }
 
-  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data);
+  const { sorted, sortKey, sortDir, handleSort } = useSortableColumns(page.data, { emptyLastKeys: ['assigneeName'] });
   const isFirstPage = cursorsStack.length === 0 && !cursor;
 
   if (errorKind === 'forbidden') {
@@ -230,16 +242,20 @@ export function TicketsScreen({
           ))}
         </select>
 
-        <select
-          value={filters.slaStatus}
-          onChange={(e) => updateParams({ slaStatus: e.target.value || null })}
-          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
-        >
-          <option value="">SLA: Todos</option>
-          <option value="ok">En tiempo (&lt;75%)</option>
-          <option value="warning">Por vencer (75–100%)</option>
-          <option value="overdue">Vencido (&gt;100%)</option>
-        </select>
+        {isTd && (
+          <select
+            value={filters.assignedTo}
+            onChange={(e) => updateParams({ assignedTo: e.target.value || null })}
+            aria-label="Asignado A"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
+          >
+            <option value="">Asignado A: Todos</option>
+            <option value="sin_asignar">Sin Asignar</option>
+            {assignees.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Tabla */}
@@ -255,7 +271,9 @@ export function TicketsScreen({
               <SortableHeader label="Estado" sortKey="status" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               <th className="px-4 py-3">SLA</th>
               <SortableHeader label="Fecha" sortKey="requestedAt" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
-              {isTd && <th className="px-4 py-3">Asignado a</th>}
+              {isTd && (
+                <SortableHeader label="Asignado a" sortKey="assigneeName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+              )}
               {isSuperAdmin && <th className="px-4 py-3">Acciones</th>}
             </tr>
           </thead>

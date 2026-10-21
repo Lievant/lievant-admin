@@ -1,13 +1,15 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
-import type { AccountPasswordItem, PasswordApplication, PasswordTeamEmployee } from '@/lib/api';
+import type { AccountPasswordItem, PasswordApplication, PasswordVisiblePerson } from '@/lib/api';
 import { AlertIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon } from '@/components/icons';
 import {
   createAccountPasswordAction,
   createPasswordApplicationAction,
   updateAccountPasswordAction,
 } from './actions';
+import { buildAccountPayload, resolveOwnerId, validateAccountForm } from './account-form';
+import { PersonSelect } from './person-select';
 import { generatePassword, isValidEmail, passwordStrength, todayIso, type PasswordStrength } from './utils';
 
 const STRENGTH_META: Record<PasswordStrength, { label: string; bar: string; text: string; width: string }> = {
@@ -23,16 +25,29 @@ const labelClass = 'text-xs font-semibold uppercase tracking-wide text-slate-500
 interface PasswordDialogProps {
   account: AccountPasswordItem | null;
   applications: PasswordApplication[];
-  team: PasswordTeamEmployee[];
+  /** La propia persona y sus subordinados directos activos. */
+  people: PasswordVisiblePerson[];
+  /** Titular preseleccionado al crear: la persona elegida en el selector de la pantalla. */
+  defaultEmployeeId: string;
+  /** Agregar aplicaciones al catálogo exige el permiso de escritura del catálogo. */
+  canAddApplication?: boolean;
   onClose: () => void;
   onSaved: (message: string) => void;
 }
 
-export function PasswordDialog({ account, applications, team, onClose, onSaved }: PasswordDialogProps) {
+export function PasswordDialog({
+  account,
+  applications,
+  people,
+  defaultEmployeeId,
+  canAddApplication = false,
+  onClose,
+  onSaved,
+}: PasswordDialogProps) {
   const isEdit = account !== null;
   const [apps, setApps] = useState<PasswordApplication[]>(applications);
   const [applicationId, setApplicationId] = useState(account?.application.id ?? '');
-  const [employeeId, setEmployeeId] = useState(account?.employee.id ?? '');
+  const [employeeId, setEmployeeId] = useState(account?.employee.id ?? defaultEmployeeId);
   const [username, setUsername] = useState(account?.username ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -42,15 +57,12 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  // Al editar, el colaborador y la aplicación actuales pueden ya no estar en
-  // las listas (cambió de jefe, app desactivada); se agregan para no perderlos.
-  const teamOptions = useMemo(() => {
-    if (!account || team.some((e) => e.id === account.employee.id)) return team;
-    return [
-      ...team,
-      { id: account.employee.id, fullName: account.employee.fullName, position: account.employee.position, area: account.employee.area, corporateEmail: null },
-    ];
-  }, [team, account]);
+  // Solo hay que elegir titular al crear y si hay más de una persona a la vista
+  // (un jefe con subordinados). Sin subordinados la cuenta es de quien la crea; al
+  // editar, el titular no cambia.
+  const chooseOwner = !isEdit && people.length > 1;
+  // Al editar, la aplicación actual puede ya no estar en la lista (desactivada);
+  // se agrega para no perderla.
   const appOptions = useMemo(() => {
     if (!account || apps.some((a) => a.id === account.application.id)) return apps;
     return [
@@ -62,29 +74,18 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
   const strength = password ? passwordStrength(password) : null;
 
   function handleSave() {
-    if (!applicationId) return setError('Selecciona la aplicación.');
-    if (!employeeId) return setError('Selecciona al colaborador.');
-    if (!isValidEmail(username)) return setError('El usuario debe ser un correo válido.');
-    if (!isEdit && !password) return setError('Escribe o genera la contraseña.');
-    if (expiryDate && expiryDate < assignedDate) {
-      return setError('El vencimiento no puede ser anterior a la fecha de asignación.');
-    }
+    const form = { isEdit, applicationId, employeeId, people, username, password, assignedDate, expiryDate, notes };
+    const problem = validateAccountForm(form);
+    if (problem) return setError(problem);
     setError(null);
 
-    const payload = {
-      applicationId,
-      employeeId,
-      username: username.trim(),
-      assignedDate,
-      expiryDate: expiryDate || null,
-      notes: notes.trim() || null,
-      ...(password ? { password } : {}),
-    };
+    const payload = buildAccountPayload(form);
 
     startTransition(async () => {
+      // El titular solo viaja al crear; al editar no se cambia.
       const res = isEdit
         ? await updateAccountPasswordAction(account.id, payload)
-        : await createAccountPasswordAction(payload);
+        : await createAccountPasswordAction({ ...payload, employeeId: resolveOwnerId(people, employeeId) });
       if (res.success) onSaved(isEdit ? 'Cuenta actualizada.' : 'Cuenta registrada.');
       else setError(res.error ?? 'No se pudo guardar la cuenta.');
     });
@@ -101,6 +102,7 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
               applications={appOptions}
               value={applicationId}
               onChange={setApplicationId}
+              canAdd={canAddApplication}
               onCreated={(app) => {
                 setApps((prev) => [...prev, app]);
                 setApplicationId(app.id);
@@ -108,23 +110,21 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
             />
           </Section>
 
-          <Section title="Colaborador">
-            <select
-              aria-label="Colaborador"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className={`${fieldClass} bg-white`}
-            >
-              <option value="">Selecciona un colaborador…</option>
-              {teamOptions.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.fullName}
-                  {emp.area ? ` · ${emp.area}` : ''}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-400">Solo aparecen los colaboradores que te reportan directamente.</p>
-          </Section>
+          {chooseOwner && (
+            <Section title="Colaborador">
+              <PersonSelect
+                people={people}
+                value={resolveOwnerId(people, employeeId)}
+                onChange={setEmployeeId}
+                disabled={isPending}
+              />
+            </Section>
+          )}
+          {isEdit && (
+            <p className="text-xs text-slate-500">
+              Titular de la cuenta: <span className="font-medium text-navy">{account.employee.fullName}</span>
+            </p>
+          )}
 
           <Section title="Credenciales">
             <div className="flex flex-col gap-1">
@@ -240,7 +240,11 @@ export function PasswordDialog({ account, applications, team, onClose, onSaved }
           </Section>
         </div>
 
-        {error && <p className="mt-3 text-xs text-rose-600">{error}</p>}
+        {error && (
+          <p role="alert" className="mt-3 text-xs font-medium text-rose-600">
+            {error}
+          </p>
+        )}
 
         <div className="mt-5 flex justify-end gap-2">
           <button
@@ -279,11 +283,13 @@ function ApplicationCombobox({
   applications,
   value,
   onChange,
+  canAdd,
   onCreated,
 }: {
   applications: PasswordApplication[];
   value: string;
   onChange: (id: string) => void;
+  canAdd: boolean;
   onCreated: (app: PasswordApplication) => void;
 }) {
   const selected = applications.find((a) => a.id === value) ?? null;
@@ -390,7 +396,7 @@ function ApplicationCombobox({
             Cancelar
           </button>
         </div>
-      ) : (
+      ) : canAdd ? (
         <button
           type="button"
           onClick={() => {
@@ -402,7 +408,7 @@ function ApplicationCombobox({
           <PlusIcon className="h-3.5 w-3.5" />
           Agregar aplicación
         </button>
-      )}
+      ) : null}
       {addError && <p className="text-xs text-rose-600">{addError}</p>}
     </div>
   );

@@ -6,6 +6,7 @@ import { CloseIcon, DownloadIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { statusBadgeStyle, typeIcon } from '../../constants';
 import { EmployeePhoto } from '../colaboradores-screen';
+import { EmployeeSimCards } from '../../../sim-cards/employee-sim-cards';
 
 interface EquipmentItem {
   id: string;
@@ -324,6 +325,20 @@ export function EmployeeEquipmentScreen({ employeeId }: { employeeId: string }) 
           </ScrollableTable>
         </div>
       )}
+
+      {/* Líneas telefónicas: solo con sim-cards.read; no toca la responsiva ni su generación. */}
+      <div className="mt-8">
+        <EmployeeSimCards
+          employeeId={employeeId}
+          title="Líneas Telefónicas"
+          emptyText="Este colaborador no tiene líneas telefónicas asignadas"
+          showCost={false}
+          showStatus={false}
+          linkEquipment
+          showHistory={false}
+          hideWhenForbidden
+        />
+      </div>
 
       {confirmando && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">

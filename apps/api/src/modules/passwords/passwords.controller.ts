@@ -29,8 +29,11 @@ import {
 import { PasswordsService } from './passwords.service';
 
 /**
- * TIC-RE-17. El permiso dice qué puede hacer el usuario; el alcance (qué
- * cuentas) lo fija el propio dato: solo las de colaboradores que le reportan.
+ * TIC-RE-17. Cualquier usuario autenticado puede abrir la pantalla. Ver,
+ * revelar, crear, editar y revocar no piden permiso: el alcance lo fija el
+ * servicio en cada llamada y vale para las cuentas propias y las de los
+ * subordinados directos activos. Solo el catálogo de aplicaciones conserva
+ * `herramientas.passwords.write`.
  */
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('passwords')
@@ -80,6 +83,12 @@ export class PasswordsController {
     return this.service.getTeamEmployees(user.id);
   }
 
+  /** Quién se puede elegir en el selector: la propia persona y sus subordinados directos activos. */
+  @Get('visible-people')
+  getVisiblePeople(@CurrentUser() user: User) {
+    return this.service.getVisiblePeople(user.id);
+  }
+
   // SUPER_ADMIN se valida en el servicio.
   @Get('audit-log')
   getAuditLog(@CurrentUser() user: User) {
@@ -88,14 +97,13 @@ export class PasswordsController {
 
   // ── Contraseñas ────────────────────────────────────────────────────────────
 
+  // Sin permiso: el alcance (propia o subordinado directo) se valida en el servicio.
   @Get()
-  @RequirePermission('herramientas', 'passwords', 'read')
   list(@CurrentUser() user: User, @Query() query: QueryPasswordsDto) {
     return this.service.list(user, query);
   }
 
   @Get(':id/reveal')
-  @RequirePermission('herramientas', 'passwords', 'read')
   reveal(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
@@ -106,13 +114,11 @@ export class PasswordsController {
   }
 
   @Post()
-  @RequirePermission('herramientas', 'passwords', 'write')
   create(@CurrentUser() user: User, @Body() dto: CreateAccountPasswordDto) {
     return this.service.create(user, dto);
   }
 
   @Patch(':id')
-  @RequirePermission('herramientas', 'passwords', 'write')
   update(
     @CurrentUser() user: User,
     @Param('id', ParseUUIDPipe) id: string,
@@ -122,7 +128,6 @@ export class PasswordsController {
   }
 
   @Delete(':id')
-  @RequirePermission('herramientas', 'passwords', 'write')
   @HttpCode(HttpStatus.NO_CONTENT)
   revoke(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
     return this.service.revoke(user, id);

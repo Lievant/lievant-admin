@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { avatarColor, initials } from '@/lib/avatar';
 import type { EquipmentDetail } from '@/lib/api';
 import { formatDate, statusBadgeStyle, typeIcon } from '../constants';
+import { EquipmentSimsSection } from './equipment-sims-section';
 
 interface OtherEquipmentItem {
   id: string;
@@ -341,6 +342,9 @@ export function AssignmentTab({ equipment, onUpdated }: Props) {
           </ul>
         </div>
       )}
+
+      {/* Líneas telefónicas: solo informativa; se oculta si no hay permiso de lectura */}
+      <EquipmentSimsSection equipmentId={equipment.id} employeeName={empName} />
     </div>
   );
 }

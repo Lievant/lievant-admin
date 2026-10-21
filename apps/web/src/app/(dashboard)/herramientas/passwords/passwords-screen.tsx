@@ -4,28 +4,32 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import type {
   AccountPasswordItem,
   PasswordApplication,
-  PasswordTeamEmployee,
+  PasswordVisiblePerson,
 } from '@/lib/api';
-import { CopyIcon, DownloadIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
+import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
+import { useCurrentUser } from '@/components/user-provider';
 import { StatCard } from '@/components/stat-card';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
+import { nextSortCycle, sortRows, type SortDir } from '@/lib/sort-rows';
 import { revokeAccountPasswordAction } from './actions';
+import { STATUS_LABEL, accountSortValue, type AccountSortKey, type DisplayStatus } from './account-sort';
 import { PasswordDialog } from './password-dialog';
-import { daysUntil, formatDate, todayIso } from './utils';
+import { PersonSelect } from './person-select';
+import { daysUntil, formatDate } from './utils';
 
 /** Cuánto tiempo queda visible una contraseña revelada. */
 const REVEAL_SECONDS = 30;
 const MASK = '••••••••';
 const SOON_DAYS = 30;
 
-type DisplayStatus = 'activa' | 'por_vencer' | 'vencida' | 'revocada';
 type StatusFilter = 'todas' | DisplayStatus;
 
 const STATUS_META: Record<DisplayStatus, { label: string; className: string }> = {
-  activa: { label: 'Activa', className: 'bg-emerald-100 text-emerald-700' },
-  por_vencer: { label: 'Por vencer', className: 'bg-amber-100 text-amber-700' },
-  vencida: { label: 'Vencida', className: 'bg-rose-100 text-rose-700' },
-  revocada: { label: 'Revocada', className: 'bg-slate-100 text-slate-500' },
+  activa: { label: STATUS_LABEL.activa, className: 'bg-emerald-100 text-emerald-700' },
+  por_vencer: { label: STATUS_LABEL.por_vencer, className: 'bg-amber-100 text-amber-700' },
+  vencida: { label: STATUS_LABEL.vencida, className: 'bg-rose-100 text-rose-700' },
+  revocada: { label: STATUS_LABEL.revocada, className: 'bg-slate-100 text-slate-500' },
 };
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
@@ -44,20 +48,75 @@ function displayStatus(account: AccountPasswordItem): DisplayStatus {
 }
 
 interface PasswordsScreenProps {
+  /** Cuentas de la propia persona (la selección inicial). */
   accounts: AccountPasswordItem[];
   applications: PasswordApplication[];
-  team: PasswordTeamEmployee[];
+  /** La propia persona y sus subordinados directos activos. */
+  people: PasswordVisiblePerson[];
   apiUnavailable: boolean;
 }
 
-export function PasswordsScreen({ accounts, applications, team, apiUnavailable }: PasswordsScreenProps) {
-  const [employeeFilter, setEmployeeFilter] = useState('');
+/** Alta de aplicaciones nuevas en el catálogo: sigue exigiendo el permiso de escritura. */
+function canEditCatalog(user: ReturnType<typeof useCurrentUser>): boolean {
+  if (!user) return false;
+  if (user.roles.some((r) => r.name === 'SUPER_ADMIN')) return true;
+  return user.permissions.some(
+    (p) => p.section === 'herramientas' && p.module === 'passwords' && p.action === 'write',
+  );
+}
+
+export function PasswordsScreen({
+  accounts: initialAccounts,
+  applications,
+  people,
+  apiUnavailable,
+}: PasswordsScreenProps) {
+  const user = useCurrentUser();
+  const me = people.find((p) => p.isMe) ?? null;
+  const [personId, setPersonId] = useState(me?.id ?? '');
+  const [accounts, setAccounts] = useState(initialAccounts);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const selectedPerson = people.find((p) => p.id === personId) ?? me;
+  const isOwnView = selectedPerson?.isMe ?? true;
+  // Cada persona gestiona las suyas y el jefe las de sus subordinados directos;
+  // el API valida el alcance en cada llamada.
+  const canManage = people.length > 0;
   const [applicationFilter, setApplicationFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('todas');
+  // Un clic ordena ascendente, otro descendente y otro quita el orden. No se guarda entre visitas.
+  const [sort, setSort] = useState<{ key: AccountSortKey; dir: SortDir } | null>(null);
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
   const [revoking, setRevoking] = useState<AccountPasswordItem | null>(null);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  /** Recarga las cuentas de una persona; el servidor valida de nuevo que pueda verlas. */
+  async function loadAccounts(id: string) {
+    setLoadingAccounts(true);
+    setLoadError(null);
+    try {
+      const res = await fetch(`/api/passwords?employeeId=${encodeURIComponent(id)}`, { cache: 'no-store' });
+      if (res.status === 403) {
+        setAccounts([]);
+        setLoadError('No tienes acceso a la información de esta persona.');
+        return;
+      }
+      if (!res.ok) throw new Error();
+      setAccounts((await res.json()) as AccountPasswordItem[]);
+    } catch {
+      setLoadError('No se pudo cargar la información. Intenta de nuevo.');
+    } finally {
+      setLoadingAccounts(false);
+    }
+  }
+
+  function selectPerson(id: string) {
+    setPersonId(id);
+    setApplicationFilter('');
+    setStatusFilter('todas');
+    void loadAccounts(id);
+  }
 
   // No hay toasts en el proyecto: aviso fijo que se retira solo.
   useEffect(() => {
@@ -84,12 +143,18 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
     () =>
       withStatus.filter(
         (r) =>
-          (!employeeFilter || r.account.employee.id === employeeFilter) &&
           (!applicationFilter || r.account.application.id === applicationFilter) &&
           (statusFilter === 'todas' || r.status === statusFilter),
       ),
-    [withStatus, employeeFilter, applicationFilter, statusFilter],
+    [withStatus, applicationFilter, statusFilter],
   );
+
+  // El orden se aplica sobre lo ya filtrado (no hay paginación: es todo el conjunto).
+  const sorted = useMemo(
+    () => (sort ? sortRows(filtered, (r) => accountSortValue(r, sort.key), sort.dir) : filtered),
+    [filtered, sort],
+  );
+  const onSort = (key: AccountSortKey) => setSort((current) => nextSortCycle(current, key));
 
   // El filtro de aplicación ofrece también las desactivadas que siguen en uso.
   const applicationOptions = useMemo(() => {
@@ -107,57 +172,11 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
       if (res.success) {
         setRevoking(null);
         setNotice({ kind: 'info', text: `Cuenta de ${target.application.name} revocada.` });
+        void loadAccounts(personId);
       } else {
         setNotice({ kind: 'error', text: res.error ?? 'No se pudo revocar la cuenta.' });
       }
     });
-  }
-
-  async function exportExcel() {
-    // SheetJS se carga solo al exportar: no tiene por qué entrar en el bundle.
-    const XLSX = await import('xlsx');
-    const hoy = todayIso();
-    const encabezado = [
-      ['TIC-RE-17 · Administración de Contraseñas'],
-      ['Código', 'TIC-RE-17'],
-      ['Versión', '01'],
-      ['Fecha de emisión', formatDate(hoy)],
-      ['Clasificación', 'C3 — Confidencial'],
-      [],
-      [
-        'No.',
-        'Aplicación',
-        'Categoría',
-        'Colaborador',
-        'Área',
-        'Puesto',
-        'Usuario / Correo',
-        'Fecha asignación',
-        'Fecha vencimiento',
-        'Estado',
-        'Notas',
-      ],
-    ];
-    const filas = filtered.map(({ account: a, status }) => [
-      a.recordNumber,
-      a.application.name,
-      a.application.category ?? '',
-      a.employee.fullName,
-      a.employee.area ?? '',
-      a.employee.position,
-      a.username,
-      formatDate(a.assignedDate),
-      a.expiryDate ? formatDate(a.expiryDate) : 'Sin vencimiento',
-      STATUS_META[status].label,
-      a.notes ?? '',
-    ]);
-    const pie = [[], ['Contraseñas omitidas por clasificación C3']];
-
-    const hoja = XLSX.utils.aoa_to_sheet([...encabezado, ...filas, ...pie]);
-    hoja['!cols'] = [6, 24, 18, 30, 18, 24, 32, 16, 18, 12, 40].map((wch) => ({ wch }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, hoja, 'TIC-RE-17');
-    XLSX.writeFile(wb, `TIC-RE-17-contrasenas-${hoy}.xlsx`);
   }
 
   const selectClass =
@@ -171,27 +190,18 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
           <h1 className="text-2xl font-bold text-navy">Administración de Contraseñas</h1>
           <p className="mt-1 text-sm text-slate-500">TIC-RE-17 · Clasificación C3</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={exportExcel}
-            disabled={filtered.length === 0}
-            className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-navy transition hover:border-slate-300 disabled:opacity-50"
-          >
-            <DownloadIcon className="h-4 w-4" />
-            Exportar Excel
-          </button>
-          <button
-            type="button"
-            onClick={() => setEditing('nueva')}
-            disabled={team.length === 0}
-            title={team.length === 0 ? 'No tienes colaboradores a cargo' : undefined}
-            className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
-          >
-            <PlusIcon className="h-4 w-4" />
-            Nueva cuenta
-          </button>
-        </div>
+        {canManage && (
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing('nueva')}
+              className="inline-flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:opacity-50"
+            >
+              <PlusIcon className="h-4 w-4" />
+              Nueva cuenta
+            </button>
+          </div>
+        )}
       </header>
 
       {apiUnavailable && (
@@ -213,6 +223,31 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
         </div>
       )}
 
+      {people.length === 0 ? (
+        apiUnavailable ? null : (
+          <div className="rounded-xl border border-dashed border-slate-200 px-6 py-12 text-center text-sm text-slate-500">
+            Tu usuario no está vinculado a un expediente de empleado. Pide a Recursos Humanos o a TI que lo
+            vinculen para poder gestionar tus contraseñas.
+          </div>
+        )
+      ) : (
+        <>
+      <div className="space-y-1">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Colaborador</p>
+        <PersonSelect
+          people={people}
+          value={selectedPerson?.id ?? ''}
+          onChange={selectPerson}
+          disabled={loadingAccounts}
+        />
+      </div>
+
+      {loadError && (
+        <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {loadError}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total cuentas activas" value={stats.activas} />
         <StatCard label="Por vencer" value={stats.porVencer} hint={`En los próximos ${SOON_DAYS} días`} />
@@ -220,19 +255,6 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <select
-          aria-label="Colaborador"
-          value={employeeFilter}
-          onChange={(e) => setEmployeeFilter(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">Todos los colaboradores</option>
-          {team.map((emp) => (
-            <option key={emp.id} value={emp.id}>
-              {emp.fullName}
-            </option>
-          ))}
-        </select>
         <select
           aria-label="Aplicación"
           value={applicationFilter}
@@ -260,10 +282,16 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
         </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {loadingAccounts ? (
+        <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
+          Cargando…
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-12 text-center text-sm text-slate-400">
           {accounts.length === 0
-            ? 'Aún no hay cuentas registradas para tu equipo.'
+            ? isOwnView
+              ? 'No tienes cuentas registradas.'
+              : `Aún no hay cuentas registradas para ${selectedPerson?.fullName ?? 'esta persona'}.`
             : 'Ninguna cuenta coincide con los filtros.'}
         </div>
       ) : (
@@ -272,20 +300,20 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3 text-left">No.</th>
-                  <th className="px-4 py-3 text-left">Aplicación</th>
-                  <th className="px-4 py-3 text-left">Colaborador</th>
-                  <th className="px-4 py-3 text-left">Área</th>
-                  <th className="px-4 py-3 text-left">Usuario / Correo</th>
+                  <SortColumnHeader label="No." column="recordNumber" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Aplicación" column="application" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Colaborador" column="employee" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Área" column="area" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Usuario / Correo" column="username" sort={sort} onSort={onSort} />
                   <th className="px-4 py-3 text-left">Contraseña</th>
-                  <th className="px-4 py-3 text-left">Asignación</th>
-                  <th className="px-4 py-3 text-left">Vencimiento</th>
-                  <th className="px-4 py-3 text-left">Estado</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
+                  <SortColumnHeader label="Asignación" column="assignedDate" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Vencimiento" column="expiryDate" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Estado" column="status" sort={sort} onSort={onSort} />
+                  {canManage && <th className="px-4 py-3 text-right">Acciones</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(({ account: a, status }) => (
+                {sorted.map(({ account: a, status }) => (
                   <tr key={a.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-slate-500">{a.recordNumber}</td>
                     <td className="px-4 py-3">
@@ -323,6 +351,7 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
                         {STATUS_META[status].label}
                       </span>
                     </td>
+                    {canManage && (
                     <td className="px-4 py-3">
                       {status !== 'revocada' && (
                         <div className="flex justify-end gap-2">
@@ -343,6 +372,7 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
                         </div>
                       )}
                     </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -351,15 +381,21 @@ export function PasswordsScreen({ accounts, applications, team, apiUnavailable }
         </div>
       )}
 
+        </>
+      )}
+
       {editing && (
         <PasswordDialog
           account={editing === 'nueva' ? null : editing}
           applications={applications}
-          team={team}
+          people={people}
+          defaultEmployeeId={selectedPerson?.id ?? ''}
+          canAddApplication={canEditCatalog(user)}
           onClose={() => setEditing(null)}
           onSaved={(text) => {
             setEditing(null);
             setNotice({ kind: 'info', text });
+            void loadAccounts(personId);
           }}
         />
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { compararMacroprocesos } from '@/app/(dashboard)/herramientas/isobot/isobot-document-library';
 import {
   AlertIcon,
@@ -17,6 +17,10 @@ import {
   uploadViaPresignedUrl,
   validateUploadSize,
 } from '@/lib/presigned-upload';
+import { DocumentFileMenu } from './document-file-menu';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
+import { nextSort } from '@/lib/sort-rows';
+import { type SortDir, type SortKey, sortDocuments } from './sort-documents';
 
 // ── tipos ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +33,7 @@ interface AdminDocument {
   category: string | null;
   fileSize: number | null;
   chunkCount: number;
+  hasFile: boolean;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +59,10 @@ interface Filtros {
 
 const FILTROS_VACIOS: Filtros = { search: '', macroprocess: '', fileType: '' };
 const TIPOS = ['pdf', 'docx', 'xlsx'];
+// El servidor pagina (máximo 100 por página) y ordena por fecha; para poder
+// ordenar por cualquier columna se traen todas las páginas del filtro actual.
+const PAGE_SIZE = 100;
+const MAX_PAGINAS = 50;
 
 // ── utilidades ───────────────────────────────────────────────────────────────
 
@@ -86,12 +95,11 @@ function mensajeDeError(body: unknown, fallback: string): string {
 export function IsobotAdminScreen() {
   const [documentos, setDocumentos] = useState<AdminDocument[]>([]);
   const [stats, setStats] = useState<AdminDocumentsPage['stats'] | null>(null);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [macroprocesos, setMacroprocesos] = useState<string[]>([]);
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS);
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
-  const [cargandoMas, setCargandoMas] = useState(false);
+  const [orden, setOrden] = useState<{ key: SortKey; dir: SortDir } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [subiendo, setSubiendo] = useState(false);
@@ -112,7 +120,7 @@ export function IsobotAdminScreen() {
       if (filtros.macroprocess) params.set('macroprocess', filtros.macroprocess);
       if (filtros.fileType) params.set('fileType', filtros.fileType);
       if (cursor) params.set('cursor', cursor);
-      params.set('limit', '20');
+      params.set('limit', String(PAGE_SIZE));
       return params.toString();
     },
     [filtros],
@@ -121,19 +129,29 @@ export function IsobotAdminScreen() {
   const cargar = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/isobot/admin/documents?${queryString()}`);
-      if (res.status === 403) {
-        setError('No tienes permiso para administrar los documentos del SGSI.');
-        return;
+      const todos: AdminDocument[] = [];
+      let primera: AdminDocumentsPage | null = null;
+      let cursor: string | undefined;
+
+      for (let i = 0; i < MAX_PAGINAS; i++) {
+        const res = await fetch(`/api/isobot/admin/documents?${queryString(cursor)}`);
+        if (res.status === 403) {
+          setError('No tienes permiso para administrar los documentos del SGSI.');
+          return;
+        }
+        if (!res.ok) {
+          setError('No se pudieron cargar los documentos.');
+          return;
+        }
+        const page = (await res.json()) as AdminDocumentsPage;
+        primera ??= page;
+        todos.push(...page.data);
+        if (!page.nextCursor) break;
+        cursor = page.nextCursor;
       }
-      if (!res.ok) {
-        setError('No se pudieron cargar los documentos.');
-        return;
-      }
-      const page = (await res.json()) as AdminDocumentsPage;
-      setDocumentos(page.data);
-      setStats(page.stats);
-      setNextCursor(page.nextCursor);
+
+      setDocumentos(todos);
+      if (primera) setStats(primera.stats);
       setError(null);
     } catch {
       setError('No se pudieron cargar los documentos.');
@@ -157,20 +175,13 @@ export function IsobotAdminScreen() {
     })();
   }, []);
 
-  async function cargarMas() {
-    if (!nextCursor || cargandoMas) return;
-    setCargandoMas(true);
-    try {
-      const res = await fetch(`/api/isobot/admin/documents?${queryString(nextCursor)}`);
-      if (res.ok) {
-        const page = (await res.json()) as AdminDocumentsPage;
-        setDocumentos((prev) => [...prev, ...page.data]);
-        setNextCursor(page.nextCursor);
-      }
-    } finally {
-      setCargandoMas(false);
-    }
-  }
+  const ordenarPor = (key: SortKey) => setOrden((actual) => nextSort(actual, key));
+
+  // Sobre las filas ya filtradas por el servidor; no modifica `documentos`.
+  const filas = useMemo(
+    () => (orden ? sortDocuments(documentos, orden.key, orden.dir) : documentos),
+    [documentos, orden],
+  );
 
   const filtrosActivos = filtros.search || filtros.macroprocess || filtros.fileType;
 
@@ -284,17 +295,17 @@ export function IsobotAdminScreen() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
                 <tr>
-                  <th className="px-4 py-3">Documento</th>
-                  <th className="px-4 py-3">Macroproceso</th>
-                  <th className="px-4 py-3 text-center">Tipo</th>
-                  <th className="px-4 py-3 text-right">Fragmentos</th>
-                  <th className="px-4 py-3 text-right">Tamaño</th>
-                  <th className="px-4 py-3">Actualizado</th>
+                  <SortColumnHeader label="Documento" column="title" sort={orden} onSort={ordenarPor} />
+                  <SortColumnHeader label="Macroproceso" column="macroprocess" sort={orden} onSort={ordenarPor} />
+                  <SortColumnHeader label="Tipo" column="fileType" sort={orden} onSort={ordenarPor} align="center" />
+                  <SortColumnHeader label="Fragmentos" column="chunkCount" sort={orden} onSort={ordenarPor} align="right" />
+                  <SortColumnHeader label="Tamaño" column="fileSize" sort={orden} onSort={ordenarPor} align="right" />
+                  <SortColumnHeader label="Actualizado" column="updatedAt" sort={orden} onSort={ordenarPor} />
                   <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {documentos.map((doc) => (
+                {filas.map((doc) => (
                   <tr key={doc.id} className="hover:bg-slate-50">
                     <td className="max-w-xs px-4 py-3">
                       <p className="truncate font-medium text-navy">{doc.title}</p>
@@ -315,6 +326,12 @@ export function IsobotAdminScreen() {
                     <td className="px-4 py-3 text-slate-500">{formatDate(doc.updatedAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
+                        <DocumentFileMenu
+                          documentId={doc.id}
+                          title={doc.title}
+                          fileType={doc.fileType}
+                          hasFile={doc.hasFile}
+                        />
                         <button
                           type="button"
                           onClick={() => setReemplazando(doc)}
@@ -338,26 +355,15 @@ export function IsobotAdminScreen() {
             </table>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-500">
-            <span>
-              {documentos.length} de {stats?.documentos ?? documentos.length}
-            </span>
-            {nextCursor && (
-              <button
-                type="button"
-                onClick={() => void cargarMas()}
-                disabled={cargandoMas}
-                className="rounded-lg border border-slate-200 px-4 py-2 font-medium text-navy hover:border-navy disabled:opacity-60"
-              >
-                {cargandoMas ? 'Cargando…' : 'Cargar más'}
-              </button>
-            )}
+          <div className="mt-4 text-sm text-slate-500">
+            {documentos.length} de {stats?.documentos ?? documentos.length}
           </div>
         </>
       )}
 
       {subiendo && (
-        <UploadModal
+        <DocumentModal
+          modo="subir"
           macroprocesos={macroprocesos}
           onClose={() => setSubiendo(false)}
           onDone={() => {
@@ -368,8 +374,10 @@ export function IsobotAdminScreen() {
       )}
 
       {reemplazando && (
-        <ReplaceModal
+        <DocumentModal
+          modo="reemplazar"
           documento={reemplazando}
+          macroprocesos={macroprocesos}
           onClose={() => setReemplazando(null)}
           onDone={() => {
             setReemplazando(null);
@@ -452,20 +460,36 @@ function ProgressBar({ pct, label }: { pct: number; label: string }) {
   );
 }
 
-function UploadModal({
+/** Título sugerido a partir del nombre del archivo: el nombre sin su extensión. */
+function tituloDesdeArchivo(nombre: string): string {
+  return nombre.replace(/\.[^.]+$/, '');
+}
+
+/**
+ * Modal único para subir y para reemplazar: mismo diseño y mismos campos. En
+ * "reemplazar" cambian el título, el botón, los mensajes y que los campos
+ * arrancan con los datos actuales del documento.
+ */
+function DocumentModal({
+  modo,
+  documento,
   macroprocesos,
   onClose,
   onDone,
 }: {
+  modo: 'subir' | 'reemplazar';
+  /** Obligatorio al reemplazar. */
+  documento?: AdminDocument;
   macroprocesos: string[];
   onClose: () => void;
   onDone: () => void;
 }) {
+  const reemplazando = modo === 'reemplazar' && documento !== undefined;
   const inputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
-  const [title, setTitle] = useState('');
-  const [macroprocess, setMacroprocess] = useState('');
-  const [category, setCategory] = useState('');
+  const [title, setTitle] = useState(documento?.title ?? '');
+  const [macroprocess, setMacroprocess] = useState(documento?.macroprocess ?? '');
+  const [category, setCategory] = useState(documento?.category ?? '');
   const [pct, setPct] = useState(0);
   const [fase, setFase] = useState<'idle' | 'subiendo' | 'indexando'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -488,7 +512,10 @@ function UploadModal({
       // objeto para extraer texto y generar embeddings, que es la parte lenta.
       await uploadViaPresignedUrl({
         presignUrl: '/api/isobot/admin/documents/presigned-upload',
-        registerUrl: '/api/isobot/admin/documents/register',
+        registerUrl: reemplazando
+          ? `/api/isobot/admin/documents/${documento.id}/register`
+          : '/api/isobot/admin/documents/register',
+        ...(reemplazando ? { registerMethod: 'PUT' as const } : {}),
         file,
         extra: {
           ...(title.trim() ? { title: title.trim() } : {}),
@@ -501,7 +528,13 @@ function UploadModal({
         },
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo subir el documento.');
+      setError(
+        err instanceof Error
+          ? err.message
+          : reemplazando
+            ? 'No se pudo reemplazar el documento.'
+            : 'No se pudo subir el documento.',
+      );
       setFase('idle');
       return;
     }
@@ -511,7 +544,10 @@ function UploadModal({
   const trabajando = fase !== 'idle';
 
   return (
-    <Modal title="Subir documento" onClose={trabajando ? () => undefined : onClose}>
+    <Modal
+      title={reemplazando ? 'Reemplazar documento' : 'Subir documento'}
+      onClose={trabajando ? () => undefined : onClose}
+    >
       <div className="space-y-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-500">Archivo</label>
@@ -523,8 +559,11 @@ function UploadModal({
             onChange={(e) => {
               const seleccionado = e.target.files?.[0] ?? null;
               setFile(seleccionado);
-              if (seleccionado && !title) {
-                setTitle(seleccionado.name.replace(/\.[^.]+$/, ''));
+              // Subir solo rellena un título vacío. Reemplazar arranca con el título
+              // actual, así que ahí cada archivo elegido lo vuelve a rellenar; no
+              // se guarda nada hasta confirmar con el botón.
+              if (seleccionado && (reemplazando || !title)) {
+                setTitle(tituloDesdeArchivo(seleccionado.name));
               }
             }}
             className="w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-navy"
@@ -579,7 +618,13 @@ function UploadModal({
         {trabajando && (
           <ProgressBar
             pct={fase === 'indexando' ? 100 : pct}
-            label={fase === 'indexando' ? 'Indexando y generando embeddings…' : `Subiendo… ${pct}%`}
+            label={
+              fase === 'indexando'
+                ? reemplazando
+                  ? 'Reindexando…'
+                  : 'Indexando y generando embeddings…'
+                : `Subiendo… ${pct}%`
+            }
           />
         )}
 
@@ -598,106 +643,9 @@ function UploadModal({
             disabled={!file || trabajando}
             className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
-            {trabajando ? 'Procesando…' : 'Subir e indexar'}
+            {trabajando ? 'Procesando…' : reemplazando ? 'Reemplazar' : 'Subir e indexar'}
           </button>
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-function ReplaceModal({
-  documento,
-  onClose,
-  onDone,
-}: {
-  documento: AdminDocument;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [pct, setPct] = useState(0);
-  const [fase, setFase] = useState<'idle' | 'subiendo' | 'indexando'>('idle');
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit() {
-    if (!file || fase !== 'idle') return;
-
-    const errorTamano = validateUploadSize(file);
-    if (errorTamano) {
-      setError(errorTamano);
-      return;
-    }
-
-    setError(null);
-    setFase('subiendo');
-    setPct(0);
-
-    try {
-      await uploadViaPresignedUrl({
-        presignUrl: '/api/isobot/admin/documents/presigned-upload',
-        registerUrl: `/api/isobot/admin/documents/${documento.id}/register`,
-        registerMethod: 'PUT',
-        file,
-        onProgress: (p) => {
-          setPct(p);
-          if (p >= 100) setFase('indexando');
-        },
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo reemplazar el documento.');
-      setFase('idle');
-      return;
-    }
-    onDone();
-  }
-
-  const trabajando = fase !== 'idle';
-
-  return (
-    <Modal title="Reemplazar documento" onClose={trabajando ? () => undefined : onClose}>
-      <p className="text-sm text-slate-600">
-        Se sustituirá el archivo de <span className="font-medium text-navy">{documento.title}</span>{' '}
-        y se regenerarán sus {documento.chunkCount} fragmentos. El nombre de archivo original se
-        conserva.
-      </p>
-
-      <div className="mt-3">
-        <input
-          type="file"
-          accept=".pdf,.docx,.xlsx"
-          disabled={trabajando}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-navy"
-        />
-      </div>
-
-      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
-
-      {trabajando && (
-        <ProgressBar
-          pct={fase === 'indexando' ? 100 : pct}
-          label={fase === 'indexando' ? 'Reindexando…' : `Subiendo… ${pct}%`}
-        />
-      )}
-
-      <div className="flex justify-end gap-2 pt-4">
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={trabajando}
-          className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 disabled:opacity-60"
-        >
-          Cancelar
-        </button>
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={!file || trabajando}
-          className="rounded-lg bg-navy px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-        >
-          {trabajando ? 'Procesando…' : 'Reemplazar'}
-        </button>
       </div>
     </Modal>
   );

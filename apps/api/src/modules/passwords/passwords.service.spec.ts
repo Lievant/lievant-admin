@@ -1,0 +1,525 @@
+import 'reflect-metadata';
+import { ForbiddenException } from '@nestjs/common';
+import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
+import { PasswordsController } from './passwords.controller';
+import { PasswordsService } from './passwords.service';
+import { ArgumentMetadata, ValidationPipe } from '@nestjs/common';
+// Lógica pura del formulario "Nueva cuenta" (frontend): se prueba aquí con el API real.
+import {
+  buildAccountPayload,
+  resolveOwnerId,
+  validateAccountForm,
+} from '../../../../web/src/app/(dashboard)/herramientas/passwords/account-form';
+import { CreateAccountPasswordDto } from './dto/password.dto';
+
+// Todos los ids son uuid-like; la jerarquía de las pruebas:
+//   BOSS ── SUB1 (activo)
+//        └─ SUB2 (inactivo)
+//   BOSS ── (jefe de) ── JEFE_B ── NIETO   (NIETO es indirecto de BOSS)
+//   PAR es par de BOSS (mismo jefe), ALIEN no tiene relación.
+const BOSS = 'e-boss';
+const SUB1 = 'e-sub1';
+const SUB2_INACTIVE = 'e-sub2';
+const JEFE_B = 'e-jefeb';
+const NIETO = 'e-nieto';
+const PAR = 'e-par';
+const ALIEN = 'e-alien';
+
+const employees: Record<string, { id: string; fullName: string; authUserId: string | null }> = {
+  [BOSS]: { id: BOSS, fullName: 'Jefa Ejemplo', authUserId: 'u-boss' },
+  [SUB1]: { id: SUB1, fullName: 'Ana Subordinada', authUserId: 'u-sub1' },
+  [SUB2_INACTIVE]: { id: SUB2_INACTIVE, fullName: 'Baja Inactiva', authUserId: 'u-sub2' },
+  [JEFE_B]: { id: JEFE_B, fullName: 'Jefe Intermedio', authUserId: 'u-jefeb' },
+  [NIETO]: { id: NIETO, fullName: 'Nieto Indirecto', authUserId: 'u-nieto' },
+  [PAR]: { id: PAR, fullName: 'Par Ejemplo', authUserId: 'u-par' },
+  [ALIEN]: { id: ALIEN, fullName: 'Ajena Total', authUserId: 'u-alien' },
+};
+
+/** Subordinados directos ACTIVOS por jefe (los inactivos no entran: teamQuery los excluye). */
+const activeTeam: Record<string, string[]> = {
+  [BOSS]: [SUB1, JEFE_B],
+  [JEFE_B]: [NIETO],
+};
+
+const userOf = (id: string, superAdmin = false) =>
+  ({ id, email: `${id}@lievant.com`, roles: superAdmin ? [{ name: 'SUPER_ADMIN' }] : [] }) as any;
+
+/** Cadena mínima de QueryBuilder: resuelve según el jefe y el empleado preguntados. */
+function fakeQueryBuilder(managerId: string) {
+  const state: { employeeId?: string } = {};
+  const qb: any = {
+    where: () => qb,
+    andWhere: (_sql: string, params?: { employeeId?: string }) => {
+      if (params?.employeeId) state.employeeId = params.employeeId;
+      return qb;
+    },
+    orderBy: () => qb,
+    getCount: async () => (state.employeeId && activeTeam[managerId]?.includes(state.employeeId) ? 1 : 0),
+    getMany: async () => (activeTeam[managerId] ?? []).map((id) => employees[id]),
+  };
+  return qb;
+}
+
+function build(
+  opts: { accountRows?: Record<string, unknown>[]; revealRow?: Record<string, unknown>; revealCount?: number } = {},
+) {
+  const dbCalls: { sql: string; params: unknown[] }[] = [];
+  const db = {
+    query: jest.fn(async (sql: string, params: unknown[] = []) => {
+      dbCalls.push({ sql, params });
+      if (sql.includes('FROM passwords.account_passwords ap\n      JOIN passwords.applications')) {
+        return opts.accountRows ?? [];
+      }
+      if (sql.includes('e.direct_report_to_id AS employee_manager_id')) return opts.revealRow ? [opts.revealRow] : [];
+      if (sql.includes('INSERT INTO passwords.account_passwords')) return [{ id: 'nueva-cuenta' }];
+      if (sql.includes('FROM passwords.reveal_log')) return [{ count: opts.revealCount ?? 0 }];
+      if (sql.includes('pgp_sym_decrypt')) return [{ password: 'secreto-de-prueba' }];
+      return [];
+    }),
+  };
+  const employeesRepo = {
+    findOne: jest.fn(async ({ where }: any) =>
+      Object.values(employees).find((e) => e.authUserId === where.authUserId) ?? null,
+    ),
+    createQueryBuilder: jest.fn(() => {
+      // El jefe consultado sale del último `findOne` resuelto: se fija con setManager().
+      return fakeQueryBuilder(currentManager);
+    }),
+  };
+  let currentManager = BOSS;
+  const origFind = employeesRepo.findOne;
+  employeesRepo.findOne = jest.fn(async (arg: any) => {
+    const found = await origFind(arg);
+    if (found) currentManager = found.id;
+    return found;
+  });
+
+  const config = { get: () => 'k'.repeat(40) };
+  const audit = { logSecurity: jest.fn(async () => undefined) };
+  const service = new PasswordsService(
+    db as any,
+    { exists: jest.fn(async () => true) } as any,
+    employeesRepo as any,
+    config as any,
+    audit as any,
+    {} as any,
+    {} as any,
+  );
+  return { service, db, dbCalls, audit };
+}
+
+const accountRow = (employeeId: string) => ({
+  id: 'a1',
+  record_number: 1,
+  username: 'ana@x.com',
+  assigned_date: '2026-01-01',
+  expiry_date: null,
+  status: 'activa',
+  notes: null,
+  manager_id: BOSS,
+  manager_name: 'Jefa Ejemplo',
+  application_id: 'app',
+  application_name: 'M365',
+  application_category: null,
+  employee_id: employeeId,
+  employee_name: employees[employeeId]!.fullName,
+  employee_area: 'X',
+  employee_position: 'Y',
+});
+
+describe('PasswordsService.getVisiblePeople', () => {
+  it('devuelve la propia persona y sus subordinados directos activos, solo id, nombre y isMe', async () => {
+    const { service } = build();
+    expect(await service.getVisiblePeople('u-boss')).toEqual([
+      { id: BOSS, fullName: 'Jefa Ejemplo', isMe: true },
+      { id: SUB1, fullName: 'Ana Subordinada', isMe: false },
+      { id: JEFE_B, fullName: 'Jefe Intermedio', isMe: false },
+    ]);
+  });
+
+  it('un colaborador sin equipo solo se ve a sí mismo', async () => {
+    const { service } = build();
+    expect(await service.getVisiblePeople('u-sub1')).toEqual([
+      { id: SUB1, fullName: 'Ana Subordinada', isMe: true },
+    ]);
+  });
+
+  it('un subordinado inactivo no aparece', async () => {
+    const { service } = build();
+    const people = await service.getVisiblePeople('u-boss');
+    expect(people.map((p) => p.id)).not.toContain(SUB2_INACTIVE);
+  });
+
+  it('un usuario sin registro de empleado recibe una lista vacía', async () => {
+    const { service } = build();
+    expect(await service.getVisiblePeople('u-sin-expediente')).toEqual([]);
+  });
+});
+
+describe('PasswordsService.list (alcance)', () => {
+  it('un colaborador sin id obtiene sus propias cuentas', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    const res = await service.list(userOf('u-sub1'), {});
+    expect(res).toHaveLength(1);
+    expect(dbCalls[0]?.params[0]).toBe(SUB1);
+  });
+
+  it('un colaborador que manda a mano el id de otra persona recibe 403', async () => {
+    const { service, db } = build({ accountRows: [accountRow(ALIEN)] });
+    await expect(service.list(userOf('u-sub1'), { employeeId: ALIEN })).rejects.toThrow(ForbiddenException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it('un jefe pide un subordinado directo activo: OK', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    await expect(service.list(userOf('u-boss'), { employeeId: SUB1 })).resolves.toHaveLength(1);
+    expect(dbCalls[0]?.params[0]).toBe(SUB1);
+  });
+
+  it('un jefe pide a un subordinado indirecto: 403', async () => {
+    const { service } = build();
+    await expect(service.list(userOf('u-boss'), { employeeId: NIETO })).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un jefe pide a un par: 403', async () => {
+    const { service } = build();
+    await expect(service.list(userOf('u-boss'), { employeeId: PAR })).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un jefe pide a un subordinado inactivo: 403', async () => {
+    const { service } = build();
+    await expect(service.list(userOf('u-boss'), { employeeId: SUB2_INACTIVE })).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('el 403 es genérico y no revela si la persona existe', async () => {
+    const { service } = build();
+    const existente = await service.list(userOf('u-sub1'), { employeeId: ALIEN }).catch((e) => e.message);
+    const inexistente = await service.list(userOf('u-sub1'), { employeeId: 'no-existe' }).catch((e) => e.message);
+    expect(existente).toBe(inexistente);
+  });
+
+  it('un usuario sin registro de empleado recibe una lista vacía, sin error', async () => {
+    const { service } = build();
+    await expect(service.list(userOf('u-sin-expediente'), {})).resolves.toEqual([]);
+  });
+
+  it('SUPER_ADMIN tampoco amplía el alcance del listado', async () => {
+    const { service } = build();
+    await expect(service.list(userOf('u-sub1', true), { employeeId: ALIEN })).rejects.toThrow(ForbiddenException);
+  });
+
+  it('nunca selecciona la contraseña cifrada', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    await service.list(userOf('u-sub1'), {});
+    expect(dbCalls[0]?.sql).not.toContain('password_encrypted');
+  });
+});
+
+describe('PasswordsService.reveal (alcance)', () => {
+  const revealRow = (employeeId: string, over: Record<string, unknown> = {}) => ({
+    id: 'a1',
+    manager_id: BOSS,
+    employee_id: employeeId,
+    deleted_at: null,
+    expiry_date: null,
+    employee_manager_id: null,
+    ...over,
+  });
+
+  it('la propia persona puede revelar su cuenta (con bitácora)', async () => {
+    const { service, audit, dbCalls } = build({ revealRow: revealRow(SUB1) });
+    await expect(service.reveal(userOf('u-sub1'), 'a1', 'ver', '1.2.3.4')).resolves.toEqual({
+      password: 'secreto-de-prueba',
+    });
+    expect(dbCalls.some((c) => c.sql.includes('INSERT INTO passwords.reveal_log'))).toBe(true);
+    expect(audit.logSecurity).toHaveBeenCalled();
+  });
+
+  it('un jefe puede revelar la cuenta de un subordinado directo activo', async () => {
+    const { service } = build({ revealRow: revealRow(SUB1) });
+    await expect(service.reveal(userOf('u-boss'), 'a1', 'copiar', null)).resolves.toBeDefined();
+  });
+
+  it('un colaborador no puede revelar la cuenta de otra persona', async () => {
+    const { service, dbCalls } = build({ revealRow: revealRow(ALIEN) });
+    await expect(service.reveal(userOf('u-sub1'), 'a1', 'ver', null)).rejects.toThrow(ForbiddenException);
+    expect(dbCalls.some((c) => c.sql.includes('pgp_sym_decrypt'))).toBe(false);
+  });
+
+  it('un jefe no puede revelar la de un indirecto, un par ni un inactivo', async () => {
+    for (const target of [NIETO, PAR, SUB2_INACTIVE]) {
+      const { service } = build({ revealRow: revealRow(target) });
+      await expect(service.reveal(userOf('u-boss'), 'a1', 'ver', null)).rejects.toThrow(ForbiddenException);
+    }
+  });
+
+  it('el líder que la asignó pero ya no es jefe de la persona ya no puede revelarla', async () => {
+    const { service } = build({ revealRow: revealRow(PAR, { manager_id: BOSS }) });
+    await expect(service.reveal(userOf('u-boss'), 'a1', 'ver', null)).rejects.toThrow(ForbiddenException);
+  });
+});
+
+const createDto = (employeeId: string) =>
+  ({ applicationId: 'app', employeeId, username: 'ana@x.com', password: 'Clave-de-prueba-1' }) as any;
+
+describe('PasswordsService.create (alcance)', () => {
+  const row = (employeeId: string) => [accountRow(employeeId)];
+
+  it('una persona crea una cuenta para sí misma', async () => {
+    const { service, dbCalls } = build({ accountRows: row(SUB1) });
+    await expect(service.create(userOf('u-sub1'), createDto(SUB1))).resolves.toBeDefined();
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(SUB1); // titular
+    expect(insert.params[2]).toBe(SUB1); // quien la asigna: ella misma
+  });
+
+  it('un jefe crea la cuenta de un subordinado directo activo', async () => {
+    const { service, dbCalls } = build({ accountRows: row(SUB1) });
+    await service.create(userOf('u-boss'), createDto(SUB1));
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(SUB1);
+    expect(insert.params[2]).toBe(BOSS);
+  });
+
+  it('una persona que manda a mano el id de otra recibe 403 y no se escribe nada', async () => {
+    const { service, db } = build();
+    await expect(service.create(userOf('u-sub1'), createDto(ALIEN))).rejects.toThrow(ForbiddenException);
+    expect(db.query).not.toHaveBeenCalled();
+  });
+
+  it.each([NIETO, PAR, SUB2_INACTIVE, ALIEN])('un jefe no puede crear para %s (indirecto, par, inactivo o ajeno)', async (target) => {
+    const { service } = build();
+    await expect(service.create(userOf('u-boss'), createDto(target))).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un usuario sin expediente recibe 403 claro, sin error técnico', async () => {
+    const { service } = build();
+    const err = await service.create(userOf('u-sin-expediente'), createDto(SUB1)).catch((e) => e);
+    expect(err).toBeInstanceOf(ForbiddenException);
+    expect(err.message).toMatch(/expediente de empleado/);
+  });
+
+  it('SUPER_ADMIN tampoco gana acceso por rol sobre otra persona', async () => {
+    const { service } = build();
+    await expect(service.create(userOf('u-alien', true), createDto(SUB1))).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('PasswordsService.update y revoke (alcance)', () => {
+  const access = (employeeId: string, over: Record<string, unknown> = {}) => ({
+    id: 'a1',
+    manager_id: BOSS,
+    employee_id: employeeId,
+    deleted_at: null,
+    expiry_date: null,
+    employee_manager_id: null,
+    ...over,
+  });
+
+  it('una persona edita y revoca su propia cuenta', async () => {
+    const { service } = build({ revealRow: access(SUB1), accountRows: [accountRow(SUB1)] });
+    await expect(service.update(userOf('u-sub1'), 'a1', { username: 'nuevo@x.com' } as any)).resolves.toBeDefined();
+    await expect(service.revoke(userOf('u-sub1'), 'a1')).resolves.toBeUndefined();
+  });
+
+  it('una persona no puede editar ni revocar la cuenta de otra', async () => {
+    const { service } = build({ revealRow: access(ALIEN) });
+    await expect(service.update(userOf('u-sub1'), 'a1', { username: 'x' } as any)).rejects.toThrow(ForbiddenException);
+    await expect(service.revoke(userOf('u-sub1'), 'a1')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un jefe edita y revoca la de un subordinado directo activo', async () => {
+    const { service } = build({ revealRow: access(SUB1), accountRows: [accountRow(SUB1)] });
+    await expect(service.update(userOf('u-boss'), 'a1', { username: 'n@x.com' } as any)).resolves.toBeDefined();
+    await expect(service.revoke(userOf('u-boss'), 'a1')).resolves.toBeUndefined();
+  });
+
+  it.each([NIETO, PAR, SUB2_INACTIVE])('un jefe no puede editar ni revocar la de %s', async (target) => {
+    const { service } = build({ revealRow: access(target) });
+    await expect(service.update(userOf('u-boss'), 'a1', { username: 'x' } as any)).rejects.toThrow(ForbiddenException);
+    await expect(service.revoke(userOf('u-boss'), 'a1')).rejects.toThrow(ForbiddenException);
+  });
+
+  it('el líder que asignó la cuenta pero ya no es jefe pierde el acceso', async () => {
+    const { service } = build({ revealRow: access(PAR, { manager_id: BOSS }) });
+    await expect(service.update(userOf('u-boss'), 'a1', { username: 'x' } as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('no se puede pasar la cuenta propia a una persona fuera del alcance', async () => {
+    const { service } = build({ revealRow: access(SUB1) });
+    await expect(service.update(userOf('u-sub1'), 'a1', { employeeId: ALIEN } as any)).rejects.toThrow(ForbiddenException);
+  });
+
+  it('un usuario sin expediente recibe 403 al editar o revocar', async () => {
+    const { service } = build({ revealRow: access(SUB1) });
+    await expect(service.update(userOf('u-sin-expediente'), 'a1', { username: 'x' } as any)).rejects.toThrow(ForbiddenException);
+    await expect(service.revoke(userOf('u-sin-expediente'), 'a1')).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('PasswordsService.reveal (tope, bitácora y secretos)', () => {
+  const own = {
+    id: 'a1',
+    manager_id: BOSS,
+    employee_id: SUB1,
+    deleted_at: null,
+    expiry_date: null,
+    employee_manager_id: BOSS,
+  };
+
+  it('aplica el tope de 10 por hora también a las cuentas propias', async () => {
+    const { service } = build({ revealRow: own, revealCount: 10 });
+    await expect(service.reveal(userOf('u-sub1'), 'a1', 'ver', null)).rejects.toMatchObject({ status: 429 });
+  });
+
+  it('registra actor y titular, tanto al revelar la propia como al revelar la de un subordinado', async () => {
+    for (const [actorUser, actorId] of [
+      ['u-sub1', 'u-sub1'],
+      ['u-boss', 'u-boss'],
+    ] as const) {
+      const { service, audit, dbCalls } = build({ revealRow: own });
+      await service.reveal(userOf(actorUser), 'a1', 'copiar', '10.0.0.1');
+      const log = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.reveal_log'))!;
+      expect(log.params[1]).toBe(actorId); // actor
+      expect(log.params[0]).toBe('a1'); // la cuenta, cuyo titular es el empleado SUB1
+      expect(audit.logSecurity).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: actorId, details: { action: 'copiar', employeeId: SUB1 } }),
+      );
+    }
+  });
+
+  it('ni la bitácora de seguridad ni la del módulo contienen la contraseña', async () => {
+    const { service, audit, dbCalls } = build({ revealRow: own });
+    await service.reveal(userOf('u-sub1'), 'a1', 'ver', null);
+    const rastro = JSON.stringify([audit.logSecurity.mock.calls, dbCalls.filter((c) => !c.sql.includes('pgp_sym_decrypt'))]);
+    expect(rastro).not.toContain('secreto-de-prueba');
+  });
+});
+
+describe('PasswordsController (permisos y exportación)', () => {
+  const required = (m: keyof PasswordsController) =>
+    Reflect.getMetadata(PERMISSION_KEY, PasswordsController.prototype[m]);
+
+  it.each([
+    'list',
+    'reveal',
+    'create',
+    'update',
+    'revoke',
+    'getVisiblePeople',
+    'isManager',
+    'getTeamEmployees',
+    'listApplications',
+  ] as const)('%s no exige permiso: el alcance lo fija el servicio', (m) => {
+    expect(required(m)).toBeUndefined();
+  });
+
+  it.each(['createApplication', 'updateApplication', 'deactivateApplication'] as const)(
+    '%s (catálogo) conserva herramientas.passwords.write',
+    (m) => {
+      expect(required(m)).toEqual({ section: 'herramientas', module: 'passwords', action: 'write' });
+    },
+  );
+
+  it('ya no existe un endpoint para exportar a Excel', () => {
+    const methods = Object.getOwnPropertyNames(PasswordsController.prototype);
+    expect(methods.filter((m) => /export|excel|xlsx/i.test(m))).toEqual([]);
+  });
+});
+
+describe('Formulario "Nueva cuenta" → API', () => {
+  const people = [
+    { id: BOSS, isMe: true },
+    { id: SUB1, isMe: false },
+  ];
+  const base = {
+    isEdit: false,
+    applicationId: '0db5a2f5-865b-47e5-a9b3-512efe50c627',
+    people,
+    username: 'cuenta@cliente.com',
+    password: 'Clave-de-prueba-1',
+    assignedDate: '2026-10-15',
+    expiryDate: '',
+    notes: '',
+  };
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  const meta: ArgumentMetadata = { type: 'body', metatype: CreateAccountPasswordDto };
+
+  // Los ids del servicio de prueba no son UUID; para el DTO se usan los reales de las pruebas.
+  const UUID_ME = 'e462ac26-5a51-41dc-b781-93cecef73e27';
+  const UUID_SUB = 'cb1ba3e6-c74b-4645-a2e9-637a86d294e5';
+
+  it('con "Yo" preseleccionado el formulario es válido y envía el titular propio', () => {
+    const form = { ...base, employeeId: BOSS };
+    expect(validateAccountForm(form)).toBeNull();
+    const payload = buildAccountPayload(form);
+    expect(payload.employeeId).toBe(BOSS);
+    expect(payload).toMatchObject({ expiryDate: null, notes: null, username: 'cuenta@cliente.com' });
+  });
+
+  it('el cuerpo del formulario (con expiryDate y notes en null) pasa la validación del API', async () => {
+    const form = { ...base, people: [{ id: UUID_ME, isMe: true }, { id: UUID_SUB, isMe: false }], employeeId: UUID_ME };
+    const body = buildAccountPayload(form);
+    await expect(pipe.transform(body, meta)).resolves.toBeDefined();
+  });
+
+  it('un titular vacío o desfasado se resuelve a la propia persona, no a un valor en blanco', () => {
+    for (const stale of ['', 'e-borrado', 'id-de-un-ajeno']) {
+      const form = { ...base, employeeId: stale };
+      expect(resolveOwnerId(people, stale)).toBe(BOSS);
+      expect(validateAccountForm(form)).toBeNull();
+      expect(buildAccountPayload(form).employeeId).toBe(BOSS);
+    }
+  });
+
+  it('para un subordinado envía el titular del subordinado', () => {
+    const payload = buildAccountPayload({ ...base, employeeId: SUB1 });
+    expect(payload.employeeId).toBe(SUB1);
+  });
+
+  it('nunca envía un titular que no esté entre las personas visibles', () => {
+    expect(buildAccountPayload({ ...base, employeeId: ALIEN }).employeeId).toBe(BOSS);
+  });
+
+  it('sin personas visibles (sin expediente) no se puede guardar y lo dice', () => {
+    expect(validateAccountForm({ ...base, people: [], employeeId: '' })).toBe(
+      'No se pudo determinar de quién es la cuenta.',
+    );
+  });
+
+  it('al editar no se pide ni se envía el titular', () => {
+    const form = { ...base, isEdit: true, people: [], employeeId: '', password: '' };
+    expect(validateAccountForm(form)).toBeNull();
+    expect(buildAccountPayload(form)).not.toHaveProperty('employeeId');
+    expect(buildAccountPayload(form)).not.toHaveProperty('password');
+  });
+
+  it.each([
+    [{ applicationId: '' }, 'Selecciona la aplicación.'],
+    [{ username: 'sin-arroba' }, 'El usuario debe ser un correo válido.'],
+    [{ password: '' }, 'Escribe o genera la contraseña.'],
+    [{ expiryDate: '2026-01-01' }, 'El vencimiento no puede ser anterior a la fecha de asignación.'],
+  ])('mensajes de validación: %p', (override, message) => {
+    expect(validateAccountForm({ ...base, employeeId: BOSS, ...override })).toBe(message);
+  });
+
+  it('end to end: el cuerpo del formulario con "Yo" crea la cuenta propia en el servicio', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(BOSS)] });
+    const body = buildAccountPayload({ ...base, employeeId: BOSS }) as any;
+    await expect(service.create(userOf('u-boss'), body)).resolves.toBeDefined();
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(BOSS); // titular: la propia persona
+    expect(insert.params[2]).toBe(BOSS); // quien la asigna
+  });
+
+  it('end to end: el cuerpo del formulario para un subordinado crea la cuenta del subordinado', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    const body = buildAccountPayload({ ...base, employeeId: SUB1 }) as any;
+    await expect(service.create(userOf('u-boss'), body)).resolves.toBeDefined();
+    const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
+    expect(insert.params[1]).toBe(SUB1);
+    expect(insert.params[2]).toBe(BOSS);
+  });
+});

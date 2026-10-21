@@ -1,14 +1,15 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
+import { EmployeeStatus } from '../employees/constants/employee-status.constant';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
-import { QueryTicketsDto } from './dto/query-tickets.dto';
+import { QueryTicketsDto, UNASSIGNED_FILTER } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
 import { UpsertCategoryDto, UpsertSubcategoryDto } from './dto/helpdesk-catalog.dto';
@@ -76,7 +77,10 @@ export class HelpdeskService {
     if (query.priority) qb.andWhere('t.priority = :priority', { priority: query.priority });
     if (query.category) qb.andWhere('t.category = :category', { category: query.category });
     if (query.area) qb.andWhere('t.requester_area ILIKE :area', { area: `%${query.area}%` });
-    if (query.assignedTo) qb.andWhere('t.assigned_to = :assignedTo', { assignedTo: query.assignedTo });
+    // Se usa la propiedad de la entidad (t.assignedTo), no el nombre de la columna: la columna real es
+    // assignee_id y `t.assigned_to` no existe. Se combina con AND con la restricción por solicitante.
+    if (query.assignedTo === UNASSIGNED_FILTER) qb.andWhere('t.assignedTo IS NULL');
+    else if (query.assignedTo) qb.andWhere('t.assignedTo = :assignedTo', { assignedTo: query.assignedTo });
     if (query.search) {
       qb.andWhere(
         '(t.display_id ILIKE :s OR t.requester_name ILIKE :s OR t.description ILIKE :s)',
@@ -151,6 +155,8 @@ export class HelpdeskService {
     return {
       ...ticket,
       history,
+      // Quién abrió el ticket cuando fue TD en nombre de otra persona (autor del evento 'creado').
+      openedByName: ticket.openedByTd ? (history.find((h) => h.action === 'creado')?.userName ?? null) : null,
       assigneeName: assignee?.name ?? null,
       escalatedToName: escalatedEmployee?.fullName ?? escalatedUser?.name ?? null,
       attachments,
@@ -211,14 +217,73 @@ export class HelpdeskService {
   // Commands
   // -----------------------------------------------------------------------
 
-  async create(dto: CreateTicketDto, user: User) {
+  /**
+   * Crea un ticket. Con `onBehalfOfEmployeeId` (solo personal de TD) el
+   * solicitante es la persona elegida —nombre, área, bandeja "Mis tickets"—; quien
+   * lo abre queda como autor del evento de historial y con `opened_by_td` y el
+   * motivo en el ticket. El servidor no confía en el cliente: sin permiso de TD
+   * el campo se rechaza y el solicitante siempre es el usuario de la sesión.
+   */
+  async create(dto: CreateTicketDto, user: User, isTd = false) {
+    const behalfEmployeeId = dto.onBehalfOfEmployeeId;
+    if (behalfEmployeeId && !isTd) {
+      throw new ForbiddenException('Solo el personal de TD puede abrir tickets en nombre de otra persona.');
+    }
+    const behalfReason = dto.behalfReason?.trim() || null;
+    if (behalfEmployeeId && !behalfReason) {
+      throw new BadRequestException('El motivo de apertura por TD es obligatorio.');
+    }
+
+    // Quién es el solicitante: por omisión, la sesión.
+    let requesterId = user.id;
+    let requesterName: string | null = null;
+    let requesterArea: string | null = null;
+    let openedOnBehalfOf: string | null = isTd ? (dto.openedOnBehalfOf ?? null) : null;
+
+    if (behalfEmployeeId) {
+      // `findOne` excluye los expedientes con deleted_at.
+      const target = await this.employeesRepo.findOne({ where: { id: behalfEmployeeId } });
+      if (!target || target.deletedAt) {
+        throw new NotFoundException('La persona elegida no existe o fue dada de baja.');
+      }
+      if (target.status !== EmployeeStatus.ACTIVE) {
+        throw new BadRequestException('La persona elegida está dada de baja.');
+      }
+      if (!target.authUserId) {
+        throw new BadRequestException(
+          `${target.fullName} no tiene un usuario vinculado a su expediente, así que no se le puede asignar como solicitante.`,
+        );
+      }
+      const targetUser = await this.usersRepo.findOne({ where: { id: target.authUserId } });
+      if (!targetUser || targetUser.deletedAt || !targetUser.isActive) {
+        throw new BadRequestException(`El usuario de ${target.fullName} no está activo.`);
+      }
+      requesterId = targetUser.id;
+      requesterName = target.fullName;
+      requesterArea = target.area ?? target.division ?? null;
+      openedOnBehalfOf = target.fullName;
+    }
+
+    // El equipo elegido debe existir; no se exige que sea del solicitante (el
+    // problema puede ser de otro equipo).
+    if (dto.equipmentId) {
+      const found = (await this.ticketsRepo.query(
+        `SELECT 1 FROM inventory.equipment
+         WHERE (legacy_id = $1 OR display_id = $1) AND deleted_at IS NULL LIMIT 1`,
+        [dto.equipmentId],
+      )) as unknown[];
+      if (found.length === 0) throw new BadRequestException('El equipo elegido no existe.');
+    }
+
     const year = new Date().getFullYear();
-    const [last, employee] = await Promise.all([
+    const [last, ownEmployee] = await Promise.all([
       this.ticketsRepo.findOne({
         where: { displayId: Like(`TIC-${year}-%`) },
         order: { displayId: 'DESC' },
       }),
-      this.employeesRepo.findOne({ where: { authUserId: user.id } }),
+      requesterName === null
+        ? this.employeesRepo.findOne({ where: { authUserId: user.id } })
+        : Promise.resolve(null),
     ]);
     const seq = last ? parseInt(last.displayId.split('-').at(2) ?? '0', 10) + 1 : 1;
     const displayId = `TIC-${year}-${String(seq).padStart(3, '0')}`;
@@ -229,17 +294,19 @@ export class HelpdeskService {
     // 'altas_bajas', que caía a P3 teniendo P2 en la tabla.
     const categoryRow = await this.categoriesRepo.findOne({ where: { slug: dto.category } });
     const priority = categoryRow?.priorityBase ?? 'P3';
-    const requesterName = employee?.fullName ?? user.name;
-    const requesterArea = employee?.area ?? employee?.division ?? null;
+    if (requesterName === null) {
+      requesterName = ownEmployee?.fullName ?? user.name;
+      requesterArea = ownEmployee?.area ?? ownEmployee?.division ?? null;
+    }
 
     const ticket = this.ticketsRepo.create({
       displayId,
-      requesterId: user.id,
+      requesterId,
       requesterName,
       requesterArea,
-      openedByTd: dto.openedByTd ?? false,
-      openedOnBehalfOf: dto.openedOnBehalfOf ?? null,
-      behalfReason: dto.behalfReason ?? null,
+      openedByTd: behalfEmployeeId ? true : isTd ? (dto.openedByTd ?? false) : false,
+      openedOnBehalfOf,
+      behalfReason: behalfEmployeeId ? behalfReason : isTd ? (dto.behalfReason ?? null) : null,
       category: dto.category,
       subcategory: dto.subcategory ?? null,
       equipmentId: dto.equipmentId ?? null,
@@ -252,7 +319,15 @@ export class HelpdeskService {
     });
 
     const saved = await this.ticketsRepo.save(ticket);
-    await this.addHistory(saved.id, user, 'creado', null, 'abierto');
+    // El autor del evento es siempre quien abrió (el usuario real de TD), no el solicitante.
+    await this.addHistory(
+      saved.id,
+      user,
+      'creado',
+      null,
+      'abierto',
+      behalfEmployeeId ? `Abierto por TD en nombre de ${requesterName}. Motivo: ${behalfReason}` : undefined,
+    );
 
     if (saved.assignedTo) {
       await this.notifyAssigned(saved, saved.assignedTo, user);

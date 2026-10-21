@@ -317,8 +317,11 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                 label="Fecha"
                 value={new Date(ticket.requestedAt).toLocaleDateString('es-MX', { dateStyle: 'medium' })}
               />
-              {ticket.openedByTd && ticket.openedOnBehalfOf && (
-                <Row label="Abierto en nombre de" value={ticket.openedOnBehalfOf} />
+              {ticket.openedByTd && ticket.openedByName && (
+                <p className="pt-1 text-xs text-slate-400">
+                  Abierto por TD: {ticket.openedByName}
+                  {ticket.behalfReason ? ` — Motivo: ${ticket.behalfReason}` : ''}
+                </p>
               )}
               {ticket.escalatedTo && (
                 <Row
