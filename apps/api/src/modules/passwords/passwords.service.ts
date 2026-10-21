@@ -27,6 +27,11 @@ import {
   UpdatePasswordApplicationDto,
 } from './dto/password.dto';
 import { PasswordApplication } from './entities/password-application.entity';
+import {
+  evaluatePasswordStrength,
+  reusedPasswordWarning,
+  WEAK_PASSWORD_WARNING,
+} from './password-strength';
 
 /** Máximo de contraseñas que un usuario puede ver o copiar por hora. */
 const REVEAL_LIMIT_PER_HOUR = 10;
@@ -118,7 +123,9 @@ export class PasswordsService {
   }
 
   async createApplication(dto: CreatePasswordApplicationDto) {
-    const name = dto.name.trim();
+    const trimmed = dto.name.trim();
+    // Solo la primera letra: "draw.io" → "Draw.io", sin tocar "LinkedIn" ni "SAP".
+    const name = trimmed.charAt(0).toLocaleUpperCase('es-MX') + trimmed.slice(1);
     await this.assertApplicationNameFree(name);
     return this.applicationsRepo.save(
       this.applicationsRepo.create({
@@ -294,7 +301,8 @@ export class PasswordsService {
       ],
     )) as { id: string }[];
 
-    return this.getOne(inserted!.id);
+    const account = await this.getOne(inserted!.id);
+    return { ...account, ...(await this.assessPassword(dto.password, me.id, dto.applicationId, account.id)) };
   }
 
   async update(user: User, id: string, dto: UpdateAccountPasswordDto) {
@@ -348,7 +356,37 @@ export class PasswordsService {
       );
     }
 
-    return this.getOne(id);
+    const account = await this.getOne(id);
+    if (!dto.password) return { ...account, passwordStrength: null, passwordWarnings: [] as string[] };
+    return { ...account, ...(await this.assessPassword(dto.password, row.manager_id, account.application.id, id)) };
+  }
+
+  /**
+   * Fortaleza y advertencias de una contraseña recién guardada. Solo informa.
+   *
+   * La reutilización se compara en la base, sin descifrar nada hacia la API:
+   * cuentas vivas del mismo líder (`manager_id`) en otra aplicación cuya
+   * contraseña descifrada es igual a la nueva. Devuelve solo los nombres de las
+   * aplicaciones.
+   */
+  private async assessPassword(password: string, managerId: string, applicationId: string, accountId: string) {
+    const passwordStrength = evaluatePasswordStrength(password);
+    const passwordWarnings: string[] = [];
+
+    const reused = (await this.db.query(
+      `SELECT DISTINCT a.name AS reused_in
+       FROM passwords.account_passwords ap
+       JOIN passwords.applications a ON a.id = ap.application_id
+       WHERE ap.manager_id = $1 AND ap.id <> $2 AND ap.application_id <> $3
+         AND ap.deleted_at IS NULL AND ap.status <> 'revocada'
+         AND pgp_sym_decrypt(ap.password_encrypted, $4) = $5
+       ORDER BY a.name`,
+      [managerId, accountId, applicationId, this.encryptionKey(), password],
+    )) as { reused_in: string }[];
+    for (const r of reused) passwordWarnings.push(reusedPasswordWarning(r.reused_in));
+
+    if (passwordStrength === 'debil') passwordWarnings.push(WEAK_PASSWORD_WARNING);
+    return { passwordStrength, passwordWarnings };
   }
 
   async revoke(user: User, id: string): Promise<void> {

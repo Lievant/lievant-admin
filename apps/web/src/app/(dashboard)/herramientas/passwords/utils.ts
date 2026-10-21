@@ -53,11 +53,17 @@ export function generatePassword(length = 12): string {
 
 export type PasswordStrength = 'debil' | 'media' | 'fuerte';
 
+/**
+ * Misma regla que `password-strength.ts` del API. Solo informa: nunca impide guardar.
+ * fuerte: 12+ con números, mayúsculas y símbolos · débil: <8, o sin números, o sin mayúsculas.
+ */
 export function passwordStrength(password: string): PasswordStrength {
-  const classes = [/[A-Z]/, /[a-z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(password)).length;
-  if (password.length >= 12 && classes === 4) return 'fuerte';
-  if (password.length >= 8 && classes >= 3) return 'media';
-  return 'debil';
+  const hasDigit = /\d/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasSymbol = /[^A-Za-z0-9]/.test(password);
+  if (password.length >= 12 && hasDigit && hasUpper && hasSymbol) return 'fuerte';
+  if (password.length < 8 || !hasDigit || !hasUpper) return 'debil';
+  return 'media';
 }
 
 // Misma regla laxa que class-validator acepta en la práctica: algo@algo.tld.
