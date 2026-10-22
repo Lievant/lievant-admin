@@ -32,6 +32,7 @@ import { PhotosTab } from './photos-tab';
 import { SimCardsTab } from './sim-cards-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
+import { LinkUserDialog } from './link-user-dialog';
 
 const ALL_TABS = [
   { id: 'general',      label: 'General',          badge: null },
@@ -141,6 +142,8 @@ export function EmployeeDetailScreen({
   );
   const [isEditOpen, setEditOpen] = useState(false);
   const [isDocumentsOpen, setDocumentsOpen] = useState(false);
+  const [isLinkOpen, setLinkOpen] = useState(false);
+  const isLinked = employee.authUserId != null;
 
   // Si el tab pedido no está visible por permisos, cae al primero disponible.
   const effectiveTab = visibleTabs.some((t) => t.id === activeTab) ? activeTab : visibleTabs[0]?.id ?? 'general';
@@ -183,12 +186,29 @@ export function EmployeeDetailScreen({
               >
                 {employee.companyName}
               </span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-1 text-xs font-semibold',
+                  isLinked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500',
+                )}
+              >
+                {isLinked ? 'Usuario Vinculado' : 'Sin Vincular'}
+              </span>
             </div>
             <p className="mt-1 text-sm text-slate-500">{employee.position}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {canWriteEmployees && !isLinked && (
+            <button
+              type="button"
+              onClick={() => setLinkOpen(true)}
+              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300"
+            >
+              Vincular Usuario
+            </button>
+          )}
           {canGenerateDocuments && (
             <button
               type="button"
@@ -279,6 +299,9 @@ export function EmployeeDetailScreen({
         {effectiveTab === 'lineas-telefonicas' && <SimCardsTab employeeId={employee.id} />}
       </div>
 
+      {isLinkOpen && (
+        <LinkUserDialog employeeId={employee.id} employeeName={employee.fullName} onClose={() => setLinkOpen(false)} />
+      )}
       {isEditOpen && <EditEmployeeDialog employee={employee} catalogs={catalogs} onClose={() => setEditOpen(false)} />}
       <GenerateDocumentsDialog
         isOpen={isDocumentsOpen}
