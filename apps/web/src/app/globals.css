@@ -53,3 +53,13 @@ body {
     'Segoe UI',
     sans-serif;
 }
+
+/* Móvil y tablet: cada pantalla trae su propio relleno lateral (px-6 / px-8) pensado
+   para escritorio. Con el sidebar fuera del flujo se reduce a 16 px para darle el
+   ancho a su contenido, sin tocar cada pantalla. */
+@media (max-width: 1023px) {
+  .dashboard-main > div {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}

@@ -8,6 +8,7 @@ import {
   AlertIcon,
   BellIcon,
   BuildingIcon,
+  CloseIcon,
   CheckIcon,
   ChartDotsIcon,
   CreditCardIcon,
@@ -44,6 +45,12 @@ import type { CurrentUser } from '@/lib/api';
 
 interface SidebarProps {
   user: CurrentUser | null;
+  /** id del panel, para `aria-controls` de la hamburguesa (solo móvil). */
+  id?: string;
+  /** Solo móvil y tablet: panel abierto. En escritorio el sidebar siempre está a la vista. */
+  open?: boolean;
+  /** Cierra el panel (X y clic en un enlace). Solo móvil y tablet. */
+  onClose?: () => void;
 }
 
 function isSuperAdmin(user: CurrentUser | null): boolean {
@@ -74,7 +81,7 @@ function hasModule(
   );
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const isManager = useIsTeamManager();
   const showFinanzas = hasSection(user, 'finanzas');
@@ -145,12 +152,37 @@ export function Sidebar({ user }: SidebarProps) {
     showAnalytics;
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col bg-black text-white">
-      <div className="flex h-16 items-center border-b border-white/10 px-6">
+    // Escritorio (lg): el sidebar de siempre, en el flujo. Debajo de lg es un panel
+    // fijo que entra desde la izquierda; cerrado queda invisible (sin foco ni lector).
+    <aside
+      id={id}
+      className={cn(
+        'fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col bg-black text-white transition-[transform,visibility] duration-200 motion-reduce:transition-none',
+        'lg:static lg:z-auto lg:h-screen lg:w-64 lg:max-w-none lg:shrink-0 lg:translate-x-0 lg:visible lg:transition-none',
+        open ? 'translate-x-0 visible' : '-translate-x-full invisible',
+      )}
+    >
+      <div className="flex h-16 items-center justify-between border-b border-white/10 px-6">
         <img src="/images/lievant-isotipo.png" alt="Lievant" className="h-8 w-auto" />
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar Menú"
+            className="flex h-9 w-9 items-center justify-center rounded-md text-white/80 hover:bg-white/10 hover:text-white lg:hidden"
+          >
+            <CloseIcon className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav
+        className="flex-1 space-y-1 overflow-y-auto px-3 py-4"
+        onClick={(e) => {
+          // Tocar un enlace cierra el panel (aunque sea la misma ruta, donde no hay cambio de ruta que lo cierre).
+          if (onClose && (e.target as HTMLElement).closest('a')) onClose();
+        }}
+      >
         <NavLink href="/dashboard" active={pathname === '/dashboard'}>
           <HomeIcon className="h-5 w-5" />
           Inicio
