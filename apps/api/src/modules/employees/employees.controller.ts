@@ -185,8 +185,8 @@ export class EmployeesController {
 
   @Post(':id/link-user')
   @RequirePermission('rrhh', 'empleados', 'write')
-  linkUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LinkUserDto) {
-    return this.userLinkService.link(id, dto.authUserId);
+  linkUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LinkUserDto, @CurrentUser() user: User) {
+    return this.userLinkService.link(id, dto.authUserId, { id: user.id, email: user.email, name: user.name });
   }
 
   @Patch(':id')

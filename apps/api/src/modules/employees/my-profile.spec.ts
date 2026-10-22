@@ -309,7 +309,8 @@ describe('Vincular usuario con expediente', () => {
       query,
       transaction: jest.fn(async (cb: (m: any) => any) => cb(manager)),
     };
-    return { service: new EmployeeUserLinkService(dataSource as any), queries, dataSource };
+    const audit = { logActivity: jest.fn(async () => undefined) };
+    return { service: new EmployeeUserLinkService(dataSource as any, audit as any), queries, dataSource, audit };
   }
 
   it('candidatos: mismo correo (sin distinguir mayúsculas), activos y sin otro expediente', async () => {
@@ -342,6 +343,17 @@ describe('Vincular usuario con expediente', () => {
     expect(queries.find((q) => /FROM employees\.employee_records\s+WHERE id/.test(q.sql))!.sql).toContain('FOR UPDATE');
     const update = queries.find((q) => /UPDATE employees\.employee_records SET auth_user_id/.test(q.sql))!;
     expect(update.params).toEqual(['u1', 'e1']);
+  });
+
+  it('deja traza de auditoría solo cuando el vínculo se guardó, con quién lo hizo', async () => {
+    const ok = setup();
+    await ok.service.link('e1', 'u1', { id: 'rrhh1', email: 'rrhh@lievant.com', name: 'RRHH' });
+    expect(ok.audit.logActivity).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'link-user', module: 'empleados', entityId: 'e1', userId: 'rrhh1', entityName: 'Ana Pérez' }),
+    );
+    const bad = setup({ takenBy: 'Beto Gómez' });
+    await bad.service.link('e1', 'u1').catch(() => undefined);
+    expect(bad.audit.logActivity).not.toHaveBeenCalled();
   });
 
   it('el correo debe coincidir exactamente (ignorando mayúsculas); si no, se rechaza sin guardar', async () => {

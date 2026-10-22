@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
 
 export interface LinkUserCandidate {
   id: string;
@@ -26,7 +27,10 @@ interface EmployeeLinkRow {
  */
 @Injectable()
 export class EmployeeUserLinkService {
-  constructor(private readonly dataSource: DataSource) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly audit: AuditService,
+  ) {}
 
   private async loadEmployee(m: { query: DataSource['query'] }, id: string, lock: boolean): Promise<EmployeeLinkRow> {
     const rows = (await m.query(
@@ -61,8 +65,12 @@ export class EmployeeUserLinkService {
   }
 
   /** Vincula en una transacción; todo se revalida en el servidor. */
-  async link(employeeId: string, authUserId: string): Promise<{ id: string; authUserId: string }> {
-    return this.dataSource.transaction(async (m) => {
+  async link(
+    employeeId: string,
+    authUserId: string,
+    actor?: { id?: string; email?: string; name?: string },
+  ): Promise<{ id: string; authUserId: string }> {
+    const result = await this.dataSource.transaction(async (m) => {
       // El mismo usuario no puede vincularse a dos expedientes a la vez: se serializa por usuario.
       await m.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [authUserId]);
 
@@ -96,7 +104,22 @@ export class EmployeeUserLinkService {
         `UPDATE employees.employee_records SET auth_user_id = $1, updated_at = NOW() WHERE id = $2`,
         [authUserId, employeeId],
       );
-      return { id: employeeId, authUserId };
+      return { id: employeeId, authUserId, employeeName: employee.full_name, userEmail: user.email };
     });
+
+    // El interceptor global no cubre esta ruta (su módulo es 'employees', no 'empleados'),
+    // así que la traza del vínculo se registra aquí, explícita.
+    await this.audit.logActivity({
+      userId: actor?.id ?? null,
+      userEmail: actor?.email ?? null,
+      userName: actor?.name ?? null,
+      action: 'link-user',
+      module: 'empleados',
+      entityType: 'employee',
+      entityId: employeeId,
+      entityName: result.employeeName,
+      changes: { authUserId: { from: null, to: authUserId }, userEmail: result.userEmail },
+    });
+    return { id: employeeId, authUserId };
   }
 }
