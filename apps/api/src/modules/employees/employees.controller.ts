@@ -44,6 +44,9 @@ import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
 import { HeadcountService } from './headcount.service';
 import { OrgChartService } from './org-chart.service';
+import { MyProfileService } from './my-profile.service';
+import { EmployeeUserLinkService } from './employee-user-link.service';
+import { LinkUserDto } from './dto/link-user.dto';
 import { OrgChartQueryDto } from './dto/org-chart-query.dto';
 import { DocumentsService, DocumentType } from './documents.service';
 
@@ -65,6 +68,8 @@ export class EmployeesController {
     private readonly photosService: EmployeePhotosService,
     private readonly headcountService: HeadcountService,
     private readonly orgChartService: OrgChartService,
+    private readonly myProfileService: MyProfileService,
+    private readonly userLinkService: EmployeeUserLinkService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -91,6 +96,33 @@ export class EmployeesController {
   @SetMetadata(PERMISSION_KEY, null)
   getOrgChart(@Query() query: OrgChartQueryDto) {
     return this.orgChartService.getOrgChart(query.location);
+  }
+
+  // Mi Información (RRHH 2.0, C2): cualquier usuario autenticado, SOLO su propio
+  // expediente. El empleado sale del JWT; ninguna de estas rutas recibe el id de un
+  // empleado. Van antes de `:id`. Sin remuneración, notas internas ni datos de baja.
+  @Get('my-profile')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyProfile(@CurrentUser() user: User) {
+    return this.myProfileService.getProfile(user.id);
+  }
+
+  @Get('my-profile/documents')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyDocuments(@CurrentUser() user: User) {
+    return this.myProfileService.listDocuments(user.id);
+  }
+
+  @Get('my-profile/documents/:docId/download-url')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyDocumentUrl(@Param('docId', ParseUUIDPipe) docId: string, @CurrentUser() user: User) {
+    return this.myProfileService.getDocumentUrl(user.id, docId);
+  }
+
+  @Get('my-profile/equipment')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyEquipment(@CurrentUser() user: User) {
+    return this.myProfileService.getEquipment(user.id);
   }
 
   // Público (cualquier usuario autenticado) — usado por el calendario del home.
@@ -142,6 +174,19 @@ export class EmployeesController {
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.findOne(id);
+  }
+
+  /** Usuarios vinculables al expediente: mismo correo corporativo, activos y sin otro expediente. */
+  @Get(':id/link-user-candidates')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  getLinkUserCandidates(@Param('id', ParseUUIDPipe) id: string) {
+    return this.userLinkService.getCandidates(id);
+  }
+
+  @Post(':id/link-user')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  linkUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LinkUserDto) {
+    return this.userLinkService.link(id, dto.authUserId);
   }
 
   @Patch(':id')
