@@ -218,11 +218,26 @@ export function OrganigramaScreen({ initial, initialError }: { initial: OrgChart
         return;
       }
     }
-    if (needsFit.current) {
+    // Solo se ajusta cuando el contenedor ya tiene tamaño; si no (pestaña oculta o
+    // aún sin medir), queda pendiente y lo resuelve el ResizeObserver de abajo.
+    if (needsFit.current && (viewportRef.current?.clientWidth ?? 0) > 0) {
       needsFit.current = false;
       fit();
     }
   }, [layout, positions, fit, isMobile]);
+
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || isMobile || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (needsFit.current && el.clientWidth > 0) {
+        needsFit.current = false;
+        fit();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [fit, isMobile, layout]);
 
   // Rueda del ratón: zoom alrededor del cursor. Escucha no pasiva para poder evitar el scroll de la página.
   useEffect(() => {
