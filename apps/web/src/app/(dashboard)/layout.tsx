@@ -1,6 +1,6 @@
 import { ApiHealthBanner } from '@/components/api-health-banner';
 import { IdleLogout } from '@/components/idle-logout';
-import { Sidebar } from '@/components/sidebar';
+import { DashboardShell } from '@/components/dashboard-shell';
 import { UserProvider } from '@/components/user-provider';
 import { getCurrentUser, type CurrentUser } from '@/lib/api';
 
@@ -18,8 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ApiHealthBanner />
       <IdleLogout />
       <UserProvider user={user}>
-        <Sidebar user={user} />
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <DashboardShell user={user}>{children}</DashboardShell>
       </UserProvider>
     </div>
   );

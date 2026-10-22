@@ -13,6 +13,7 @@ import { EmployeesController } from './employees.controller';
 import { EmployeesService } from './employees.service';
 import { EmployeeStorageService } from './employee-storage.service';
 import { HeadcountService } from './headcount.service';
+import { OrgChartService } from './org-chart.service';
 import { Compensation } from './entities/compensation.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { EmployeeDocument } from './entities/employee-document.entity';
@@ -58,6 +59,7 @@ import { TerminationData } from './entities/termination-data.entity';
     EmployeeStorageService,
     EmployeePhotosService,
     HeadcountService,
+    OrgChartService,
   ],
   exports: [EmployeesService],
 })
