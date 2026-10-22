@@ -30,6 +30,7 @@ import {
   ReportMoneyIcon,
   RobotIcon,
   ShieldLockIcon,
+  SitemapIcon,
   SpeakerphoneIcon,
   TableIcon,
   TargetIcon,
@@ -113,6 +114,7 @@ export function Sidebar({ user }: SidebarProps) {
   // Contraseñas (TIC-RE-17) es visible para todos: cada quien ve la suya y un
   // jefe también la de sus subordinados directos; el alcance lo fija el API.
   const showPasswords = true;
+  const showOrgChartInTools = !showRrhh;
   const showHerramientas =
     showNotificaciones ||
     showReembolsos ||
@@ -122,7 +124,8 @@ export function Sidebar({ user }: SidebarProps) {
     showIsobot ||
     showVacaciones ||
     showGestionVacaciones ||
-    showPasswords;
+    showPasswords ||
+    showOrgChartInTools;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
   const showUsuarios = hasModule(user, 'admin', 'usuarios');
@@ -213,6 +216,10 @@ export function Sidebar({ user }: SidebarProps) {
                 <NavSubLink href="/rrhh/empleados" active={pathname.startsWith('/rrhh/empleados')}>
                   <IdCardIcon className="h-4 w-4" />
                   Empleados
+                </NavSubLink>
+                <NavSubLink href="/rrhh/organigrama" active={pathname.startsWith('/rrhh/organigrama')}>
+                  <SitemapIcon className="h-4 w-4" />
+                  Organigrama
                 </NavSubLink>
                 <NavSubLink
                   href="/rrhh/reportes"
@@ -475,6 +482,13 @@ export function Sidebar({ user }: SidebarProps) {
               >
                 <KeyIcon className="h-5 w-5" />
                 Gestión de Contraseñas
+              </NavLink>
+            )}
+            {/* El organigrama es para cualquier usuario autenticado: quien ve el grupo RRHH lo tiene ahí. */}
+            {showOrgChartInTools && (
+              <NavLink href="/rrhh/organigrama" active={pathname.startsWith('/rrhh/organigrama')}>
+                <SitemapIcon className="h-5 w-5" />
+                Organigrama
               </NavLink>
             )}
           </>
