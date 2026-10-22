@@ -43,6 +43,8 @@ import { GetHeadcountDto } from './dto/get-headcount.dto';
 import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
 import { HeadcountService } from './headcount.service';
+import { OrgChartService } from './org-chart.service';
+import { OrgChartQueryDto } from './dto/org-chart-query.dto';
 import { DocumentsService, DocumentType } from './documents.service';
 
 const VALID_DOCUMENT_TYPES: DocumentType[] = [
@@ -62,6 +64,7 @@ export class EmployeesController {
     private readonly documentsService: DocumentsService,
     private readonly photosService: EmployeePhotosService,
     private readonly headcountService: HeadcountService,
+    private readonly orgChartService: OrgChartService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -80,6 +83,14 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados', 'write')
   create(@Body() dto: CreateEmployeeDto) {
     return this.employeesService.create(dto);
+  }
+
+  // Organigrama (RRHH 2.0, clasificación C2): cualquier usuario autenticado. Va antes de
+  // `:id` para que no se confunda con un id. La respuesta es una lista blanca de campos.
+  @Get('org-chart')
+  @SetMetadata(PERMISSION_KEY, null)
+  getOrgChart(@Query() query: OrgChartQueryDto) {
+    return this.orgChartService.getOrgChart(query.location);
   }
 
   // Público (cualquier usuario autenticado) — usado por el calendario del home.
