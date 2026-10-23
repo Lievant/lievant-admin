@@ -507,6 +507,21 @@ export class SimCardsService {
     return rows.map((r) => this.toView(r, false));
   }
 
+  /** Líneas del empleado ligado al usuario de la sesión (nunca con ICCID). Sin expediente: ninguna. */
+  async myLines(userId: string): Promise<SimCardView[]> {
+    const rows = (await this.dataSource.manager.query(
+      `${SIM_SELECT}
+       WHERE s.deleted_at IS NULL
+         AND s.employee_id = (
+           SELECT e.id FROM employees.employee_records e
+           WHERE e.auth_user_id = $1 AND e.deleted_at IS NULL LIMIT 1
+         )
+       ORDER BY s.sim_code ASC`,
+      [userId],
+    )) as SimRow[];
+    return rows.map((r) => this.toView(r, false));
+  }
+
   /** Líneas aún sin equipo, para el selector "Asociar línea" de la pestaña Asignación. */
   async withoutEquipment(user: User): Promise<SimCardView[]> {
     const rows = (await this.dataSource.manager.query(

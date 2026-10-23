@@ -15,7 +15,10 @@ import {
 import { useSimPermissions } from './use-sim-permissions';
 
 interface EmployeeSimCardsProps {
-  employeeId: string;
+  /** Con `source: 'mine'` no se usa: el API toma al usuario de la sesión. */
+  employeeId?: string;
+  /** 'mine' lee /sim-cards/my-lines (líneas propias, sin ICCID). */
+  source?: 'employee' | 'mine';
   title?: string;
   emptyText?: string;
   /** Columnas de valor del plan y estado. */
@@ -45,6 +48,7 @@ interface ByEmployee {
  */
 export function EmployeeSimCards({
   employeeId,
+  source = 'employee',
   title = 'Líneas telefónicas vigentes',
   emptyText = 'Sin líneas telefónicas asignadas.',
   showCost = true,
@@ -62,14 +66,16 @@ export function EmployeeSimCards({
   useEffect(() => {
     if (blocked) return;
     let cancelled = false;
-    fetch(`/api/sim-cards/by-employee/${employeeId}`)
+    fetch(source === 'mine' ? '/api/sim-cards/my-lines' : `/api/sim-cards/by-employee/${employeeId}`)
       .then(async (res) => {
         if (res.status === 403) {
           if (!cancelled) setForbidden(true);
           throw new Error('No tienes permisos para ver las líneas.');
         }
         if (!res.ok) throw new Error('No se pudieron cargar las líneas.');
-        return (await res.json()) as ByEmployee;
+        const json = (await res.json()) as ByEmployee | SimCard[];
+        // my-lines devuelve la lista plana de líneas propias, sin historial.
+        return Array.isArray(json) ? { current: json, history: [] } : json;
       })
       .then((body) => {
         if (!cancelled) setData(body);
@@ -80,7 +86,7 @@ export function EmployeeSimCards({
     return () => {
       cancelled = true;
     };
-  }, [employeeId, blocked]);
+  }, [employeeId, source, blocked]);
 
   if (blocked || (hideWhenForbidden && forbidden)) return null;
 
