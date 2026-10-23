@@ -47,6 +47,13 @@ import { OrgChartService } from './org-chart.service';
 import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { LinkUserDto } from './dto/link-user.dto';
+import { TrainingsService } from './trainings.service';
+import {
+  CertificateUploadDto,
+  CreateTrainingDto,
+  TrainingQueryDto,
+  UpdateTrainingDto,
+} from './dto/training.dto';
 import { OrgChartQueryDto } from './dto/org-chart-query.dto';
 import { DocumentsService, DocumentType } from './documents.service';
 
@@ -70,6 +77,7 @@ export class EmployeesController {
     private readonly orgChartService: OrgChartService,
     private readonly myProfileService: MyProfileService,
     private readonly userLinkService: EmployeeUserLinkService,
+    private readonly trainingsService: TrainingsService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -123,6 +131,18 @@ export class EmployeesController {
   @SetMetadata(PERMISSION_KEY, null)
   getMyEquipment(@CurrentUser() user: User) {
     return this.myProfileService.getEquipment(user.id);
+  }
+
+  @Get('my-profile/trainings')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyTrainings(@CurrentUser() user: User, @Query() query: TrainingQueryDto) {
+    return this.myProfileService.getTrainings(user.id, query);
+  }
+
+  @Get('my-profile/trainings/:trainingId/certificate-url')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyTrainingCertificateUrl(@Param('trainingId', ParseUUIDPipe) trainingId: string, @CurrentUser() user: User) {
+    return this.myProfileService.getTrainingCertificateUrl(user.id, trainingId);
   }
 
   // Público (cualquier usuario autenticado) — usado por el calendario del home.
@@ -187,6 +207,58 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados', 'write')
   linkUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LinkUserDto, @CurrentUser() user: User) {
     return this.userLinkService.link(id, dto.authUserId, { id: user.id, email: user.email, name: user.name });
+  }
+
+  // Capacitaciones (RRHH 2.0 · M3). Permiso propio: `rrhh.capacitaciones`. Cada ruta
+  // exige que la capacitación pertenezca al empleado de la URL.
+  @Get(':id/trainings')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  listTrainings(@Param('id', ParseUUIDPipe) id: string, @Query() query: TrainingQueryDto) {
+    return this.trainingsService.list(id, query);
+  }
+
+  @Post(':id/trainings')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  createTraining(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateTrainingDto, @CurrentUser() user: User) {
+    return this.trainingsService.create(id, dto, { id: user.id, email: user.email, name: user.name });
+  }
+
+  /** Paso 1 del certificado: devuelve { uploadUrl, s3Key }; el navegador sube directo a S3. */
+  @Post(':id/trainings/certificate-upload')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  createTrainingCertificateUpload(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CertificateUploadDto) {
+    return this.trainingsService.createCertificateUpload(id, dto);
+  }
+
+  @Patch(':id/trainings/:trainingId')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  updateTraining(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+    @Body() dto: UpdateTrainingDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.trainingsService.update(id, trainingId, dto, { id: user.id, email: user.email, name: user.name });
+  }
+
+  @Delete(':id/trainings/:trainingId')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeTraining(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.trainingsService.remove(id, trainingId, { id: user.id, email: user.email, name: user.name });
+  }
+
+  @Get(':id/trainings/:trainingId/certificate-url')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingCertificateUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+  ) {
+    return this.trainingsService.getCertificateUrl(id, trainingId);
   }
 
   @Patch(':id')
