@@ -74,7 +74,16 @@ export class EmployeeStorageService {
     fileType: string,
     employeeId: string,
   ): Promise<{ uploadUrl: string; s3Key: string }> {
-    const s3Key = buildUploadKey(EmployeeStorageService.documentPrefix(employeeId), fileName);
+    return this.getPresignedUploadUrlForPrefix(fileName, fileType, EmployeeStorageService.documentPrefix(employeeId));
+  }
+
+  /** Igual que la anterior pero con un prefijo propio (p. ej. certificados de capacitaciones). */
+  async getPresignedUploadUrlForPrefix(
+    fileName: string,
+    fileType: string,
+    prefix: string,
+  ): Promise<{ uploadUrl: string; s3Key: string }> {
+    const s3Key = buildUploadKey(prefix, fileName);
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: s3Key,

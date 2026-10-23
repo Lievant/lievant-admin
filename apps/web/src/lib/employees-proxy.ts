@@ -20,6 +20,9 @@ export async function proxyEmployees(request: NextRequest, path: string): Promis
     cache: 'no-store',
   });
 
+  // Un 204 (baja lógica) no admite cuerpo.
+  if (res.status === 204) return new NextResponse(null, { status: 204 });
+
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,

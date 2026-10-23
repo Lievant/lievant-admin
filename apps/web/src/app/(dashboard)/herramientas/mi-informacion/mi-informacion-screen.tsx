@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cn, formatDateLocal } from '@/lib/utils';
 import { statusBadgeStyle, typeIcon } from '@/app/(dashboard)/transformacion/inventario/constants';
+import { TrainingsPanel } from '@/app/(dashboard)/rrhh/empleados/trainings-panel';
 import { EmployeeSimCards } from '@/app/(dashboard)/transformacion/sim-cards/employee-sim-cards';
 import {
   EMPLOYEE_STATUS_LABELS,
@@ -43,6 +44,7 @@ const TABS = [
   { id: 'documentos', label: 'Documentos' },
   { id: 'equipos', label: 'Equipos y Licencias' },
   { id: 'lineas', label: 'Línea Telefónica' },
+  { id: 'capacitaciones', label: 'Capacitaciones' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
 
@@ -391,6 +393,7 @@ export function MiInformacionScreen() {
         {tab === 'laboral' && <LaboralPanel l={profile.laboral} />}
         {tab === 'documentos' && <DocumentsPanel docs={docs} />}
         {tab === 'equipos' && <EquipmentPanel data={equipment} />}
+        {tab === 'capacitaciones' && <TrainingsPanel mode="mine" />}
         {tab === 'lineas' && (
           <EmployeeSimCards source="mine" title="Mis Líneas Telefónicas" showHistory={false} showCost={false} />
         )}

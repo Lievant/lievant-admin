@@ -5,6 +5,8 @@ import { EmployeeStorageService } from './employee-storage.service';
 import { EmployeeDocument } from './entities/employee-document.entity';
 import { EmployeeRecord } from './entities/employee-record.entity';
 import { PersonalData } from './entities/personal-data.entity';
+import { TrainingsService } from './trainings.service';
+import type { MyTrainingView, TrainingFilters } from './trainings.util';
 import {
   EMPLOYEE_NOT_LINKED,
   EMPLOYEE_NOT_LINKED_MESSAGE,
@@ -44,6 +46,7 @@ export class MyProfileService {
     @InjectRepository(PersonalData) private readonly personalRepo: Repository<PersonalData>,
     @InjectRepository(EmployeeDocument) private readonly documentsRepo: Repository<EmployeeDocument>,
     private readonly storage: EmployeeStorageService,
+    private readonly trainings: TrainingsService,
   ) {}
 
   /** Expediente vivo ligado al usuario; 404 con código identificable si no hay. */
@@ -87,6 +90,19 @@ export class MyProfileService {
       throw new NotFoundException('Documento no encontrado');
     }
     return { url: await this.storage.getPresignedUrl(doc.s3Key) };
+  }
+
+  /** Capacitaciones propias (lista blanca: sin notas de RRHH ni llaves de S3). */
+  async getTrainings(userId: string, filters: TrainingFilters): Promise<MyTrainingView[]> {
+    const employee = await this.resolveEmployee(userId);
+    return this.trainings.listMine(employee.id, filters);
+  }
+
+  /** Certificado de una capacitación PROPIA; una ajena o borrada responde 404. */
+  async getTrainingCertificateUrl(userId: string, trainingId: string): Promise<{ url: string }> {
+    const employee = await this.resolveEmployee(userId);
+    const { url } = await this.trainings.getCertificateUrl(employee.id, trainingId);
+    return { url };
   }
 
   /** Equipos y herramientas/licencias asignados al colaborador, solo para verlos. */

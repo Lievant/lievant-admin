@@ -147,3 +147,28 @@ export async function uploadViaPresignedUrl<T>({
     registerMethod,
   );
 }
+
+export interface UploadedFileRef {
+  s3Key: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+}
+
+/**
+ * Pasos 1 y 2 solamente: pide la URL prefirmada y sube a S3. El registro no es un
+ * POST aparte: la referencia devuelta viaja con el formulario del módulo (p. ej. el
+ * certificado de una capacitación se adjunta al guardar la capacitación).
+ */
+export async function uploadToPresignedUrl(
+  presignUrl: string,
+  file: File,
+  onProgress?: (percent: number) => void,
+): Promise<UploadedFileRef> {
+  const sizeError = validateUploadSize(file);
+  if (sizeError) throw new Error(sizeError);
+
+  const { uploadUrl, s3Key } = await requestPresignedUrl(presignUrl, file);
+  await putToS3(uploadUrl, file, onProgress);
+  return { s3Key, fileName: file.name, fileType: file.type || 'application/octet-stream', fileSize: file.size };
+}
