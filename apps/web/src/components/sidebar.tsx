@@ -121,6 +121,8 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   // Contraseñas (TIC-RE-17) es visible para todos: cada quien ve la suya y un
   // jefe también la de sus subordinados directos; el alcance lo fija el API.
   const showPasswords = true;
+  // Mi Información (solo lectura de mi propio expediente) es para cualquier usuario.
+  const showMiInformacion = true;
   const showOrgChartInTools = !showRrhh;
   const showHerramientas =
     showNotificaciones ||
@@ -132,6 +134,7 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
     showVacaciones ||
     showGestionVacaciones ||
     showPasswords ||
+    showMiInformacion ||
     showOrgChartInTools;
 
   // Configuración: basta un permiso de section 'admin', no ser SUPER_ADMIN.
@@ -505,6 +508,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
               >
                 <UsersGroupIcon className="h-5 w-5" />
                 Gestión de Vacaciones
+              </NavLink>
+            )}
+            {showMiInformacion && (
+              <NavLink href="/herramientas/mi-informacion" active={pathname.startsWith('/herramientas/mi-informacion')}>
+                <IdCardIcon className="h-5 w-5" />
+                Mi Información
               </NavLink>
             )}
             {showPasswords && (
