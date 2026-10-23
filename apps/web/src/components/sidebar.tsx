@@ -88,6 +88,7 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   const showRrhh = hasSection(user, 'rrhh');
   // Headcount es confidencial: solo SUPER_ADMIN y overrides individuales.
   const showHeadcount = hasModule(user, 'rrhh', 'headcount', 'read');
+  const showRiac = hasModule(user, 'rrhh', 'capacitaciones', 'read');
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
@@ -258,7 +259,11 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
                 </NavSubLink>
                 <NavSubLink
                   href="/rrhh/reportes"
-                  active={pathname.startsWith('/rrhh/reportes') && !pathname.startsWith('/rrhh/reportes/headcount')}
+                  active={
+                    pathname.startsWith('/rrhh/reportes') &&
+                    !pathname.startsWith('/rrhh/reportes/headcount') &&
+                    !pathname.startsWith('/rrhh/reportes/riac')
+                  }
                 >
                   <TableIcon className="h-4 w-4" />
                   Reportes
@@ -270,6 +275,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
                   >
                     <UsersGroupIcon className="h-4 w-4" />
                     Headcount
+                  </NavSubLink>
+                )}
+                {showRiac && (
+                  <NavSubLink href="/rrhh/reportes/riac" active={pathname.startsWith('/rrhh/reportes/riac')}>
+                    <IdCardIcon className="h-4 w-4" />
+                    RIAC
                   </NavSubLink>
                 )}
               </SubMenu>
