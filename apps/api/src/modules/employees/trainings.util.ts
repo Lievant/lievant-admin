@@ -190,3 +190,15 @@ export function buildTrainingFilter(
   }
   return { where, params };
 }
+
+/**
+ * TypeORM devuelve `[filas, afectadas]` para UPDATE/DELETE ... RETURNING con el
+ * driver de Postgres, y solo las filas para SELECT/INSERT. Esta función entrega
+ * la primera fila real en ambos casos (o undefined si no hubo ninguna).
+ */
+export function firstReturnedRow<T>(result: unknown): T | undefined {
+  if (!Array.isArray(result)) return undefined;
+  const head = result[0];
+  if (Array.isArray(head)) return head[0] as T | undefined;
+  return head as T | undefined;
+}

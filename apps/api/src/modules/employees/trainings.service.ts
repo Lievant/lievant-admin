@@ -10,6 +10,7 @@ import {
   TRAINING_COLUMNS,
   TRAINING_NOT_FOUND,
   buildTrainingFilter,
+  firstReturnedRow,
   toMyTrainingView,
   toTrainingView,
   trainingPrefix,
@@ -188,7 +189,7 @@ export class TrainingsService {
       }
     }
 
-    const rows = (await this.dataSource.query(
+    const rows: unknown = await this.dataSource.query(
       `UPDATE employees.employee_trainings SET
          name = $3, institution = $4, development_type = $5, level = $6, start_date = $7, end_date = $8,
          duration_value = $9, duration_unit = $10, is_company_recognition = $11, notes = $12,
@@ -212,8 +213,8 @@ export class TrainingsService {
         certName,
         actor.id ?? null,
       ],
-    )) as TrainingRow[];
-    const row = rows[0];
+    );
+    const row = firstReturnedRow<TrainingRow>(rows);
     if (!row) throw new NotFoundException(TRAINING_NOT_FOUND);
 
     // El archivo reemplazado o retirado ya no lo referencia ninguna fila viva.
@@ -226,14 +227,14 @@ export class TrainingsService {
   /** Baja lógica: la fila y su certificado quedan, pero ya no se listan ni se descargan. */
   async remove(employeeId: string, trainingId: string, actor: TrainingActor): Promise<void> {
     const employee = await this.assertEmployee(employeeId);
-    const rows = (await this.dataSource.query(
+    const rows: unknown = await this.dataSource.query(
       `UPDATE employees.employee_trainings
        SET deleted_at = NOW(), updated_by = $3, updated_at = NOW()
        WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL
        RETURNING ${TRAINING_COLUMNS}`,
       [trainingId, employeeId, actor.id ?? null],
-    )) as TrainingRow[];
-    const row = rows[0];
+    );
+    const row = firstReturnedRow<TrainingRow>(rows);
     if (!row) throw new NotFoundException(TRAINING_NOT_FOUND);
     await this.logAudit('delete', actor, row, employee.full_name, { name: { from: row.name, to: null } });
   }

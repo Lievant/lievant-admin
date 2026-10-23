@@ -9,6 +9,7 @@ import { MyProfileService } from './my-profile.service';
 import { TrainingsService } from './trainings.service';
 import {
   buildTrainingFilter,
+  firstReturnedRow,
   isRealDate,
   toMyTrainingView,
   toTrainingView,
@@ -124,6 +125,15 @@ describe('Capacitaciones · filtros del listado', () => {
   });
 });
 
+describe('Capacitaciones · forma de resultado de TypeORM', () => {
+  it('firstReturnedRow entiende [filas, afectadas] y filas sueltas', () => {
+    expect(firstReturnedRow([[{ a: 1 }], 1])).toEqual({ a: 1 });
+    expect(firstReturnedRow([[], 0])).toBeUndefined();
+    expect(firstReturnedRow([{ a: 2 }])).toEqual({ a: 2 });
+    expect(firstReturnedRow([])).toBeUndefined();
+  });
+});
+
 describe('Capacitaciones · vistas (lista blanca)', () => {
   it('RRHH no recibe la llave de S3; solo hasCertificate', () => {
     const v = toTrainingView(row());
@@ -166,11 +176,14 @@ function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; obje
         return store.filter((t) => t.employee_id === params[0]);
       }
       if (/^\s*INSERT/.test(sql)) return [row({ id: 'new', name: params[1] as string, certificate_s3_key: (params[10] as string) ?? null })];
+      // Con el driver de Postgres, TypeORM devuelve [filas, afectadas] en UPDATE ... RETURNING.
       if (/^\s*UPDATE/.test(sql) && /deleted_at = NOW/.test(sql)) {
-        return store.filter((t) => t.id === params[0] && t.employee_id === params[1]);
+        const hit = store.filter((t) => t.id === params[0] && t.employee_id === params[1]);
+        return [hit, hit.length];
       }
       if (/^\s*UPDATE/.test(sql)) {
-        return store.filter((t) => t.id === params[0] && t.employee_id === params[1]).map((t) => ({ ...t, name: params[2] as string }));
+        const hit = store.filter((t) => t.id === params[0] && t.employee_id === params[1]).map((t) => ({ ...t, name: params[2] as string }));
+        return [hit, hit.length];
       }
       return [];
     }),
@@ -224,6 +237,13 @@ describe('Capacitaciones · servicio', () => {
     await expect(service.remove(EMP_A, T1, ACTOR)).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.getCertificateUrl(EMP_A, T1)).rejects.toBeInstanceOf(NotFoundException);
     expect(audit.logActivity).not.toHaveBeenCalled();
+  });
+
+  it('PATCH propio devuelve la capacitación actualizada con la forma real de TypeORM', async () => {
+    const { service } = setup();
+    const res = await service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { name: 'Nuevo nombre' }), ACTOR);
+    expect(res.name).toBe('Nuevo nombre');
+    expect(res.id).toBe(T1);
   });
 
   it('eliminar es baja lógica (deleted_at), nunca DELETE físico, y deja auditoría', async () => {
