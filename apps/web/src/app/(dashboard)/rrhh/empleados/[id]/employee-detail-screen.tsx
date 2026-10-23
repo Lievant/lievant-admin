@@ -33,6 +33,7 @@ import { SimCardsTab } from './sim-cards-tab';
 import { EditEmployeeDialog } from './edit-employee-dialog';
 import { GenerateDocumentsDialog } from './generate-documents-dialog';
 import { LinkUserDialog } from './link-user-dialog';
+import { TrainingsPanel } from '../trainings-panel';
 
 const ALL_TABS = [
   { id: 'general',      label: 'General',          badge: null },
@@ -44,6 +45,7 @@ const ALL_TABS = [
   { id: 'photos',       label: 'Fotos',              badge: null },
   { id: 'equipos-licencias', label: 'Equipos y Licencias', badge: null },
   { id: 'lineas-telefonicas', label: 'Líneas Telefónicas', badge: null },
+  { id: 'capacitaciones', label: 'Capacitaciones', badge: null },
 ] as const;
 
 type TabId = (typeof ALL_TABS)[number]['id'];
@@ -121,6 +123,8 @@ export function EmployeeDetailScreen({
   const canViewLicencias     = usePermission('rrhh', 'empleados.licencias', 'read');
   const canViewVacations     = usePermission('rrhh', 'empleados.vacaciones', 'read');
   const canViewSimCards      = usePermission('rrhh', 'empleados', 'read');
+  const canViewTrainings     = usePermission('rrhh', 'capacitaciones', 'read');
+  const canWriteTrainings    = usePermission('rrhh', 'capacitaciones', 'write');
 
   const visibleTabs = ALL_TABS.filter((tab) => {
     if (tab.id === 'personal' || tab.id === 'family') return canViewPersonal;
@@ -129,6 +133,7 @@ export function EmployeeDetailScreen({
     if (tab.id === 'documents') return canViewDocuments;
     if (tab.id === 'equipos-licencias') return canViewEquipos || canViewLicencias;
     if (tab.id === 'lineas-telefonicas') return canViewSimCards;
+    if (tab.id === 'capacitaciones') return canViewTrainings;
     return true; // general, photos
   });
 
@@ -297,6 +302,9 @@ export function EmployeeDetailScreen({
           />
         )}
         {effectiveTab === 'lineas-telefonicas' && <SimCardsTab employeeId={employee.id} />}
+        {effectiveTab === 'capacitaciones' && (
+          <TrainingsPanel mode="rrhh" employeeId={employee.id} canWrite={canWriteTrainings} />
+        )}
       </div>
 
       {isLinkOpen && (
