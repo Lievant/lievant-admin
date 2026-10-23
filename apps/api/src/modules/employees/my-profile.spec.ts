@@ -98,7 +98,8 @@ function setup(over: { documents?: any[]; queryRows?: (sql: string) => unknown[]
     findOne: jest.fn(async ({ where }: any) => docs.find((d) => d.id === where.id && d.employeeId === where.employeeId) ?? null),
   };
   const storage = { getPresignedUrl: jest.fn(async (key: string) => `https://s3.example/${key}?sig=1`) };
-  const service = new MyProfileService(employeesRepo as any, personalRepo as any, documentsRepo as any, storage as any);
+  const trainings = { listMine: jest.fn(async () => []), getCertificateUrl: jest.fn(async () => ({ url: 'u', fileName: null })) };
+  const service = new MyProfileService(employeesRepo as any, personalRepo as any, documentsRepo as any, storage as any, trainings as any);
   return { service, employeesRepo, personalRepo, documentsRepo, storage, queries };
 }
 
