@@ -32,7 +32,7 @@ export function RequisitionDetailView({ d, showRequester }: { d: RequisitionDeta
         {d.priority && <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', PRIORITY_BADGE[d.priority])}>Prioridad {priorityLabel(d.priority)}</span>}
       </div>
 
-      {d.needsMatrixPosition && d.status !== 'borrador' && (
+      {showRequester && d.needsMatrixPosition && d.status !== 'borrador' && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           Este puesto no existe en la Matriz de Puestos: hay que crearlo en la Matriz de Puestos antes de publicar la vacante.
         </p>
