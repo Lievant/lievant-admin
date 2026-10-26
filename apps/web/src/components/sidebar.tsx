@@ -89,6 +89,7 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   // Headcount es confidencial: solo SUPER_ADMIN y overrides individuales.
   const showHeadcount = hasModule(user, 'rrhh', 'headcount', 'read');
   const showRiac = hasModule(user, 'rrhh', 'capacitaciones', 'read');
+  const showMatrizPuestos = hasModule(user, 'rrhh', 'matriz-puestos', 'read');
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
@@ -257,6 +258,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
                   <SitemapIcon className="h-4 w-4" />
                   Organigrama
                 </NavSubLink>
+                {showMatrizPuestos && (
+                  <NavSubLink href="/rrhh/matriz-puestos" active={pathname.startsWith('/rrhh/matriz-puestos')}>
+                    <LayersIcon className="h-4 w-4" />
+                    Matriz de Puestos
+                  </NavSubLink>
+                )}
                 <NavSubLink
                   href="/rrhh/reportes"
                   active={
