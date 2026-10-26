@@ -19,6 +19,7 @@ import { EmployeeUserLinkService } from './employee-user-link.service';
 import { Compensation } from './entities/compensation.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { TrainingsService } from './trainings.service';
+import { TrainingsReportService } from './trainings-report.service';
 import { EmployeeDocument } from './entities/employee-document.entity';
 import { EmployeePhoto } from './entities/employee-photo.entity';
 import { EmployeeRecord } from './entities/employee-record.entity';
@@ -66,6 +67,7 @@ import { TerminationData } from './entities/termination-data.entity';
     MyProfileService,
     EmployeeUserLinkService,
     TrainingsService,
+    TrainingsReportService,
   ],
   exports: [EmployeesService],
 })

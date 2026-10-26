@@ -48,6 +48,8 @@ import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { LinkUserDto } from './dto/link-user.dto';
 import { TrainingsService } from './trainings.service';
+import { TrainingsReportService } from './trainings-report.service';
+import { TrainingReportQueryDto } from './dto/trainings-report.dto';
 import {
   CertificateUploadDto,
   CreateTrainingDto,
@@ -78,6 +80,7 @@ export class EmployeesController {
     private readonly myProfileService: MyProfileService,
     private readonly userLinkService: EmployeeUserLinkService,
     private readonly trainingsService: TrainingsService,
+    private readonly trainingsReportService: TrainingsReportService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -189,6 +192,38 @@ export class EmployeesController {
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.send(buffer);
     return undefined;
+  }
+
+  // Reporte RIAC (RRHH 2.0 · M4). Solo lectura; reutiliza rrhh.capacitaciones.read.
+  // Va antes de `:id`.
+  @Get('trainings/report/options')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingReportOptions() {
+    return this.trainingsReportService.getOptions();
+  }
+
+  @Get('trainings/report/export')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  async exportTrainingReport(
+    @Query() dto: TrainingReportQueryDto,
+    @CurrentUser() user: User,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, fileName } = await this.trainingsReportService.exportExcel(dto, {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+    return undefined;
+  }
+
+  @Get('trainings/report')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingReport(@Query() dto: TrainingReportQueryDto) {
+    return this.trainingsReportService.getReport(dto);
   }
 
   @Get(':id')
