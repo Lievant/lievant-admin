@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, Matches, Max, MaxLength, Min } from 'class-validator';
 import { COUNTRIES, MAX_LIMIT, MODALITIES, PRIORITIES, REQUISITION_TYPES, REVIEWABLE_STATUSES, STATUSES } from '../job-requisitions.util';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -185,9 +185,11 @@ export class ApproveRequisitionDto {
   comments?: string | null;
 }
 
+/** Los comentarios son obligatorios al rechazar; se exige en el servicio para dar un solo mensaje claro. */
 export class RejectRequisitionDto {
+  @IsOptional()
+  @emptyToNull
   @IsString()
-  @IsNotEmpty({ message: 'Los comentarios son obligatorios al rechazar' })
-  @MaxLength(5000)
-  comments!: string;
+  @MaxLength(5000, { message: 'Los comentarios no pueden pasar de 5,000 caracteres' })
+  comments?: string | null;
 }

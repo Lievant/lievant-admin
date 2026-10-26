@@ -194,9 +194,9 @@ describe('Solicitud de Puesto · DTO', () => {
   it('editar acepta null para limpiar campos', async () => {
     expect(await errs(UpdateRequisitionDto, { jobPositionId: null, reason: null, priority: null, requiredDate: null })).toEqual([]);
   });
-  it('rechazar exige comentarios en el cuerpo; aprobar no', async () => {
-    expect(await errs(RejectRequisitionDto, {})).toContain('comments');
-    expect(await errs(RejectRequisitionDto, { comments: '' })).toContain('comments');
+  it('los comentarios se exigen en el servicio al rechazar (un solo mensaje); el DTO solo acota la longitud', async () => {
+    expect(await errs(RejectRequisitionDto, {})).toEqual([]);
+    expect(await errs(RejectRequisitionDto, { comments: 'x'.repeat(5001) })).toContain('comments');
     expect(await errs(ApproveRequisitionDto, {})).toEqual([]);
   });
   it('filtros de RRHH: RRHH no puede pedir borradores', async () => {
