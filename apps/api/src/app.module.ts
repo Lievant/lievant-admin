@@ -15,6 +15,7 @@ import { InventoryModule } from './modules/inventory/inventory.module';
 import { SimCardsModule } from './modules/inventory/sim-cards/sim-cards.module';
 import { AuditsModule } from './modules/audits/audits.module';
 import { JobPositionsModule } from './modules/job-positions/job-positions.module';
+import { JobRequisitionsModule } from './modules/job-requisitions/job-requisitions.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { MediaModule } from './modules/media/media.module';
@@ -72,6 +73,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     SimCardsModule,
     AuditsModule,
     JobPositionsModule,
+    JobRequisitionsModule,
     ProjectsModule,
     IsobotModule,
     RisksModule,
