@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,8 @@ export function PositionsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  // Solo cuenta la respuesta de la consulta más reciente (si no, una respuesta lenta pisa a una nueva).
+  const latest = useRef(0);
 
   // La búsqueda espera a que se deje de escribir.
   useEffect(() => {
@@ -65,15 +67,18 @@ export function PositionsScreen() {
     if (level) q.set('level', level);
     if (status) q.set('status', status);
     if (debounced) q.set('search', debounced);
+    const ticket = ++latest.current;
     try {
       const res = await fetch(`/api/hr/job-positions?${q}`);
       if (!res.ok) throw new Error(res.status === 403 ? 'No tienes permisos para ver la Matriz de Puestos.' : 'No se pudo cargar la lista.');
-      setResult((await res.json()) as PositionPage);
+      const data = (await res.json()) as PositionPage;
+      if (ticket === latest.current) setResult(data);
     } catch (err) {
+      if (ticket !== latest.current) return;
       setResult(null);
       setError(err instanceof Error ? err.message : 'No se pudo cargar la lista.');
     } finally {
-      setLoading(false);
+      if (ticket === latest.current) setLoading(false);
     }
   }, [page, area, businessUnit, level, status, debounced]);
   useEffect(() => {
