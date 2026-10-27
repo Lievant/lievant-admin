@@ -144,7 +144,8 @@ export class EmployeesController {
   @SetMetadata(PERMISSION_KEY, null)
   async getMyDevelopment(@CurrentUser() user: User, @Query() query: PeriodQueryDto) {
     const employee = await this.myProfileService.resolveEmployee(user.id);
-    return this.developmentService.getDevelopment(employee.id, query.period);
+    // Siempre la vista del propio colaborador (restringida): sin comentarios y, con la bandera apagada, sin calificación.
+    return this.developmentService.getDevelopment(employee.id, query.period, 'self');
   }
 
   @Get('my-profile/trainings')

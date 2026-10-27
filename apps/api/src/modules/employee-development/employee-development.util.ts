@@ -76,6 +76,10 @@ export interface OkrView {
   objective: string;
   keyResult: string;
   weight: number | null;
+  /** M7: solo viajan según quién consulta (ver `visibleEvaluation`); si no se permiten, las llaves no existen. */
+  score?: number | null;
+  evaluationStatus?: 'pendiente' | 'completada';
+  comments?: string | null;
 }
 
 export interface KpiView {

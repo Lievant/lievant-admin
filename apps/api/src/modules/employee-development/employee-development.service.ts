@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
 import { User } from '../auth/entities/user.entity';
 import { userHasPermission } from '../auth/permissions.util';
+import { OKR_SCORE_VISIBLE_TO_EMPLOYEE, visibleEvaluation, type EvaluationFields, type Viewer } from '../okr-evaluations/okr-evaluations.util';
 import {
   EMPLOYEE_NOT_FOUND,
   KPI_NOT_FOUND,
@@ -12,6 +13,7 @@ import {
   addSummaries,
   assertPeriod,
   canViewEmployeeDevelopment,
+  type AccessFacts,
   currentPeriodMx,
   findSuggestion,
   summarize,
@@ -73,6 +75,11 @@ export class EmployeeDevelopmentService {
    * empleado o su líder DIRECTO. Cualquier otro caso: 404 (no se revela que existe).
    */
   async assertCanView(user: Pick<User, 'id' | 'roles' | 'userPermissions'>, employeeId: string): Promise<void> {
+    await this.resolveAccess(user, employeeId);
+  }
+
+  /** Igual que `assertCanView`, pero devuelve los hechos de acceso (permiso, propio, líder directo) para quien los necesite (M7). */
+  async resolveAccess(user: Pick<User, 'id' | 'roles' | 'userPermissions'>, employeeId: string): Promise<AccessFacts> {
     const rows = (await this.dataSource.query(
       `SELECT e.id, e.auth_user_id, e.direct_report_to_id,
               (SELECT m.id FROM employees.employee_records m WHERE m.auth_user_id = $2 AND m.deleted_at IS NULL LIMIT 1) AS viewer_employee_id
@@ -80,25 +87,28 @@ export class EmployeeDevelopmentService {
       [employeeId, user.id],
     )) as { id: string; auth_user_id: string | null; direct_report_to_id: string | null; viewer_employee_id: string | null }[];
     const e = rows[0];
-    const allowed =
-      !!e &&
-      canViewEmployeeDevelopment({
-        hasReadPermission: userHasPermission(user, 'rrhh', 'desarrollo-organizacional', 'read'),
-        isSelf: e.auth_user_id !== null && e.auth_user_id === user.id,
-        isDirectLeader: e.viewer_employee_id !== null && e.direct_report_to_id === e.viewer_employee_id && e.id !== e.viewer_employee_id,
-      });
-    if (!allowed) throw new NotFoundException(EMPLOYEE_NOT_FOUND);
+    const facts: AccessFacts | null = e
+      ? {
+          hasReadPermission: userHasPermission(user, 'rrhh', 'desarrollo-organizacional', 'read'),
+          isSelf: e.auth_user_id !== null && e.auth_user_id === user.id,
+          isDirectLeader: e.viewer_employee_id !== null && e.direct_report_to_id === e.viewer_employee_id && e.id !== e.viewer_employee_id,
+        }
+      : null;
+    if (!facts || !canViewEmployeeDevelopment(facts)) throw new NotFoundException(EMPLOYEE_NOT_FOUND);
+    return facts;
   }
 
   // ── Lectura ────────────────────────────────────────────────────────────────
 
   async getForUser(user: Pick<User, 'id' | 'roles' | 'userPermissions'>, employeeId: string, period?: string): Promise<DevelopmentView> {
-    await this.assertCanView(user, employeeId);
-    return this.getDevelopment(employeeId, period);
+    const facts = await this.resolveAccess(user, employeeId);
+    // El propio colaborador siempre recibe la vista restringida, aunque además tenga permiso de RRHH.
+    const viewer: Viewer = facts.isSelf ? 'self' : facts.hasReadPermission ? 'rrhh' : 'leader';
+    return this.getDevelopment(employeeId, period, viewer);
   }
 
   /** Lectura sin verificar acceso: quien llama ya resolvió que el empleado es el correcto (p. ej. Mi Información). */
-  async getDevelopment(employeeId: string, period?: string): Promise<DevelopmentView> {
+  async getDevelopment(employeeId: string, period?: string, viewer: Viewer = 'self'): Promise<DevelopmentView> {
     const chosen = period ?? currentPeriodMx();
     assertPeriod(chosen);
 
@@ -141,7 +151,21 @@ export class EmployeeDevelopmentService {
       ) as Promise<{ period: string }[]>,
     ]);
 
-    const okrs = okrRows.map(toOkrView);
+    // M7: la evaluación solo viaja a quien corresponde (RRHH y líder directo: todo; el propio colaborador: nada,
+    // o solo la calificación si la bandera está encendida). Una consulta para todos los OKRs: sin N+1.
+    const wantsEvaluations = viewer !== 'self' || OKR_SCORE_VISIBLE_TO_EMPLOYEE;
+    const evaluations = new Map<string, EvaluationFields>();
+    if (wantsEvaluations && okrRows.length > 0) {
+      const evRows = (await this.dataSource.query(
+        `SELECT employee_okr_id, score, status, comments FROM hr.okr_evaluations
+         WHERE employee_id = $1 AND period = $2 AND deleted_at IS NULL`,
+        [employeeId, chosen],
+      )) as { employee_okr_id: string; score: string | null; status: 'pendiente' | 'completada'; comments: string | null }[];
+      for (const r of evRows) {
+        evaluations.set(r.employee_okr_id, { score: r.score === null ? null : Number(r.score), status: r.status, comments: r.comments });
+      }
+    }
+    const okrs = okrRows.map((r) => ({ ...toOkrView(r), ...visibleEvaluation(viewer, evaluations.get(r.id) ?? null) }));
     const description = position ? visibleDescription(position.description, position.description_approved) : null;
     return {
       employeeId,
