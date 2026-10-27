@@ -22,7 +22,16 @@ interface PositionSummary {
   area: string;
   level: string | null;
 }
-interface DevOkr { id: string; objective: string; keyResult: string; weight: number | null }
+interface DevOkr {
+  id: string;
+  objective: string;
+  keyResult: string;
+  weight: number | null;
+  /** M7: llegan solo si el API los entrega a quien consulta (RRHH y líder directo; el colaborador, nunca con la bandera apagada). */
+  score?: number | null;
+  evaluationStatus?: 'pendiente' | 'completada';
+  comments?: string | null;
+}
 interface DevKpi { id: string; name: string; description: string | null; targetValue: string | null; measurementFrequency: Frequency | null }
 interface Development {
   employeeId: string;
@@ -154,6 +163,9 @@ export function DevelopmentPanel(props: Source) {
 
   const parsed = parsePeriod(period) ?? { year: currentYearMx(), semester: 1 as const };
   const state = weightState(data.weightSum, data.okrs.length);
+  // La columna Calificación existe solo si el API entregó la evaluación (la llave `score` viaja o no según quién consulta).
+  const showScore = data.okrs.some((o) => 'score' in o);
+  const showComments = data.okrs.some((o) => 'comments' in o);
   const others = data.periodsWithData.filter((p) => p !== period);
 
   return (
@@ -252,6 +264,8 @@ export function DevelopmentPanel(props: Source) {
                   <th className="px-3 py-2">Objetivo</th>
                   <th className="px-3 py-2">Resultado Clave</th>
                   <th className="whitespace-nowrap px-3 py-2">Peso</th>
+                  {showScore && <th className="whitespace-nowrap px-3 py-2">Calificación</th>}
+                  {showComments && <th className="px-3 py-2">Comentarios del Líder</th>}
                   {canWrite && <th className="px-3 py-2" />}
                 </tr>
               </thead>
@@ -261,6 +275,12 @@ export function DevelopmentPanel(props: Source) {
                     <td className="whitespace-pre-line px-3 py-2 text-navy">{o.objective}</td>
                     <td className="whitespace-pre-line px-3 py-2 text-slate-700">{o.keyResult}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-700">{o.weight !== null ? formatPct(o.weight) : '—'}</td>
+                    {showScore && (
+                      <td className="whitespace-nowrap px-3 py-2">
+                        {o.score != null ? <span className="font-semibold text-navy">{o.score}</span> : <span className="text-slate-400">Pendiente</span>}
+                      </td>
+                    )}
+                    {showComments && <td className="whitespace-pre-line px-3 py-2 text-slate-700">{o.comments ?? '—'}</td>}
                     {canWrite && (
                       <td className="whitespace-nowrap px-3 py-2 text-right">
                         <button type="button" onClick={() => setToRemove({ kind: 'okrs', id: o.id, label: o.objective })} className="text-xs font-medium text-red-600 hover:underline">Quitar</button>

@@ -91,6 +91,7 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   const showRiac = hasModule(user, 'rrhh', 'capacitaciones', 'read');
   const showMatrizPuestos = hasModule(user, 'rrhh', 'matriz-puestos', 'read');
   const showSolicitudesPuesto = hasModule(user, 'rrhh', 'solicitudes-puesto', 'read');
+  const showOkrsReport = hasModule(user, 'rrhh', 'okrs', 'read');
   const showTransformacion = hasSection(user, 'transformacion');
   const showHerramientasCatalogo = hasModule(user, 'transformacion', 'herramientas', 'read');
   const showAsignaciones = hasModule(user, 'transformacion', 'asignaciones', 'read');
@@ -123,6 +124,8 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
   const showGestionVacaciones = isManager;
   // Solicitud de Puesto es para líderes: misma regla que Gestión de Vacaciones (tener gente a cargo).
   const showSolicitudPuesto = isManager;
+  // Mis OKRs (evaluación del líder) también es para líderes: misma regla.
+  const showMisOkrs = isManager;
   // Contraseñas (TIC-RE-17) es visible para todos: cada quien ve la suya y un
   // jefe también la de sus subordinados directos; el alcance lo fija el API.
   const showPasswords = true;
@@ -139,6 +142,7 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
     showVacaciones ||
     showGestionVacaciones ||
     showSolicitudPuesto ||
+    showMisOkrs ||
     showPasswords ||
     showMiInformacion ||
     showOrgChartInTools;
@@ -279,7 +283,8 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
                   active={
                     pathname.startsWith('/rrhh/reportes') &&
                     !pathname.startsWith('/rrhh/reportes/headcount') &&
-                    !pathname.startsWith('/rrhh/reportes/riac')
+                    !pathname.startsWith('/rrhh/reportes/riac') &&
+                    !pathname.startsWith('/rrhh/reportes/okrs')
                   }
                 >
                   <TableIcon className="h-4 w-4" />
@@ -298,6 +303,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
                   <NavSubLink href="/rrhh/reportes/riac" active={pathname.startsWith('/rrhh/reportes/riac')}>
                     <IdCardIcon className="h-4 w-4" />
                     RIAC
+                  </NavSubLink>
+                )}
+                {showOkrsReport && (
+                  <NavSubLink href="/rrhh/reportes/okrs" active={pathname.startsWith('/rrhh/reportes/okrs')}>
+                    <TableIcon className="h-4 w-4" />
+                    OKRs
                   </NavSubLink>
                 )}
               </SubMenu>
@@ -548,6 +559,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
               <NavLink href="/herramientas/solicitud-puesto" active={pathname.startsWith('/herramientas/solicitud-puesto')}>
                 <IdCardIcon className="h-5 w-5" />
                 Solicitud de Puesto
+              </NavLink>
+            )}
+            {showMisOkrs && (
+              <NavLink href="/herramientas/mis-okrs" active={pathname.startsWith('/herramientas/mis-okrs')}>
+                <TableIcon className="h-5 w-5" />
+                Mis OKRs
               </NavLink>
             )}
             {showPasswords && (
