@@ -17,6 +17,7 @@ import { AuditsModule } from './modules/audits/audits.module';
 import { JobPositionsModule } from './modules/job-positions/job-positions.module';
 import { JobRequisitionsModule } from './modules/job-requisitions/job-requisitions.module';
 import { EmployeeDevelopmentModule } from './modules/employee-development/employee-development.module';
+import { OkrEvaluationsModule } from './modules/okr-evaluations/okr-evaluations.module';
 import { IsobotModule } from './modules/isobot/isobot.module';
 import { RisksModule } from './modules/risks/risks.module';
 import { MediaModule } from './modules/media/media.module';
@@ -76,6 +77,7 @@ import { VendorsModule } from './modules/vendors/vendors.module';
     JobPositionsModule,
     JobRequisitionsModule,
     EmployeeDevelopmentModule,
+    OkrEvaluationsModule,
     ProjectsModule,
     IsobotModule,
     RisksModule,

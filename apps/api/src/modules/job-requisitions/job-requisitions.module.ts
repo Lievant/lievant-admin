@@ -15,5 +15,7 @@ import { RequisitionLeaderService } from './requisition-leader.service';
   imports: [NotificationsModule, VacationsModule],
   controllers: [JobRequisitionsController],
   providers: [JobRequisitionsService, JobRequisitionsReviewService, RequisitionLeaderService],
+  // El M7 (evaluación de OKRs) reutiliza la verificación de líder.
+  exports: [RequisitionLeaderService],
 })
 export class JobRequisitionsModule {}
