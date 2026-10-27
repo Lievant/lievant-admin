@@ -50,6 +50,9 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const canUpdate = usePermission('rrhh', 'matriz-puestos', 'update');
   const canDelete = usePermission('rrhh', 'matriz-puestos', 'delete');
   const canApprove = usePermission('rrhh', 'matriz-puestos', 'approve');
+  // La asignación masiva exige ambos permisos: editar la Matriz y escribir en Desarrollo Organizacional.
+  const canWriteDevelopment = usePermission('rrhh', 'desarrollo-organizacional', 'write');
+  const canAssignBulk = canUpdate && canWriteDevelopment;
 
   const [position, setPosition] = useState<PositionDetail | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading');
@@ -66,6 +69,8 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const [okrToDelete, setOkrToDelete] = useState<OkrItem | null>(null);
   const [kpiDialog, setKpiDialog] = useState<KpiItem | 'new' | null>(null);
   const [kpiToDelete, setKpiToDelete] = useState<KpiItem | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ employees: number; okrsCopied: number; okrsSkipped: number; kpisCopied: number; kpisSkipped: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -225,9 +230,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
                 <option value={2}>Semestre 2</option>
               </select>
             </div>
-            {canUpdate && (
-              <button type="button" onClick={() => setOkrDialog('new')} className="ml-auto rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nuevo OKR</button>
-            )}
+            <div className="ml-auto flex flex-wrap gap-2">
+              {canAssignBulk && (
+                <button type="button" onClick={() => { setActionError(null); setBulkResult(null); setBulkConfirm(true); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50">Asignar a Colaboradores del Puesto</button>
+              )}
+              {canUpdate && (
+                <button type="button" onClick={() => setOkrDialog('new')} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nuevo OKR</button>
+              )}
+            </div>
           </div>
 
           <div
@@ -358,6 +368,51 @@ export function PositionDetailScreen({ id }: { id: string }) {
             void load();
           }}
         />
+      )}
+
+      {bulkConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
+          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+            <h2 className="text-lg font-semibold text-navy">Asignar a Colaboradores del Puesto</h2>
+            {bulkResult ? (
+              <div className="mt-3 space-y-1 text-sm text-slate-700">
+                <p><strong>{bulkResult.employees}</strong> {bulkResult.employees === 1 ? 'colaborador alcanzado' : 'colaboradores alcanzados'}.</p>
+                <p>OKRs: {bulkResult.okrsCopied} copiados, {bulkResult.okrsSkipped} omitidos (ya asignados).</p>
+                <p>KPIs: {bulkResult.kpisCopied} copiados, {bulkResult.kpisSkipped} omitidos (ya asignados).</p>
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">
+                Se copiarán los OKRs activos de <strong>{periodLabel(period)}</strong> y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
+              </p>
+            )}
+            {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" onClick={() => setBulkConfirm(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">{bulkResult ? 'Cerrar' : 'Cancelar'}</button>
+              {!bulkResult && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    setActionError(null);
+                    try {
+                      const res = await fetch(`/api/hr/job-positions/${id}/assign-to-employees`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ period }) });
+                      if (!res.ok) throw new Error(await readError(res, 'No se pudo asignar a los colaboradores.'));
+                      setBulkResult(await res.json());
+                    } catch (err) {
+                      setActionError(err instanceof Error ? err.message : 'No se pudo asignar a los colaboradores.');
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {busy ? 'Asignando…' : 'Asignar'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {deletingPosition && (
