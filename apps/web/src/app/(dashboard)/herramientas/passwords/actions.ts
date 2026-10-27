@@ -4,11 +4,9 @@ import { revalidatePath } from 'next/cache';
 import {
   ApiError,
   createAccountPassword,
-  createPasswordApplication,
   revokeAccountPassword,
   updateAccountPassword,
   type AccountPasswordPayload,
-  type PasswordApplication,
 } from '@/lib/api';
 
 export interface PasswordActionResult<T = undefined> {
@@ -24,13 +22,18 @@ function fail(err: unknown, fallback: string): { success: false; error: string }
   return { success: false, error: fallback };
 }
 
+/** Advertencias de la contraseña guardada (reutilizada, débil). No impiden guardar. */
+export interface SavedPasswordInfo {
+  warnings: string[];
+}
+
 export async function createAccountPasswordAction(
   payload: AccountPasswordPayload,
-): Promise<PasswordActionResult> {
+): Promise<PasswordActionResult<SavedPasswordInfo>> {
   try {
-    await createAccountPassword(payload);
+    const saved = await createAccountPassword(payload);
     revalidatePath(PATH);
-    return { success: true };
+    return { success: true, data: { warnings: saved.passwordWarnings ?? [] } };
   } catch (err) {
     return fail(err, 'No se pudo registrar la cuenta.');
   }
@@ -39,11 +42,11 @@ export async function createAccountPasswordAction(
 export async function updateAccountPasswordAction(
   id: string,
   payload: Partial<AccountPasswordPayload>,
-): Promise<PasswordActionResult> {
+): Promise<PasswordActionResult<SavedPasswordInfo>> {
   try {
-    await updateAccountPassword(id, payload);
+    const saved = await updateAccountPassword(id, payload);
     revalidatePath(PATH);
-    return { success: true };
+    return { success: true, data: { warnings: saved.passwordWarnings ?? [] } };
   } catch (err) {
     return fail(err, 'No se pudo guardar la cuenta.');
   }
@@ -56,24 +59,5 @@ export async function revokeAccountPasswordAction(id: string): Promise<PasswordA
     return { success: true };
   } catch (err) {
     return fail(err, 'No se pudo revocar la cuenta.');
-  }
-}
-
-/** Alta inline desde el modal: devuelve la aplicación para seleccionarla. */
-export async function createPasswordApplicationAction(
-  name: string,
-  category?: string,
-): Promise<PasswordActionResult<PasswordApplication>> {
-  const nombre = name.trim();
-  if (nombre.length < 2) return { success: false, error: 'Escribe el nombre de la aplicación.' };
-  try {
-    const app = await createPasswordApplication({
-      name: nombre,
-      ...(category?.trim() ? { category: category.trim() } : {}),
-    });
-    revalidatePath(PATH);
-    return { success: true, data: app };
-  } catch (err) {
-    return fail(err, 'No se pudo crear la aplicación.');
   }
 }

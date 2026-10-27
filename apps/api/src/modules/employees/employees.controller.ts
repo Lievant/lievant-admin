@@ -43,6 +43,20 @@ import { GetHeadcountDto } from './dto/get-headcount.dto';
 import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
 import { HeadcountService } from './headcount.service';
+import { OrgChartService } from './org-chart.service';
+import { MyProfileService } from './my-profile.service';
+import { EmployeeUserLinkService } from './employee-user-link.service';
+import { LinkUserDto } from './dto/link-user.dto';
+import { TrainingsService } from './trainings.service';
+import { TrainingsReportService } from './trainings-report.service';
+import { TrainingReportQueryDto } from './dto/trainings-report.dto';
+import {
+  CertificateUploadDto,
+  CreateTrainingDto,
+  TrainingQueryDto,
+  UpdateTrainingDto,
+} from './dto/training.dto';
+import { OrgChartQueryDto } from './dto/org-chart-query.dto';
 import { DocumentsService, DocumentType } from './documents.service';
 
 const VALID_DOCUMENT_TYPES: DocumentType[] = [
@@ -62,6 +76,11 @@ export class EmployeesController {
     private readonly documentsService: DocumentsService,
     private readonly photosService: EmployeePhotosService,
     private readonly headcountService: HeadcountService,
+    private readonly orgChartService: OrgChartService,
+    private readonly myProfileService: MyProfileService,
+    private readonly userLinkService: EmployeeUserLinkService,
+    private readonly trainingsService: TrainingsService,
+    private readonly trainingsReportService: TrainingsReportService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -80,6 +99,53 @@ export class EmployeesController {
   @RequirePermission('rrhh', 'empleados', 'write')
   create(@Body() dto: CreateEmployeeDto) {
     return this.employeesService.create(dto);
+  }
+
+  // Organigrama (RRHH 2.0, clasificación C2): cualquier usuario autenticado. Va antes de
+  // `:id` para que no se confunda con un id. La respuesta es una lista blanca de campos.
+  @Get('org-chart')
+  @SetMetadata(PERMISSION_KEY, null)
+  getOrgChart(@Query() query: OrgChartQueryDto) {
+    return this.orgChartService.getOrgChart(query.location);
+  }
+
+  // Mi Información (RRHH 2.0, C2): cualquier usuario autenticado, SOLO su propio
+  // expediente. El empleado sale del JWT; ninguna de estas rutas recibe el id de un
+  // empleado. Van antes de `:id`. Sin remuneración, notas internas ni datos de baja.
+  @Get('my-profile')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyProfile(@CurrentUser() user: User) {
+    return this.myProfileService.getProfile(user.id);
+  }
+
+  @Get('my-profile/documents')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyDocuments(@CurrentUser() user: User) {
+    return this.myProfileService.listDocuments(user.id);
+  }
+
+  @Get('my-profile/documents/:docId/download-url')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyDocumentUrl(@Param('docId', ParseUUIDPipe) docId: string, @CurrentUser() user: User) {
+    return this.myProfileService.getDocumentUrl(user.id, docId);
+  }
+
+  @Get('my-profile/equipment')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyEquipment(@CurrentUser() user: User) {
+    return this.myProfileService.getEquipment(user.id);
+  }
+
+  @Get('my-profile/trainings')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyTrainings(@CurrentUser() user: User, @Query() query: TrainingQueryDto) {
+    return this.myProfileService.getTrainings(user.id, query);
+  }
+
+  @Get('my-profile/trainings/:trainingId/certificate-url')
+  @SetMetadata(PERMISSION_KEY, null)
+  getMyTrainingCertificateUrl(@Param('trainingId', ParseUUIDPipe) trainingId: string, @CurrentUser() user: User) {
+    return this.myProfileService.getTrainingCertificateUrl(user.id, trainingId);
   }
 
   // Público (cualquier usuario autenticado) — usado por el calendario del home.
@@ -128,9 +194,106 @@ export class EmployeesController {
     return undefined;
   }
 
+  // Reporte RIAC (RRHH 2.0 · M4). Solo lectura; reutiliza rrhh.capacitaciones.read.
+  // Va antes de `:id`.
+  @Get('trainings/report/options')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingReportOptions() {
+    return this.trainingsReportService.getOptions();
+  }
+
+  @Get('trainings/report/export')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  async exportTrainingReport(
+    @Query() dto: TrainingReportQueryDto,
+    @CurrentUser() user: User,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { buffer, fileName } = await this.trainingsReportService.exportExcel(dto, {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+    return undefined;
+  }
+
+  @Get('trainings/report')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingReport(@Query() dto: TrainingReportQueryDto) {
+    return this.trainingsReportService.getReport(dto);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.employeesService.findOne(id);
+  }
+
+  /** Usuarios vinculables al expediente: mismo correo corporativo, activos y sin otro expediente. */
+  @Get(':id/link-user-candidates')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  getLinkUserCandidates(@Param('id', ParseUUIDPipe) id: string) {
+    return this.userLinkService.getCandidates(id);
+  }
+
+  @Post(':id/link-user')
+  @RequirePermission('rrhh', 'empleados', 'write')
+  linkUser(@Param('id', ParseUUIDPipe) id: string, @Body() dto: LinkUserDto, @CurrentUser() user: User) {
+    return this.userLinkService.link(id, dto.authUserId, { id: user.id, email: user.email, name: user.name });
+  }
+
+  // Capacitaciones (RRHH 2.0 · M3). Permiso propio: `rrhh.capacitaciones`. Cada ruta
+  // exige que la capacitación pertenezca al empleado de la URL.
+  @Get(':id/trainings')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  listTrainings(@Param('id', ParseUUIDPipe) id: string, @Query() query: TrainingQueryDto) {
+    return this.trainingsService.list(id, query);
+  }
+
+  @Post(':id/trainings')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  createTraining(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateTrainingDto, @CurrentUser() user: User) {
+    return this.trainingsService.create(id, dto, { id: user.id, email: user.email, name: user.name });
+  }
+
+  /** Paso 1 del certificado: devuelve { uploadUrl, s3Key }; el navegador sube directo a S3. */
+  @Post(':id/trainings/certificate-upload')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  createTrainingCertificateUpload(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CertificateUploadDto) {
+    return this.trainingsService.createCertificateUpload(id, dto);
+  }
+
+  @Patch(':id/trainings/:trainingId')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  updateTraining(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+    @Body() dto: UpdateTrainingDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.trainingsService.update(id, trainingId, dto, { id: user.id, email: user.email, name: user.name });
+  }
+
+  @Delete(':id/trainings/:trainingId')
+  @RequirePermission('rrhh', 'capacitaciones', 'write')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  removeTraining(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+    @CurrentUser() user: User,
+  ) {
+    return this.trainingsService.remove(id, trainingId, { id: user.id, email: user.email, name: user.name });
+  }
+
+  @Get(':id/trainings/:trainingId/certificate-url')
+  @RequirePermission('rrhh', 'capacitaciones', 'read')
+  getTrainingCertificateUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('trainingId', ParseUUIDPipe) trainingId: string,
+  ) {
+    return this.trainingsService.getCertificateUrl(id, trainingId);
   }
 
   @Patch(':id')

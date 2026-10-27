@@ -3,6 +3,7 @@ import { ForbiddenException } from '@nestjs/common';
 import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
 import { PasswordsController } from './passwords.controller';
 import { PasswordsService } from './passwords.service';
+import { evaluatePasswordStrength, reusedPasswordWarning, WEAK_PASSWORD_WARNING } from './password-strength';
 import { ArgumentMetadata, ValidationPipe } from '@nestjs/common';
 // Lógica pura del formulario "Nueva cuenta" (frontend): se prueba aquí con el API real.
 import {
@@ -61,7 +62,12 @@ function fakeQueryBuilder(managerId: string) {
 }
 
 function build(
-  opts: { accountRows?: Record<string, unknown>[]; revealRow?: Record<string, unknown>; revealCount?: number } = {},
+  opts: {
+    accountRows?: Record<string, unknown>[];
+    revealRow?: Record<string, unknown>;
+    revealCount?: number;
+    reusedIn?: string[];
+  } = {},
 ) {
   const dbCalls: { sql: string; params: unknown[] }[] = [];
   const db = {
@@ -73,6 +79,7 @@ function build(
       if (sql.includes('e.direct_report_to_id AS employee_manager_id')) return opts.revealRow ? [opts.revealRow] : [];
       if (sql.includes('INSERT INTO passwords.account_passwords')) return [{ id: 'nueva-cuenta' }];
       if (sql.includes('FROM passwords.reveal_log')) return [{ count: opts.revealCount ?? 0 }];
+      if (sql.includes('AS reused_in')) return (opts.reusedIn ?? []).map((reused_in) => ({ reused_in }));
       if (sql.includes('pgp_sym_decrypt')) return [{ password: 'secreto-de-prueba' }];
       return [];
     }),
@@ -521,5 +528,72 @@ describe('Formulario "Nueva cuenta" → API', () => {
     const insert = dbCalls.find((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))!;
     expect(insert.params[1]).toBe(SUB1);
     expect(insert.params[2]).toBe(BOSS);
+  });
+});
+
+describe('PasswordsService: fortaleza y reutilización (solo informan)', () => {
+  const access = { id: 'a1', manager_id: BOSS, employee_id: SUB1, deleted_at: null, expiry_date: null, employee_manager_id: null };
+
+  it('una contraseña de 1 carácter se guarda y avisa que es débil', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)] });
+    const res = await service.create(userOf('u-sub1'), { ...createDto(SUB1), password: 'x' });
+    expect(dbCalls.some((c) => c.sql.includes('INSERT INTO passwords.account_passwords'))).toBe(true);
+    expect(res.passwordStrength).toBe('debil');
+    expect(res.passwordWarnings).toEqual([WEAK_PASSWORD_WARNING]);
+  });
+
+  it('avisa en qué otras aplicaciones del mismo líder se repite, sin exponer contraseñas', async () => {
+    const { service, dbCalls } = build({ accountRows: [accountRow(SUB1)], reusedIn: ['Canva', 'Figma'] });
+    const res = await service.create(userOf('u-boss'), { ...createDto(SUB1), password: 'Segura#2026-Lievant' });
+    expect(res.passwordStrength).toBe('fuerte');
+    expect(res.passwordWarnings).toEqual([reusedPasswordWarning('Canva'), reusedPasswordWarning('Figma')]);
+    const reuse = dbCalls.find((c) => c.sql.includes('AS reused_in'))!;
+    expect(reuse.params[0]).toBe(BOSS); // mismo líder
+    expect(reuse.params[2]).toBe('app'); // otra aplicación
+    expect(reuse.sql).toContain('ap.deleted_at IS NULL');
+  });
+
+  it('al editar sin cambiar la contraseña no evalúa nada', async () => {
+    const { service, dbCalls } = build({ revealRow: access, accountRows: [accountRow(SUB1)] });
+    const res = await service.update(userOf('u-sub1'), 'a1', { username: 'nuevo@x.com' } as any);
+    expect(res.passwordStrength).toBeNull();
+    expect(res.passwordWarnings).toEqual([]);
+    expect(dbCalls.some((c) => c.sql.includes('AS reused_in'))).toBe(false);
+  });
+
+  it('al editar la contraseña excluye la propia cuenta y usa el líder de la cuenta', async () => {
+    const { service, dbCalls } = build({ revealRow: access, accountRows: [accountRow(SUB1)] });
+    const res = await service.update(userOf('u-sub1'), 'a1', { password: 'Media1234' } as any);
+    expect(res.passwordStrength).toBe('media');
+    const reuse = dbCalls.find((c) => c.sql.includes('AS reused_in'))!;
+    expect(reuse.params[0]).toBe(BOSS);
+    expect(reuse.params[1]).toBe('a1');
+  });
+});
+
+describe('evaluatePasswordStrength', () => {
+  it.each([
+    ['x', 'debil'],
+    ['abcdefgh', 'debil'], // sin números ni mayúsculas
+    ['abcdefg1', 'debil'], // sin mayúsculas
+    ['Abcdefgh', 'debil'], // sin números
+    ['Abcdefg1', 'media'],
+    ['Abcdefghijk1', 'media'], // 12 pero sin símbolo
+    ['Abcdefghij1!', 'fuerte'],
+  ])('%s → %s', (pw, expected) => {
+    expect(evaluatePasswordStrength(pw)).toBe(expected);
+  });
+});
+
+describe('PasswordsService.createApplication', () => {
+  it('normaliza el nombre: recorta y capitaliza solo la primera letra', async () => {
+    const repo = {
+      createQueryBuilder: () => ({ where: () => ({ getOne: async () => null }) }),
+      create: (x: unknown) => x,
+      save: jest.fn(async (x: unknown) => ({ id: 'nueva', ...(x as object) })),
+    };
+    const service = new PasswordsService({} as any, repo as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+    const app = await service.createApplication({ name: '  draw.io ' });
+    expect(app.name).toBe('Draw.io');
   });
 });

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Like, Repository } from 'typeorm';
+import { EntityManager, In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
@@ -413,6 +413,89 @@ export class HelpdeskService {
       await this.notifyAssigned(saved, saved.assignedTo, requester);
     }
 
+    return saved;
+  }
+
+  /**
+   * Registra un trabajo ya hecho como ticket cerrado (p. ej. el mantenimiento
+   * preventivo de una auditoría de equipos). Corre en el `EntityManager` de
+   * quien llama para que el ticket y su origen se confirmen o reviertan juntos.
+   *
+   * El solicitante es el colaborador atendido (puede no tener cuenta: el ticket
+   * acepta requester nulo) y el autor del historial es quien hizo el trabajo.
+   * El agente se resuelve por correo en la mesa de servicio; si no existe, el
+   * ticket queda sin asignar. No se notifica la asignación: el ticket nace
+   * cerrado y quien lo genera avisa por su cuenta.
+   */
+  async createClosedTicket(
+    m: EntityManager,
+    input: {
+      requester: { userId: string | null; name: string; area: string | null };
+      categorySlug: string;
+      subcategory: string | null;
+      equipmentDisplayId: string | null;
+      title: string;
+      description: string;
+      assigneeEmail: string | null;
+      behalfReason: string;
+      actor: User;
+    },
+  ): Promise<Ticket> {
+    const tickets = m.getRepository(Ticket);
+    const category = await m.getRepository(HelpdeskCategory).findOne({ where: { slug: input.categorySlug } });
+    if (!category) throw new NotFoundException(`No existe la categoría de HelpDesk "${input.categorySlug}".`);
+
+    const assignee = input.assigneeEmail
+      ? await m.getRepository(TicketAssignee).findOne({ where: { email: input.assigneeEmail, isActive: true } })
+      : null;
+    if (input.assigneeEmail && !assignee) {
+      this.logger.warn(`No hay agente de HelpDesk con el correo ${input.assigneeEmail}; el ticket queda sin asignar.`);
+    }
+
+    const year = new Date().getFullYear();
+    const last = await tickets.findOne({ where: { displayId: Like(`TIC-${year}-%`) }, order: { displayId: 'DESC' } });
+    const seq = last ? parseInt(last.displayId.split('-').at(2) ?? '0', 10) + 1 : 1;
+    const now = new Date();
+
+    const saved = await tickets.save(
+      tickets.create({
+        displayId: `TIC-${year}-${String(seq).padStart(3, '0')}`,
+        requesterId: input.requester.userId,
+        requesterName: input.requester.name,
+        requesterArea: input.requester.area,
+        openedByTd: true,
+        openedOnBehalfOf: input.requester.name,
+        behalfReason: input.behalfReason,
+        category: category.slug,
+        subcategory: input.subcategory,
+        equipmentId: input.equipmentDisplayId,
+        description: `${input.title}\n\n${input.description}`,
+        impact: 'bajo',
+        priority: category.priorityBase ?? 'P3',
+        assignedTo: assignee?.id ?? null,
+        status: 'cerrado',
+        firstResponseAt: now,
+        resolvedAt: now,
+        closedAt: now,
+        resolutionHours: '0.00',
+      }),
+    );
+
+    const history = m.getRepository(TicketHistory);
+    const entry = (action: string, oldValue: string | null, newValue: string, notes: string | null) =>
+      history.create({
+        ticketId: saved.id,
+        userId: input.actor.id,
+        userName: input.actor.name,
+        action,
+        oldValue,
+        newValue,
+        notes,
+      });
+    await history.save([
+      entry('creado', null, 'abierto', `Abierto por TD en nombre de ${input.requester.name}. Motivo: ${input.behalfReason}`),
+      entry('estado_cambiado', 'abierto', 'cerrado', 'Trabajo registrado como realizado'),
+    ]);
     return saved;
   }
 

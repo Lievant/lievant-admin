@@ -98,6 +98,16 @@ export class SimCardsController {
     return this.service.forEquipmentDetail(equipmentId);
   }
 
+  /**
+   * Mis líneas telefónicas (Mi Información): solo las del empleado ligado a la
+   * sesión, sin ICCID. Sin @RequirePermission a propósito: no relaja `sim-cards.read`
+   * ni `by-employee`; lo que limita es que el empleado sale del JWT, no del cliente.
+   */
+  @Get('my-lines')
+  myLines(@CurrentUser() user: User) {
+    return this.service.myLines(user.id);
+  }
+
   @Get('by-equipment/:equipmentId')
   @RequirePermission('transformacion', 'sim-cards', 'read')
   byEquipment(@Param('equipmentId', ParseUUIDPipe) equipmentId: string, @CurrentUser() user: User) {

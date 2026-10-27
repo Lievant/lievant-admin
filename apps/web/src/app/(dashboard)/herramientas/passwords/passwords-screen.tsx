@@ -6,7 +6,7 @@ import type {
   PasswordApplication,
   PasswordVisiblePerson,
 } from '@/lib/api';
-import { CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
+import { AlertIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
 import { StatCard } from '@/components/stat-card';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
@@ -89,6 +89,8 @@ export function PasswordsScreen({
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
   const [revoking, setRevoking] = useState<AccountPasswordItem | null>(null);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  // Sugerencias sobre la última contraseña guardada: se quedan hasta "Entendido".
+  const [passwordWarnings, setPasswordWarnings] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   /** Recarga las cuentas de una persona; el servidor valida de nuevo que pueda verlas. */
@@ -220,6 +222,28 @@ export function PasswordsScreen({
           }`}
         >
           {notice.text}
+        </div>
+      )}
+
+      {passwordWarnings.length > 0 && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <ul className="space-y-1">
+            {passwordWarnings.map((w) => (
+              <li key={w} className="flex gap-2">
+                <AlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{w}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPasswordWarnings([])}
+              className="rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              Entendido
+            </button>
+          </div>
         </div>
       )}
 
@@ -392,9 +416,10 @@ export function PasswordsScreen({
           defaultEmployeeId={selectedPerson?.id ?? ''}
           canAddApplication={canEditCatalog(user)}
           onClose={() => setEditing(null)}
-          onSaved={(text) => {
+          onSaved={(text, warnings) => {
             setEditing(null);
             setNotice({ kind: 'info', text });
+            setPasswordWarnings(warnings);
             void loadAccounts(personId);
           }}
         />

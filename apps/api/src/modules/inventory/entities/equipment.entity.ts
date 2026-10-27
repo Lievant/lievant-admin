@@ -42,6 +42,10 @@ export class Equipment {
   @Column({ type: 'text', nullable: true })
   specifications!: string | null;
 
+  /** XX:XX:XX:XX:XX:XX. La registra la Auditoría de Equipos (TIC-RE-18) al completarse. */
+  @Column({ name: 'mac_address', type: 'varchar', length: 17, nullable: true })
+  macAddress!: string | null;
+
   @Column({ name: 'assigned_to_employee_id', type: 'uuid', nullable: true })
   assignedToEmployeeId!: string | null;
 
