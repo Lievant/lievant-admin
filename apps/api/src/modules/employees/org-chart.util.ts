@@ -44,7 +44,6 @@ export interface OrgNode {
   corporateEmail: string | null;
   phone?: string | null;
   /** Verdadero si el nodo solo está por ser jefe (directo o no) de alguien que coincide con los filtros. */
-  inContext: boolean;
   children: OrgNode[];
 }
 
@@ -78,7 +77,7 @@ export function photoUrlFor(email: string | null): string | null {
   return email ? `/api/users/${encodeURIComponent(email)}/photo` : null;
 }
 
-function toNode(row: OrgRow, showPhone: boolean, contextIds: ReadonlySet<string>): OrgNode {
+function toNode(row: OrgRow, showPhone: boolean): OrgNode {
   const node: OrgNode = {
     id: row.id,
     displayId: row.displayId,
@@ -90,7 +89,6 @@ function toNode(row: OrgRow, showPhone: boolean, contextIds: ReadonlySet<string>
     division: row.division,
     photoUrl: photoUrlFor(row.corporateEmail),
     corporateEmail: row.corporateEmail,
-    inContext: contextIds.has(row.id),
     children: [],
   };
   if (showPhone) node.phone = row.phone;
@@ -111,10 +109,9 @@ const collator = new Intl.Collator('es', { sensitivity: 'base', numeric: true })
  */
 export function buildOrgTree(
   rows: OrgRow[],
-  options: { showPhone?: boolean; onCycle?: (message: string) => void; contextIds?: ReadonlySet<string> } = {},
+  options: { showPhone?: boolean; onCycle?: (message: string) => void } = {},
 ): OrgTreeResult {
   const showPhone = options.showPhone ?? ORG_CHART_SHOW_PHONE;
-  const contextIds = options.contextIds ?? new Set<string>();
   const byId = new Map(rows.map((r) => [r.id, r]));
   const sorted = [...rows].sort((a, b) => collator.compare(a.fullName, b.fullName) || a.id.localeCompare(b.id));
 
@@ -194,12 +191,12 @@ export function buildOrgTree(
 
   const build = (row: OrgRow): OrgNode => {
     // Iterativo para no depender de la profundidad de la pila.
-    const rootNode = toNode(row, showPhone, contextIds);
+    const rootNode = toNode(row, showPhone);
     const stack: { row: OrgRow; node: OrgNode }[] = [{ row, node: rootNode }];
     while (stack.length > 0) {
       const { row: r, node } = stack.pop()!;
       for (const child of childrenOf.get(r.id) ?? []) {
-        const childNode = toNode(child, showPhone, contextIds);
+        const childNode = toNode(child, showPhone);
         node.children.push(childNode);
         stack.push({ row: child, node: childNode });
       }
@@ -301,38 +298,60 @@ export function rowMatches(row: OrgRow, f: OrgFilters): boolean {
 }
 
 export interface FilteredRows {
+  /** Solo los que coinciden, con el jefe reasignado al ancestro más cercano que también coincide. */
   rows: OrgRow[];
-  /** Los que solo están por ser jefes de una coincidencia. */
-  contextIds: Set<string>;
   matched: number;
 }
 
 /**
- * Un filtro NO corta el árbol: se conservan los que coinciden (todos los filtros
- * a la vez, AND) y, para que la jerarquía siga conectada, la cadena de jefes
- * hacia arriba de cada uno aunque no coincida (esos quedan como "contexto").
- * Los subárboles sin ninguna coincidencia desaparecen.
+ * Un filtro CORTA el árbol: solo quedan los que coinciden (todos los filtros a la
+ * vez, AND). El jefe de cada uno pasa a ser su ancestro más cercano (siguiendo
+ * `direct_report_to_id`) que también coincide; si ninguno coincide, queda como raíz.
+ * Un jefe ausente (inactivo, dado de baja, inexistente) se conserva tal cual para
+ * que se siga contando como huérfano.
  *
- * La subida usa un conjunto de visitados: un ciclo en «Reporta a» no puede
- * provocar recursión ni un bucle infinito, y un jefe ausente (inactivo, dado de
- * baja) corta la cadena sin perder al subordinado, que se resolverá como huérfano.
+ * La subida es iterativa, con conjunto de visitados (un ciclo no provoca recursión
+ * ni bucle infinito) y memoizada: cada fila se resuelve una sola vez aunque la
+ * cadena tenga miles de eslabones.
  */
 export function filterOrgRows(rows: OrgRow[], filters: OrgFilters): FilteredRows {
-  if (!hasFilters(filters)) return { rows, contextIds: new Set(), matched: rows.length };
+  if (!hasFilters(filters)) return { rows, matched: rows.length };
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const matchedIds = new Set(rows.filter((r) => rowMatches(r, filters)).map((r) => r.id));
-  const included = new Set<string>(matchedIds);
-  for (const id of matchedIds) {
+  const matches = new Set(rows.filter((r) => rowMatches(r, filters)).map((r) => r.id));
+  // Ancestro coincidente más cercano por encima de cada fila ya recorrida.
+  const memo = new Map<string, string | null>();
+
+  const nearestAbove = (id: string): string | null => {
+    if (memo.has(id)) return memo.get(id)!;
+    const visited = new Set<string>([id]);
+    const path: string[] = [id];
     let cursor = byId.get(id)?.directReportToId ?? null;
-    const climbed = new Set<string>([id]);
-    while (cursor && byId.has(cursor) && !climbed.has(cursor)) {
-      climbed.add(cursor);
-      included.add(cursor);
-      cursor = byId.get(cursor)?.directReportToId ?? null;
+    let result: string | null = null;
+    while (true) {
+      if (!cursor) break;
+      if (matches.has(cursor) && !visited.has(cursor)) {
+        result = cursor;
+        break;
+      }
+      if (!byId.has(cursor)) {
+        result = cursor;
+        break;
+      }
+      if (visited.has(cursor)) break;
+      if (memo.has(cursor)) {
+        result = memo.get(cursor)!;
+        break;
+      }
+      visited.add(cursor);
+      path.push(cursor);
+      cursor = byId.get(cursor)!.directReportToId;
     }
-  }
-  const contextIds = new Set([...included].filter((id) => !matchedIds.has(id)));
-  return { rows: rows.filter((r) => included.has(r.id)), contextIds, matched: matchedIds.size };
+    for (const p of path) if (!matches.has(p) || p === id) memo.set(p, result);
+    return result;
+  };
+
+  const kept = rows.filter((r) => matches.has(r.id)).map((r) => ({ ...r, directReportToId: nearestAbove(r.id) }));
+  return { rows: kept, matched: kept.length };
 }
 
 // ── Opciones de los filtros (cascada con combinaciones reales) ───────────────

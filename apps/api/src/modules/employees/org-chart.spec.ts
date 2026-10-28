@@ -123,8 +123,8 @@ describe('buildOrgTree', () => {
   it('la respuesta contiene solo los campos de la lista blanca', () => {
     const dirty = { ...row('a', 'Ana'), salary: 99999, curp: 'XXXX', rfc: 'YYYY', notes: 'interno', birthDate: '1990-01-01', address: 'Calle 1' } as OrgRow;
     const { root } = buildOrgTree([dirty, row('b', 'Beto', 'a')]);
-    // Lista blanca exacta: se amplió SOLO con level, companyName y division (más inContext, el indicador de contexto).
-    const allowed = ['children', 'area', 'companyName', 'corporateEmail', 'displayId', 'division', 'fullName', 'id', 'inContext', 'level', 'phone', 'photoUrl', 'position'].sort();
+    // Lista blanca exacta: se amplió SOLO con level, companyName y division.
+    const allowed = ['children', 'area', 'companyName', 'corporateEmail', 'displayId', 'division', 'fullName', 'id', 'level', 'phone', 'photoUrl', 'position'].sort();
     const check = (n: OrgNode) => {
       expect(Object.keys(n).sort()).toEqual(allowed);
       n.children.forEach(check);
@@ -184,18 +184,17 @@ describe('OrgChartService', () => {
     expect(res.locations).toEqual(['León']);
   });
 
-  it('el filtro de país (ubicación) ya no va en SQL: sigue siendo UNA consulta y se resuelve con el mismo mecanismo que los demás (coincidencias + cadena de jefes)', async () => {
+  it('el filtro de país (ubicación) ya no va en SQL: sigue siendo UNA consulta y se resuelve con el mismo mecanismo que los demás (solo las coincidencias)', async () => {
     const { service, query } = setup([raw('a', 'Ana', null, 'León'), raw('m', 'Mario', 'a', 'Medellín')]);
     const res = await service.getOrgChart({ location: 'Medellín' });
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0]![0]).not.toContain('location = $');
     // las opciones del filtro siguen saliendo de todos los activos
     expect(res.locations).toEqual(['León', 'Medellín']);
-    // Ana (León) se muestra como contexto por ser jefa de Mario (Medellín), que es el que coincide
+    // Ana (León) no coincide: desaparece y Mario queda como raíz
     const root = res.root as OrgNode;
-    expect(root.fullName).toBe('Ana');
-    expect(root.inContext).toBe(true);
-    expect(root.children[0]).toMatchObject({ fullName: 'Mario', inContext: false });
+    expect(root.fullName).toBe('Mario');
+    expect(root.children).toEqual([]);
     expect(res.counts).toEqual({ matched: 1, total: 2 });
   });
 

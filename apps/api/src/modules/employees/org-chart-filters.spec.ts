@@ -58,11 +58,11 @@ describe('Organigrama · normalización y coincidencia', () => {
 });
 
 describe('Organigrama · filtros', () => {
-  it('sin filtros: todos, sin contexto', () => {
+  it('sin filtros: todos, sin cambios', () => {
     const r = filterOrgRows(base(), {});
     expect(r.rows).toHaveLength(6);
-    expect(r.contextIds.size).toBe(0);
     expect(r.matched).toBe(6);
+    expect(r.rows.map((x) => x.directReportToId)).toEqual(base().map((x) => x.directReportToId));
   });
 
   it('cada filtro por separado', () => {
@@ -81,79 +81,138 @@ describe('Organigrama · filtros', () => {
     expect(filterOrgRows(base(), { area: 'TI', location: 'Medellín', level: 'I' }).matched).toBe(1);
   });
 
-  it('coincidencias más cadena de jefes hacia arriba, marcada como contexto', () => {
-    const r = filterOrgRows(base(), { level: 'I' }); // solo Beto
-    expect(ids(r.rows)).toEqual(['beto', 'dir', 'ger']);
-    expect([...r.contextIds].sort()).toEqual(['dir', 'ger']);
-    expect(r.matched).toBe(1);
-    const { root } = buildOrgTree(r.rows, { contextIds: r.contextIds });
-    const nodes = flat(root as OrgNode);
-    expect(nodes.find((n) => n.id === 'dir')!.inContext).toBe(true);
-    expect(nodes.find((n) => n.id === 'ger')!.inContext).toBe(true);
-    expect(nodes.find((n) => n.id === 'beto')!.inContext).toBe(false);
+  const parents = (r: OrgRow[]) => Object.fromEntries(r.map((x) => [x.id, x.directReportToId]));
+
+  it('un jefe que no coincide desaparece y sus subordinados suben al siguiente jefe que sí coincide', () => {
+    const r = filterOrgRows(base(), { level: 'I' }); // solo Beto: ni Gerente ni Dirección coinciden
+    expect(ids(r.rows)).toEqual(['beto']);
+    const rows = [...base(), row('x', 'Equipo', 'ger', { level: 'I' })];
+    expect(parents(filterOrgRows(rows, { level: 'I' }).rows)).toEqual({ beto: null, x: null });
+    // Dirección, Ana y Carla coinciden por nivel; el Gerente (III) y la jefa de Ventas (III) no: suben a Dirección
+    const f = filterOrgRows(
+      base().map((x) => (x.id === 'dir' ? { ...x, level: 'II' } : x)),
+      { level: 'II' },
+    );
+    expect(parents(f.rows)).toEqual({ dir: null, ana: 'dir', carla: 'dir' });
   });
 
-  it('un jefe que además coincide NO queda como contexto', () => {
-    const r = filterOrgRows(base(), { level: 'III' }); // ger y vta coinciden; dir es contexto
-    expect([...r.contextIds]).toEqual(['dir']);
+  it('sin ningún jefe que coincida el empleado queda como raíz', () => {
+    const r = filterOrgRows(base(), { location: 'Medellín' });
+    expect(parents(r.rows)).toEqual({ beto: null });
+    expect(buildOrgTree(r.rows).root).toMatchObject({ id: 'beto', children: [] });
+  });
+
+  it('un subordinado que no coincide desaparece aunque su jefe sí coincida', () => {
+    const r = filterOrgRows(base(), { area: 'TI', level: 'III' }); // solo el Gerente TI
+    expect(ids(r.rows)).toEqual(['ger']);
+    expect(parents(r.rows)).toEqual({ ger: null });
   });
 
   it('el subárbol sin ninguna coincidencia desaparece', () => {
     const r = filterOrgRows(base(), { area: 'TI' });
-    expect(ids(r.rows)).toEqual(['ana', 'beto', 'dir', 'ger']);
-    expect(ids(r.rows)).not.toContain('vta');
-    expect(ids(r.rows)).not.toContain('carla');
+    expect(ids(r.rows)).toEqual(['ana', 'beto', 'ger']);
+    expect(parents(r.rows)).toEqual({ ger: null, ana: 'ger', beto: 'ger' });
+  });
+
+  it('varias raíces: cuelgan del nodo "Organización"', () => {
+    const r = filterOrgRows(base(), { level: 'II' }); // Ana y Carla, sin jefes coincidentes
+    const { root, stats } = buildOrgTree(r.rows);
+    expect(root).toMatchObject({ synthetic: true, id: 'organization' });
+    expect(stats.roots).toBe(2);
+    expect(((root as unknown as { children: OrgNode[] }).children).map((c) => c.id).sort()).toEqual(['ana', 'carla']);
+  });
+
+  it('un solo resultado: el árbol parte directamente de él', () => {
+    const { root } = buildOrgTree(filterOrgRows(base(), { area: 'TI', level: 'II' }).rows);
+    expect(root).toMatchObject({ id: 'ana' });
+    expect((root as OrgNode).children).toEqual([]);
+  });
+
+  it('un jefe de otra empresa se omite y el subordinado de la empresa filtrada sube', () => {
+    const rows = [row('ext', 'Jefe Externo', null, { companyName: 'Filial' }), row('a', 'Sub A', 'ext'), row('b', 'Sub B', 'a')];
+    expect(parents(filterOrgRows(rows, { company: 'Lievant' }).rows)).toEqual({ a: null, b: 'a' });
+  });
+
+  it('un subordinado con nivel mayor que el jefe sigue colgando del jefe si ambos coinciden', () => {
+    const rows = [row('j', 'Jefe', null, { level: 'I' }), row('s', 'Sub', 'j', { level: 'IV' })];
+    expect(parents(filterOrgRows(rows, { area: 'TI' }).rows)).toEqual({ j: null, s: 'j' });
+    expect(parents(filterOrgRows(rows, { level: 'IV' }).rows)).toEqual({ s: null });
   });
 
   it('un filtro sin resultados: sin filas, sin árbol', () => {
     const r = filterOrgRows(base(), { area: 'Inexistente' });
     expect(r.rows).toEqual([]);
     expect(r.matched).toBe(0);
-    expect(buildOrgTree(r.rows, { contextIds: r.contextIds }).root).toBeNull();
+    expect(buildOrgTree(r.rows).root).toBeNull();
   });
 
-  it('el filtro de país (ubicación) usa el mismo mecanismo: coincidencias más cadena de jefes', () => {
-    const r = filterOrgRows(base(), { location: 'Medellín' });
-    expect(ids(r.rows)).toEqual(['beto', 'dir', 'ger']);
-    expect(r.contextIds.size).toBe(2);
+  it('todos los filtros combinados', () => {
+    const r = filterOrgRows(base(), { company: 'Lievant', division: 'Tecnología', area: 'TI', level: 'I', location: 'Medellín' });
+    expect(ids(r.rows)).toEqual(['beto']);
+    expect(filterOrgRows(base(), { company: 'Lievant', division: 'Tecnología', area: 'TI', level: 'I', location: 'León' }).rows).toEqual([]);
+  });
+
+  it('el filtro de país (ubicación) usa el mismo mecanismo: solo coincidencias', () => {
+    expect(ids(filterOrgRows(base(), { location: 'Medellín' }).rows)).toEqual(['beto']);
   });
 
   it('un jefe ausente (inactivo): el empleado que coincide no se pierde y queda como huérfano', () => {
     const rows = [row('h', 'Huérfano', 'jefe-inactivo', { area: 'Rara' }), ...base()];
     const r = filterOrgRows(rows, { area: 'Rara' });
     expect(ids(r.rows)).toEqual(['h']);
-    expect(r.contextIds.size).toBe(0);
-    const { stats } = buildOrgTree(r.rows, { contextIds: r.contextIds });
-    expect(stats.orphans).toBe(1);
+    expect(buildOrgTree(r.rows).stats.orphans).toBe(1);
+  });
+
+  it('un huérfano cuyo jefe ausente queda más arriba sigue contando como huérfano', () => {
+    const rows = [row('m', 'Medio', 'jefe-inactivo', { area: 'Otra' }), row('h', 'Hoja', 'm', { area: 'Rara' })];
+    expect(buildOrgTree(filterOrgRows(rows, { area: 'Rara' }).rows).stats.orphans).toBe(1);
   });
 
   it('un ciclo en «Reporta a» no provoca recursión infinita ni al filtrar ni al armar el árbol', () => {
     const cyc = [row('a', 'A', 'b', { area: 'Ciclo' }), row('b', 'B', 'c', { area: 'Otra' }), row('c', 'C', 'a', { area: 'Otra' }), row('z', 'Z', null)];
     const r = filterOrgRows(cyc, { area: 'Ciclo' });
-    expect(ids(r.rows)).toEqual(['a', 'b', 'c']); // la cadena sube hasta cerrar el ciclo y se detiene
+    expect(parents(r.rows)).toEqual({ a: null });
     const logs: string[] = [];
-    const { stats, root } = buildOrgTree(r.rows, { contextIds: r.contextIds, onCycle: (m) => logs.push(m) });
+    const { stats } = buildOrgTree(filterOrgRows(cyc, { company: 'Lievant' }).rows, { onCycle: (m) => logs.push(m) });
     expect(stats.cycles).toBe(1);
     expect(logs).toHaveLength(1);
-    expect(flat(root as OrgNode)).toHaveLength(3);
+  });
+
+  it('un ciclo con dos coincidencias se corta sin bucle y no pierde a nadie', () => {
+    const cyc = [row('a', 'A', 'b', { area: 'Ciclo' }), row('b', 'B', 'c', { area: 'Ciclo' }), row('c', 'C', 'a', { area: 'Otra' })];
+    const r = filterOrgRows(cyc, { area: 'Ciclo' });
+    expect(ids(r.rows)).toEqual(['a', 'b']);
+    const { root, stats } = buildOrgTree(r.rows);
+    expect(stats.employees).toBe(2);
+    expect(root).not.toBeNull();
   });
 
   it('un empleado que se apunta a sí mismo como jefe tampoco cicla', () => {
     const rows = [row('s', 'Solo', 's', { area: 'X' })];
-    expect(ids(filterOrgRows(rows, { area: 'X' }).rows)).toEqual(['s']);
+    expect(parents(filterOrgRows(rows, { area: 'X' }).rows)).toEqual({ s: null });
   });
 
   it('una cadena muy profunda no desborda la pila al filtrar', () => {
     const rows: OrgRow[] = [row('n0', 'N0', null, { area: 'A' })];
     for (let i = 1; i < 5000; i++) rows.push(row(`n${i}`, `N${i}`, `n${i - 1}`, { area: i === 4999 ? 'Hoja' : 'A' }));
     const r = filterOrgRows(rows, { area: 'Hoja' });
-    expect(r.rows).toHaveLength(5000);
+    expect(r.rows).toHaveLength(1);
     expect(r.matched).toBe(1);
+    expect(r.rows[0]!.directReportToId).toBeNull();
+    const all = filterOrgRows(rows, { area: 'A' });
+    expect(all.rows).toHaveLength(4999);
+    expect(all.rows.find((x) => x.id === 'n4998')!.directReportToId).toBe('n4997');
   });
 
-  it('los nodos de la respuesta marcan inContext=false cuando no hay filtros', () => {
+  it('una cadena larga de no coincidentes se resuelve hasta el primer jefe que coincide', () => {
+    const rows: OrgRow[] = [row('n0', 'N0', null, { area: 'Jefe' })];
+    for (let i = 1; i < 5000; i++) rows.push(row(`n${i}`, `N${i}`, `n${i - 1}`, { area: i === 4999 ? 'Jefe' : 'Medio' }));
+    expect(parents(filterOrgRows(rows, { area: 'Jefe' }).rows)).toEqual({ n0: null, n4999: 'n0' });
+  });
+
+  it('el nodo de la respuesta ya no trae inContext', () => {
     const { root } = buildOrgTree(base());
-    expect(flat(root as OrgNode).every((n) => n.inContext === false)).toBe(true);
+    expect(flat(root as OrgNode).every((n) => !('inContext' in n))).toBe(true);
   });
 });
 

@@ -48,8 +48,8 @@ export class OrgChartService {
   /**
    * Árbol de empleados activos. Una sola consulta (con el celular unido de
    * `personal_data`, solo esa columna); los filtros (empresa, división, área, nivel
-   * y ubicación) y el árbol se resuelven en memoria: los que coinciden más la
-   * cadena de jefes hacia arriba, marcada como `inContext`. Los campos de la
+   * y ubicación) y el árbol se resuelven en memoria: el filtro corta el árbol (solo
+   * los que coinciden; el jefe pasa a ser el ancestro más cercano que coincide). Los campos de la
    * respuesta salen de una lista blanca: ver `OrgNode`.
    */
   async getOrgChart(filters: OrgFilters = {}): Promise<OrgChartResponse> {
@@ -79,10 +79,7 @@ export class OrgChartService {
     }));
 
     const filtered = filterOrgRows(orgRows, filters);
-    const result = buildOrgTree(filtered.rows, {
-      onCycle: (message) => this.logger.warn(message),
-      contextIds: filtered.contextIds,
-    });
+    const result = buildOrgTree(filtered.rows, { onCycle: (message) => this.logger.warn(message) });
     return {
       ...result,
       // Las ubicaciones del filtro salen de todos los activos, no solo de los filtrados.
