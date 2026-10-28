@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { PositionFormDialog } from './position-form-dialog';
 import {
   EMPTY_OPTIONS,
+  levelOptionLabel,
   STATUS_BADGE,
   STATUS_LABELS,
   VALIDATION_BADGE,
@@ -147,7 +148,7 @@ export function PositionsScreen() {
           <label htmlFor="mp-level" className={LABEL}>Nivel</label>
           <select id="mp-level" value={level} onChange={onFilter(setLevel)} className={SELECT}>
             <option value="">Todos</option>
-            {options.levels.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+            {options.levels.map((l) => <option key={l.code} value={l.code}>{levelOptionLabel(l)}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">

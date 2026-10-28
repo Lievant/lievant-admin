@@ -232,7 +232,7 @@ export class JobPositionsImportService {
   }
 
   private async levelCodes(m: Q): Promise<string[]> {
-    const rows = (await m.query(`SELECT code FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[];
+    const rows = (await m.query(`SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[];
     return rows.map((r) => r.code);
   }
 

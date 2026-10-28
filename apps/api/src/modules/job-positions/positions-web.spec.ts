@@ -5,6 +5,7 @@ import {
   formatDateTimeMx,
   formatPct,
   EMPTY_OPTIONS,
+  levelOptionLabel,
   areasForDivision,
   frequencyLabel,
   groupActivities,
@@ -156,11 +157,14 @@ describe('Matriz de Puestos (web) · listas cerradas', () => {
   });
 });
 
-describe('Matriz de Puestos (web) · niveles I a XV', () => {
-  it('el desplegable muestra los niveles del catálogo en su orden (sin lista fija)', () => {
-    const codes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
-    const options = { ...EMPTY_OPTIONS, levels: codes.map((code) => ({ code, name: `Nivel ${code}` })) };
+describe('Matriz de Puestos (web) · niveles de org_levels', () => {
+  it('el desplegable muestra los 9 niveles del catálogo en su orden, como «I - Dirección General»', () => {
+    const names = ['Dirección General', 'Dirección', 'Head / Gerencia', 'Líder / Coordinación', 'Especialista Senior / Key Account', 'Senior', 'Semi Senior', 'Junior / Auxiliar', 'Practicante / Trainee'];
+    const codes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+    const options = { ...EMPTY_OPTIONS, levels: codes.map((code, i) => ({ code, name: names[i]! })) };
     expect(options.levels.map((l) => l.code)).toEqual(codes);
-    expect(options.levels).toHaveLength(15);
+    expect(options.levels).toHaveLength(9);
+    expect(options.levels.map(levelOptionLabel)[0]).toBe('I - Dirección General');
+    expect(options.levels.map(levelOptionLabel)[8]).toBe('IX - Practicante / Trainee');
   });
 });

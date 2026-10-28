@@ -18,7 +18,7 @@ import {
   seniorityFromText,
 } from './job-positions-catalog.util';
 
-const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
+const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 const ACTOR = { id: 'user-1', email: 'rrhh@lievant.com', name: 'RRHH' };
 
 describe('Listas cerradas · nivel', () => {
@@ -41,17 +41,26 @@ describe('Listas cerradas · nivel', () => {
   });
 });
 
-describe('Listas cerradas · niveles I a XV', () => {
-  it('XV es válido; «xv», « XV » y «15» se leen como XV; XVI no', () => {
-    for (const v of ['XV', 'xv', ' XV ', '15']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'ok', code: 'XV' });
-    expect(resolveLevel('IX', LEVELS)).toEqual({ kind: 'ok', code: 'IX' });
-    expect(resolveLevel('XVI', LEVELS)).toEqual({ kind: 'invalid' });
-    expect(LEVELS).toHaveLength(15);
+describe('Listas cerradas · la escala es org_levels (I a IX)', () => {
+  it('IX es válido; «ix», « IX » y «9» se leen como IX; X y XV ya no existen', () => {
+    for (const v of ['IX', 'ix', ' IX ', '9']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'ok', code: 'IX' });
+    for (const v of ['X', '10', 'XV', '15', 'XVI']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'invalid' });
+    expect(LEVELS).toHaveLength(9);
   });
-  it('el API rechaza XVI con 400 y acepta XV', async () => {
+  it('lee los niveles de catalogs.org_levels (activos, por sort_order) y no de otro catálogo', async () => {
+    const { service, calls } = build();
+    await service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'III' }), ACTOR);
+    const q = calls.find((c) => /FROM catalogs\.org_levels/.test(c.sql))!;
+    expect(q.sql).toContain('is_active IS NOT FALSE');
+    expect(q.sql).toContain('ORDER BY sort_order');
+    expect(calls.some((c) => /job_position_levels/.test(c.sql))).toBe(false);
+    const options = await service.getOptions();
+    expect(options.levels.map((l) => l.code)).toEqual(LEVELS);
+  });
+  it('el API rechaza X con 400 y acepta IX («9»)', async () => {
     const { service } = build();
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'XVI' }), ACTOR)).rejects.toThrow(/I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII, XIV, XV/);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: '15' }), ACTOR)).resolves.toBeDefined();
+    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'X' }), ACTOR)).rejects.toThrow(/I, II, III, IV, V, VI, VII, VIII, IX/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: '9' }), ACTOR)).resolves.toBeDefined();
   });
 });
 
@@ -118,7 +127,7 @@ function build(opts: { areas?: { name: string; division_name: string | null }[];
   const query = jest.fn(async (rawSql: string, params: unknown[] = []) => {
     const sql = rawSql.replace(/\s+/g, ' ').trim();
     calls.push({ sql, params });
-    if (/FROM catalogs\.job_position_levels/.test(sql)) return LEVELS.map((code) => ({ code }));
+    if (/FROM catalogs\.org_levels/.test(sql)) return LEVELS.map((code) => ({ code, name: `Nivel ${code}` }));
     if (/^SELECT name, division_name FROM catalogs\.areas/.test(sql)) return areas;
     if (/^INSERT INTO catalogs\.areas/.test(sql)) {
       areas.push({ name: params[0] as string, division_name: params[1] as string });

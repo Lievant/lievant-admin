@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CloseIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
-import { areasForDivision, inList, type PositionDetail, type PositionOptions } from './positions-constants';
+import { areasForDivision, inList, levelOptionLabel, type PositionDetail, type PositionOptions } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -214,7 +214,7 @@ export function PositionFormDialog({
               <select id="jp-level" value={level} onChange={(e) => setLevel(e.target.value)} className={INPUT}>
                 <option value="">Sin nivel</option>
                 {legacyLevel && <option value={legacyLevel}>{legacyLevel} (Fuera de Catálogo)</option>}
-                {options.levels.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+                {options.levels.map((l) => <option key={l.code} value={l.code}>{levelOptionLabel(l)}</option>)}
               </select>
               {position?.levelOriginal && (
                 <p className="text-xs text-slate-400">Nivel original (Excel): {position.levelOriginal}</p>

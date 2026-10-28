@@ -108,6 +108,9 @@ export interface PositionOptions {
 
 export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], businessUnits: [], divisions: [], levels: [], seniorities: [], validationStatuses: [] };
 
+/** Etiqueta del nivel en los desplegables: «I - Dirección General» (se guarda solo el número romano). */
+export const levelOptionLabel = (l: { code: string; name: string }): string => `${l.code} - ${l.name}`;
+
 export const SENIORITY_LABELS: Record<string, string> = { junior: 'Junior', semi_senior: 'Semi Senior', senior: 'Senior' };
 export const seniorityLabel = (s: string | null): string => (s ? (SENIORITY_LABELS[s] ?? s) : '—');
 

@@ -14,7 +14,7 @@ class FakeDb {
   okrs: Row[] = [];
   kpis: Row[] = [];
   areas: Row[] = [];
-  levelCodes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
+  levelCodes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
   calls: { sql: string; params: unknown[] }[] = [];
   failOn: RegExp | null = null;
   private seq = 0;
@@ -40,7 +40,7 @@ class FakeDb {
     if (this.failOn && this.failOn.test(sql)) throw new Error('fallo simulado');
     const live = (rows: Row[]) => rows.filter((r) => !r.deleted_at);
     if (/pg_advisory_xact_lock/.test(sql)) return [];
-    if (/FROM catalogs\.job_position_levels/.test(sql)) return this.levelCodes.map((code) => ({ code }));
+    if (/FROM catalogs\.org_levels/.test(sql)) return this.levelCodes.map((code) => ({ code }));
     if (/^SELECT name, division_name FROM catalogs\.areas/.test(sql)) return this.areas.map((a) => ({ ...a }));
     if (/^INSERT INTO catalogs\.areas/.test(sql)) {
       this.areas.push({ name: params[0], division_name: params[1] });
@@ -450,12 +450,12 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
     expect(db.positions[2]!.level_original).toBe('4');
   });
 
-  it('nivel XV es válido («xv» y «15» también) y XVI es error bloqueante', async () => {
+  it('nivel IX es válido («ix» y «9» también) y X es error bloqueante', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'xv' }), row('A1', 'P2', { 3: '15' }), row('A1', 'P3', { 3: 'XV' })]), ACTOR);
-    expect(db.positions.map((p) => p.level)).toEqual(['XV', 'XV', 'XV']);
-    const bad = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P9', { 3: 'XVI' })]), ACTOR);
-    expect(bad.errors).toEqual([{ row: 4, message: expect.stringMatching(/El nivel «XVI» no está en el catálogo de niveles/) }]);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'ix' }), row('A1', 'P2', { 3: '9' }), row('A1', 'P3', { 3: 'IX' })]), ACTOR);
+    expect(db.positions.map((p) => p.level)).toEqual(['IX', 'IX', 'IX']);
+    const bad = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P9', { 3: 'X' })]), ACTOR);
+    expect(bad.errors).toEqual([{ row: 4, message: expect.stringMatching(/El nivel «X» no está en el catálogo de niveles/) }]);
   });
 
   it('nivel fuera del catálogo: error bloqueante con su fila; no se importa nada', async () => {
