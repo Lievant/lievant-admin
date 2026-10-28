@@ -73,6 +73,9 @@ export interface PositionSummary {
 
 export interface OkrView {
   id: string;
+  /** Códigos de la Matriz (`O1`, `KR1`), si el OKR los tiene. */
+  objectiveCode: string | null;
+  krCode: string | null;
   objective: string;
   keyResult: string;
   weight: number | null;
@@ -111,8 +114,17 @@ export const toPositionSummary = (r: { id: string; code: string; title: string; 
   level: r.level,
 });
 
-export const toOkrView = (r: { id: string; objective: string; key_result: string; weight: string | number | null }): OkrView => ({
+export const toOkrView = (r: {
+  id: string;
+  objective_code?: string | null;
+  kr_code?: string | null;
+  objective: string;
+  key_result: string;
+  weight: string | number | null;
+}): OkrView => ({
   id: r.id,
+  objectiveCode: r.objective_code ?? null,
+  krCode: r.kr_code ?? null,
   objective: r.objective,
   keyResult: r.key_result,
   weight: r.weight === null ? null : Number(r.weight),

@@ -398,7 +398,7 @@ describe('Solicitud de Puesto · servicio del líder', () => {
     const { service, db } = build(row());
     await service.positionOptions(LEADER_USER);
     const q = db.calls[0]!;
-    expect(q.sql).toMatch(/SELECT id, code, title, area FROM hr\.job_positions/);
+    expect(q.sql).toMatch(/SELECT id, code, title, area, division FROM hr\.job_positions/);
     expect(q.sql).toContain("status = 'activo'");
     expect(q.sql).toContain('deleted_at IS NULL');
     expect(q.sql).not.toMatch(/description|okr|kpi/i);

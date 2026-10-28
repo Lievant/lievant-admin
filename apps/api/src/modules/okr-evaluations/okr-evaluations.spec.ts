@@ -216,7 +216,7 @@ describe('Evaluación de OKRs · visibilidad de la evaluación', () => {
     it('el propio colaborador (bandera apagada): sin score, sin estado, sin comments y ni siquiera se consulta la evaluación', async () => {
       const { service, queries } = build();
       const d = await service.getDevelopment(E1, '2026-S2', 'self');
-      expect(d.okrs[0]).toEqual({ id: OKR1, objective: 'Obj', keyResult: 'KR', weight: 50 });
+      expect(d.okrs[0]).toEqual({ id: OKR1, objectiveCode: null, krCode: null, objective: 'Obj', keyResult: 'KR', weight: 50 });
       expect(queries.some((q) => /okr_evaluations/.test(q))).toBe(false);
     });
     it('RRHH y líder: calificación, estado y comentarios, con una sola consulta para todos los OKRs', async () => {

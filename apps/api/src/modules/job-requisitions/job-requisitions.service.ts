@@ -60,12 +60,12 @@ export class JobRequisitionsService {
   ) {}
 
   /** Puestos activos de la Matriz con los datos MÍNIMOS (nunca descripción, OKRs ni KPIs). */
-  async positionOptions(userId: string): Promise<{ id: string; code: string; title: string; area: string }[]> {
+  async positionOptions(userId: string): Promise<{ id: string; code: string; title: string; area: string; division: string | null }[]> {
     await this.leaders.resolve(userId);
     return (await this.dataSource.query(
-      `SELECT id, code, title, area FROM hr.job_positions
+      `SELECT id, code, title, area, division FROM hr.job_positions
        WHERE deleted_at IS NULL AND status = 'activo' ORDER BY title ASC`,
-    )) as { id: string; code: string; title: string; area: string }[];
+    )) as { id: string; code: string; title: string; area: string; division: string | null }[];
   }
 
   async listMine(userId: string, q: MyRequisitionsQueryDto): Promise<RequisitionPage> {

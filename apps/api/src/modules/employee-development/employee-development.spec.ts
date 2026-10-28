@@ -178,7 +178,7 @@ describe('Desarrollo Organizacional · lectura', () => {
     expect(d.position).toEqual({ id: P1, code: 'JP-001', title: 'Analista de Datos', area: 'TI', level: 'Senior' });
     expect(d.description).toBe('Descripción');
     expect(d.descriptionPending).toBe(false);
-    expect(d.okrs).toEqual([{ id: 'o1', objective: 'Obj', keyResult: 'KR', weight: 60 }, { id: 'o2', objective: 'Obj2', keyResult: 'KR2', weight: 40 }]);
+    expect(d.okrs).toEqual([{ id: 'o1', objectiveCode: null, krCode: null, objective: 'Obj', keyResult: 'KR', weight: 60 }, { id: 'o2', objectiveCode: null, krCode: null, objective: 'Obj2', keyResult: 'KR2', weight: 40 }]);
     expect(d.weightSum).toBe(100);
     expect(d.kpis[0]).toEqual({ id: 'k1', name: 'KPI', description: null, targetValue: '95%', measurementFrequency: 'mensual' });
     expect(d.periodsWithData).toEqual(['2026-S2', '2026-S1']);
@@ -340,7 +340,7 @@ describe('Desarrollo Organizacional · asignar OKRs y KPIs', () => {
     expect((await third.service.assign(E1, '2026-S2', ACTOR)).summary).toEqual({ okrsCopied: 1, okrsSkipped: 3, kpisCopied: 0, kpisSkipped: 2 });
 
     const insert = first.db.calls.find((c) => /INSERT INTO hr\.employee_okrs/.test(c.sql))!;
-    expect(insert.sql).toContain('ON CONFLICT (employee_id, job_position_okr_id)');
+    expect(insert.sql).toContain('ON CONFLICT (employee_id, job_position_okr_id, period)');
     expect(insert.sql).toContain('DO NOTHING');
   });
 
@@ -399,7 +399,7 @@ describe('Desarrollo Organizacional · asignación masiva desde la Matriz', () =
   it('reutiliza la misma copia idempotente que la individual (mismo INSERT … ON CONFLICT)', async () => {
     const { db, service } = build(['e1']);
     await service.assignToPositionEmployees(userWith({ write: true }), P1, '2026-S2', ACTOR);
-    expect(db.calls.find((c) => /INSERT INTO hr\.employee_okrs/.test(c.sql))!.sql).toContain('ON CONFLICT (employee_id, job_position_okr_id)');
+    expect(db.calls.find((c) => /INSERT INTO hr\.employee_okrs/.test(c.sql))!.sql).toContain('ON CONFLICT (employee_id, job_position_okr_id, period)');
   });
 
   it('un puesto inexistente o eliminado: 404', async () => {

@@ -134,11 +134,11 @@ export class EmployeeDevelopmentService {
 
     const [okrRows, kpiRows, periodRows] = await Promise.all([
       this.dataSource.query(
-        `SELECT id, objective, key_result, weight FROM hr.employee_okrs
+        `SELECT id, objective_code, kr_code, objective, key_result, weight FROM hr.employee_okrs
          WHERE employee_id = $1 AND period = $2 AND deleted_at IS NULL AND is_active = true
          ORDER BY sort_order ASC, created_at ASC`,
         [employeeId, chosen],
-      ) as Promise<{ id: string; objective: string; key_result: string; weight: string | null }[]>,
+      ) as Promise<{ id: string; objective_code: string | null; kr_code: string | null; objective: string; key_result: string; weight: string | null }[]>,
       this.dataSource.query(
         `SELECT id, name, description, target_value, measurement_frequency FROM hr.employee_kpis
          WHERE employee_id = $1 AND deleted_at IS NULL AND is_active = true ORDER BY created_at ASC`,
@@ -232,24 +232,25 @@ export class EmployeeDevelopmentService {
   }
 
   /**
-   * Copia (snapshot) los OKRs activos del periodo y los KPIs activos del puesto
-   * vinculado. Idempotente: lo ya copiado se omite (índice único parcial por
+   * Copia (snapshot) los OKRs activos del puesto cuyo periodo sea el elegido o NULL (plantilla: vale
+   * para cualquier semestre) y los KPIs activos del puesto vinculado; la copia lleva el periodo elegido
+   * y los códigos de objetivo/KR. Idempotente: lo ya copiado se omite (índice único parcial por
    * origen). Una sola sentencia INSERT … SELECT por tipo.
    */
   private async copyForEmployee(m: Q, employeeId: string, jobPositionId: string, period: string, actorId: string | null): Promise<AssignmentSummary> {
     const okrTotal = Number(
       ((await m.query(
-        `SELECT COUNT(*) AS n FROM hr.job_position_okrs WHERE job_position_id = $1 AND period = $2 AND deleted_at IS NULL AND is_active = true`,
+        `SELECT COUNT(*) AS n FROM hr.job_position_okrs WHERE job_position_id = $1 AND (period = $2 OR period IS NULL) AND deleted_at IS NULL AND is_active = true`,
         [jobPositionId, period],
       )) as { n: string }[])[0]?.n ?? 0,
     );
     const okrCopied = (
       (await m.query(
-        `INSERT INTO hr.employee_okrs (employee_id, job_position_id, job_position_okr_id, period, objective, key_result, weight, sort_order, created_by)
-         SELECT $1, o.job_position_id, o.id, o.period, o.objective, o.key_result, o.weight, o.sort_order, $4
+        `INSERT INTO hr.employee_okrs (employee_id, job_position_id, job_position_okr_id, period, objective_code, kr_code, objective, key_result, weight, sort_order, created_by)
+         SELECT $1, o.job_position_id, o.id, $3::varchar, o.objective_code, o.kr_code, o.objective, o.key_result, o.weight, o.sort_order, $4
          FROM hr.job_position_okrs o
-         WHERE o.job_position_id = $2 AND o.period = $3 AND o.deleted_at IS NULL AND o.is_active = true
-         ON CONFLICT (employee_id, job_position_okr_id) WHERE deleted_at IS NULL AND job_position_okr_id IS NOT NULL DO NOTHING
+         WHERE o.job_position_id = $2 AND (o.period = $3 OR o.period IS NULL) AND o.deleted_at IS NULL AND o.is_active = true
+         ON CONFLICT (employee_id, job_position_okr_id, period) WHERE deleted_at IS NULL AND job_position_okr_id IS NOT NULL DO NOTHING
          RETURNING id`,
         [employeeId, jobPositionId, period, actorId],
       )) as unknown[]

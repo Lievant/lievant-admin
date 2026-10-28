@@ -35,6 +35,8 @@ export interface TeamMemberView {
 
 export interface TeamOkrView {
   employeeOkrId: string;
+  objectiveCode: string | null;
+  krCode: string | null;
   objective: string;
   keyResult: string;
   weight: number | null;
@@ -106,15 +108,17 @@ export class OkrEvaluationsService {
     const chosen = period ?? currentPeriodMx();
     assertValidPeriod(chosen);
     const rows = (await this.dataSource.query(
-      `SELECT o.id, o.objective, o.key_result, o.weight, ev.score, ev.comments, ev.status, ev.evaluated_at
+      `SELECT o.id, o.objective_code, o.kr_code, o.objective, o.key_result, o.weight, ev.score, ev.comments, ev.status, ev.evaluated_at
        FROM hr.employee_okrs o
        LEFT JOIN hr.okr_evaluations ev ON ev.employee_okr_id = o.id AND ev.deleted_at IS NULL
        WHERE o.employee_id = $1 AND o.period = $2 AND o.deleted_at IS NULL AND o.is_active = true
        ORDER BY o.sort_order ASC, o.created_at ASC`,
       [employeeId, chosen],
-    )) as { id: string; objective: string; key_result: string; weight: string | null; score: string | null; comments: string | null; status: EvaluationStatus | null; evaluated_at: Date | null }[];
+    )) as { id: string; objective_code: string | null; kr_code: string | null; objective: string; key_result: string; weight: string | null; score: string | null; comments: string | null; status: EvaluationStatus | null; evaluated_at: Date | null }[];
     const okrs: TeamOkrView[] = rows.map((r) => ({
       employeeOkrId: r.id,
+      objectiveCode: r.objective_code,
+      krCode: r.kr_code,
       objective: r.objective,
       keyResult: r.key_result,
       weight: r.weight === null ? null : Number(r.weight),
@@ -144,10 +148,10 @@ export class OkrEvaluationsService {
 
     const result = await this.dataSource.transaction(async (m) => {
       const okrs = (await m.query(
-        `SELECT id, period, objective, key_result, weight FROM hr.employee_okrs
+        `SELECT id, period, objective_code, kr_code, objective, key_result, weight FROM hr.employee_okrs
          WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL AND is_active = true FOR UPDATE`,
         [employeeOkrId, employeeId],
-      )) as { id: string; period: string; objective: string; key_result: string; weight: string | null }[];
+      )) as { id: string; period: string; objective_code: string | null; kr_code: string | null; objective: string; key_result: string; weight: string | null }[];
       const okr = okrs[0];
       if (!okr) throw new NotFoundException(OKR_NOT_FOUND);
       assertEvaluablePeriod(okr.period);
@@ -194,6 +198,8 @@ export class OkrEvaluationsService {
 
     return {
       employeeOkrId,
+      objectiveCode: result.okr.objective_code,
+      krCode: result.okr.kr_code,
       objective: result.okr.objective,
       keyResult: result.okr.key_result,
       weight: result.okr.weight === null ? null : Number(result.okr.weight),

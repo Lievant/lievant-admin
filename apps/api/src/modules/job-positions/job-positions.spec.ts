@@ -96,8 +96,8 @@ describe('Matriz de Puestos · periodo, frecuencia y pesos', () => {
     }
   });
   it('frecuencia válida o nula', () => {
-    for (const ok of ['mensual', 'trimestral', 'semestral', 'anual', null, undefined]) expect(() => assertFrequency(ok)).not.toThrow();
-    expect(() => assertFrequency('semanal')).toThrow(BadRequestException);
+    for (const ok of ['diario', 'semanal', 'quincenal', 'mensual', 'trimestral', 'semestral', 'anual', null, undefined]) expect(() => assertFrequency(ok)).not.toThrow();
+    expect(() => assertFrequency('bimestral')).toThrow(BadRequestException);
   });
   it('la suma de pesos no arrastra errores de coma flotante', () => {
     expect(sumWeights([0.1, 0.2])).toBe(0.3);
@@ -134,11 +134,17 @@ describe('Matriz de Puestos · filtros del listado', () => {
   });
 });
 
+const EXTRA = {
+  division: null, meot_hierarchy: null, reports_to_text: null, supervises_text: null, plazas: null, role_summary: null,
+  position_objective: null, validation_points: null, head_comments: null, validation_status: 'pendiente' as const,
+  validated_by: null, validator_name: null, validated_at: null,
+};
+
 describe('Matriz de Puestos · vistas', () => {
   const row = (over: Partial<PositionRow> = {}): PositionRow => ({
     id: P1, code: 'JP-001', title: 'Analista', area: 'TI', business_unit: null, level: null,
     description: null, description_approved: false, description_approved_by: null, approver_name: null,
-    description_approved_at: null, status: 'activo', created_at: new Date('2026-01-01'), updated_at: new Date('2026-01-02'), ...over,
+    description_approved_at: null, status: 'activo', ...EXTRA, created_at: new Date('2026-01-01'), updated_at: new Date('2026-01-02'), ...over,
   });
   it('lista: sin descripción se marca hasDescription=false', () => {
     expect(toListItem(row()).hasDescription).toBe(false);
@@ -206,7 +212,7 @@ function fakeDb(handler: (sql: string, params: unknown[]) => unknown) {
 const posRow = (over: Partial<PositionRow> = {}): PositionRow => ({
   id: P1, code: 'JP-004', title: 'Analista', area: 'TI', business_unit: null, level: null,
   description: null, description_approved: false, description_approved_by: null, approver_name: null,
-  description_approved_at: null, status: 'activo', created_at: new Date(), updated_at: new Date(), ...over,
+  description_approved_at: null, status: 'activo', ...EXTRA, created_at: new Date(), updated_at: new Date(), ...over,
 });
 
 describe('Matriz de Puestos · servicio de puestos', () => {
@@ -372,7 +378,7 @@ describe('Matriz de Puestos · OKRs y KPIs', () => {
     const q = db.calls.find((c) => /SELECT weight FROM hr\.job_position_okrs/.test(c.sql))!;
     expect(q.sql).toContain('deleted_at IS NULL');
     expect(q.sql).toContain('is_active = true');
-    expect(q.sql).toContain('period = $2');
+    expect(q.sql).toContain('period IS NOT DISTINCT FROM $2');
     expect(q.params).toEqual([P1, '2026-S1', null]);
   });
 

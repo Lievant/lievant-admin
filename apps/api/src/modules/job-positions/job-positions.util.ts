@@ -5,7 +5,15 @@ export const POSITION_STATUSES = ['activo', 'inactivo', 'pendiente_aprobacion'] 
 export const MANUAL_STATUSES = ['activo', 'inactivo'] as const;
 export type PositionStatus = (typeof POSITION_STATUSES)[number];
 
-export const MEASUREMENT_FREQUENCIES = ['mensual', 'trimestral', 'semestral', 'anual'] as const;
+export const MEASUREMENT_FREQUENCIES = ['diario', 'semanal', 'quincenal', 'mensual', 'trimestral', 'semestral', 'anual'] as const;
+/** Frecuencias de las actividades: las de los KPIs más "eventual". */
+export const ACTIVITY_FREQUENCIES = ['diario', 'semanal', 'quincenal', 'mensual', 'trimestral', 'semestral', 'anual', 'eventual'] as const;
+export type ActivityFrequency = (typeof ACTIVITY_FREQUENCIES)[number];
+
+export const VALIDATION_STATUSES = ['pendiente', 'validado', 'validado_con_ajustes', 'rechazado'] as const;
+export type ValidationStatus = (typeof VALIDATION_STATUSES)[number];
+/** Valor del parámetro de periodo que designa la plantilla (OKRs sin periodo). */
+export const BASE_PERIOD = 'base';
 export const PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
 
 export const MAX_TITLE = 200;
@@ -18,6 +26,7 @@ export const MAX_LIMIT = 100;
 export const POSITION_NOT_FOUND = 'Puesto no encontrado';
 export const OKR_NOT_FOUND = 'OKR no encontrado';
 export const KPI_NOT_FOUND = 'KPI no encontrado';
+export const ACTIVITY_NOT_FOUND = 'Actividad no encontrada';
 
 // ── Código consecutivo ───────────────────────────────────────────────────────
 
@@ -96,6 +105,18 @@ export function assertPeriod(period: string): void {
   }
 }
 
+/**
+ * Periodo de un OKR de la Matriz: vacío/null/'base' = plantilla (NULL en la base); en otro caso AAAA-S1/S2.
+ * `undefined` se conserva (no se pidió cambiar).
+ */
+export function normalizeOkrPeriod(period: string | null | undefined): string | null | undefined {
+  if (period === undefined) return undefined;
+  const p = (period ?? '').trim();
+  if (p === '' || p === BASE_PERIOD) return null;
+  assertPeriod(p);
+  return p;
+}
+
 export function assertFrequency(freq: string | null | undefined): void {
   if (freq === null || freq === undefined) return;
   if (!(MEASUREMENT_FREQUENCIES as readonly string[]).includes(freq)) {
@@ -128,8 +149,10 @@ export function assertWeightSum(others: (number | null)[], own: number | null, o
 export interface PositionFilters {
   area?: string | undefined;
   businessUnit?: string | undefined;
+  division?: string | undefined;
   level?: string | undefined;
   status?: PositionStatus | undefined;
+  validationStatus?: ValidationStatus | undefined;
   search?: string | undefined;
 }
 
@@ -149,9 +172,17 @@ export function buildPositionWhere(f: PositionFilters): { where: string; params:
     params.push(f.businessUnit);
     clauses.push(`p.business_unit = $${params.length}`);
   }
+  if (f.division) {
+    params.push(f.division);
+    clauses.push(`p.division = $${params.length}`);
+  }
   if (f.level) {
     params.push(f.level);
     clauses.push(`p.level = $${params.length}`);
+  }
+  if (f.validationStatus) {
+    params.push(f.validationStatus);
+    clauses.push(`p.validation_status = $${params.length}`);
   }
   if (f.status) {
     params.push(f.status);
@@ -180,6 +211,19 @@ export interface PositionRow {
   approver_name?: string | null;
   description_approved_at: Date | null;
   status: PositionStatus;
+  division: string | null;
+  meot_hierarchy: string | null;
+  reports_to_text: string | null;
+  supervises_text: string | null;
+  plazas: number | null;
+  role_summary: string | null;
+  position_objective: string | null;
+  validation_points: string | null;
+  head_comments: string | null;
+  validation_status: ValidationStatus;
+  validated_by: string | null;
+  validator_name?: string | null;
+  validated_at: Date | null;
   created_at: Date;
   updated_at: Date;
   total_count?: string | number;
@@ -195,6 +239,11 @@ export interface PositionListItem {
   status: PositionStatus;
   hasDescription: boolean;
   descriptionApproved: boolean;
+  division: string | null;
+  plazas: number | null;
+  /** `plazas = 0`: se muestra como "Vacante". */
+  vacant: boolean;
+  validationStatus: ValidationStatus;
 }
 
 export function toListItem(r: PositionRow): PositionListItem {
@@ -208,13 +257,19 @@ export function toListItem(r: PositionRow): PositionListItem {
     status: r.status,
     hasDescription: r.description !== null && r.description !== '',
     descriptionApproved: r.description_approved,
+    division: r.division,
+    plazas: r.plazas,
+    vacant: r.plazas === 0,
+    validationStatus: r.validation_status,
   };
 }
 
 export interface OkrRow {
   id: string;
   job_position_id: string;
-  period: string;
+  period: string | null;
+  objective_code: string | null;
+  kr_code: string | null;
   objective: string;
   key_result: string;
   weight: string | number | null;
@@ -225,7 +280,10 @@ export interface OkrRow {
 export interface OkrView {
   id: string;
   jobPositionId: string;
-  period: string;
+  /** null = plantilla (vale para cualquier semestre). */
+  period: string | null;
+  objectiveCode: string | null;
+  krCode: string | null;
   objective: string;
   keyResult: string;
   weight: number | null;
@@ -238,6 +296,8 @@ export function toOkrView(r: OkrRow): OkrView {
     id: r.id,
     jobPositionId: r.job_position_id,
     period: r.period,
+    objectiveCode: r.objective_code,
+    krCode: r.kr_code,
     objective: r.objective,
     keyResult: r.key_result,
     weight: r.weight === null ? null : Number(r.weight),
@@ -278,7 +338,67 @@ export function toKpiView(r: KpiRow): KpiView {
   };
 }
 
+export interface ActivityRow {
+  id: string;
+  job_position_id: string;
+  group_order: number;
+  group_title: string;
+  sort_order: number;
+  description: string;
+  frequency: ActivityFrequency | null;
+  note: string | null;
+}
+
+export interface ActivityView {
+  id: string;
+  jobPositionId: string;
+  groupOrder: number;
+  groupTitle: string;
+  sortOrder: number;
+  description: string;
+  frequency: ActivityFrequency | null;
+  note: string | null;
+}
+
+export function toActivityView(r: ActivityRow): ActivityView {
+  return {
+    id: r.id,
+    jobPositionId: r.job_position_id,
+    groupOrder: r.group_order,
+    groupTitle: r.group_title,
+    sortOrder: r.sort_order,
+    description: r.description,
+    frequency: r.frequency,
+    note: r.note,
+  };
+}
+
+export interface ValidationState {
+  status: ValidationStatus;
+  by: string | null;
+  at: Date | null;
+}
+
+/**
+ * Efecto de cambiar el estado de validación: cualquier valor distinto de `pendiente` guarda quién y cuándo
+ * (de la sesión); volver a `pendiente` los limpia; si el estado no cambia se conservan.
+ */
+export function applyValidationChange(current: ValidationState, next: ValidationStatus | undefined, actorId: string | null, now: Date): ValidationState {
+  if (next === undefined || next === current.status) return current;
+  if (next === 'pendiente') return { status: 'pendiente', by: null, at: null };
+  return { status: next, by: actorId, at: now };
+}
+
 export interface PositionDetail extends PositionListItem {
+  meotHierarchy: string | null;
+  reportsTo: string | null;
+  supervises: string | null;
+  roleSummary: string | null;
+  positionObjective: string | null;
+  validationPoints: string | null;
+  headComments: string | null;
+  validatedBy: { id: string; name: string | null } | null;
+  validatedAt: string | null;
   description: string | null;
   approvedBy: { id: string; name: string | null } | null;
   approvedAt: string | null;
@@ -286,11 +406,21 @@ export interface PositionDetail extends PositionListItem {
   updatedAt: string;
   okrs: OkrView[];
   kpis: KpiView[];
+  activities: ActivityView[];
 }
 
-export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[]): PositionDetail {
+export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = []): PositionDetail {
   return {
     ...toListItem(r),
+    meotHierarchy: r.meot_hierarchy,
+    reportsTo: r.reports_to_text,
+    supervises: r.supervises_text,
+    roleSummary: r.role_summary,
+    positionObjective: r.position_objective,
+    validationPoints: r.validation_points,
+    headComments: r.head_comments,
+    validatedBy: r.validated_by ? { id: r.validated_by, name: r.validator_name ?? null } : null,
+    validatedAt: r.validated_at ? new Date(r.validated_at).toISOString() : null,
     description: r.description,
     approvedBy: r.description_approved_by ? { id: r.description_approved_by, name: r.approver_name ?? null } : null,
     approvedAt: r.description_approved_at ? new Date(r.description_approved_at).toISOString() : null,
@@ -298,5 +428,6 @@ export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[]): Posi
     updatedAt: new Date(r.updated_at).toISOString(),
     okrs,
     kpis,
+    activities,
   };
 }
