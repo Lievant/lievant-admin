@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { CloseIcon } from '@/components/icons';
-import type { PositionDetail } from './positions-constants';
+import { usePermission } from '@/hooks/use-permission';
+import { areasForDivision, inList, type PositionDetail, type PositionOptions } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -39,7 +40,7 @@ export function PositionFormDialog({
   onSaved,
 }: {
   position: PositionDetail | null;
-  options: { areas: string[]; divisions: string[]; levels: string[] };
+  options: PositionOptions;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -47,6 +48,13 @@ export function PositionFormDialog({
   const [division, setDivision] = useState(position?.division ?? '');
   const [area, setArea] = useState(position?.area ?? '');
   const [level, setLevel] = useState(position?.level ?? '');
+  const [seniority, setSeniority] = useState(position?.seniority ?? '');
+  // Áreas agregadas al catálogo desde este formulario (se suman a las del catálogo hasta recargar).
+  const [addedAreas, setAddedAreas] = useState<{ name: string; division: string | null }[]>([]);
+  const [newArea, setNewArea] = useState<string | null>(null);
+  const [areaMsg, setAreaMsg] = useState<{ text: string; suggestion?: string } | null>(null);
+  const [areaBusy, setAreaBusy] = useState(false);
+  const canAddArea = usePermission('rrhh', 'matriz-puestos', 'update');
   const [meot, setMeot] = useState(position?.meotHierarchy ?? '');
   const [reportsTo, setReportsTo] = useState(position?.reportsTo ?? '');
   const [supervises, setSupervises] = useState(position?.supervises ?? '');
@@ -63,7 +71,7 @@ export function PositionFormDialog({
     e.preventDefault();
     setError(null);
     if (!title.trim()) return setError('El nombre del puesto es obligatorio.');
-    if (!area.trim()) return setError('El área es obligatoria.');
+    if (!area.trim()) return setError('Elige el área de la lista.');
     if (title.trim().length > 200) return setError('El puesto no puede pasar de 200 caracteres.');
     if (description.length > 10000) return setError('La descripción no puede pasar de 10,000 caracteres.');
     const n = plazas.trim() === '' ? null : Number(plazas);
@@ -76,6 +84,7 @@ export function PositionFormDialog({
         area: area.trim(),
         division: division.trim() || null,
         level: level.trim() || null,
+        seniority: seniority || null,
         meotHierarchy: meot.trim() || null,
         reportsTo: reportsTo.trim() || null,
         supervises: supervises.trim() || null,
@@ -96,6 +105,47 @@ export function PositionFormDialog({
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar el puesto.');
       setSaving(false);
+    }
+  };
+
+  const levelCodes = options.levels.map((l) => l.code);
+  const areaOptions = areasForDivision([...options.catalogAreas, ...addedAreas], division);
+  // Un valor antiguo fuera de catálogo se ofrece para no perderlo al editar otros campos.
+  const legacyLevel = level !== '' && !inList(levelCodes, level) ? level : null;
+  const legacyArea = area !== '' && !inList(areaOptions, area) ? area : null;
+
+  const changeDivision = (value: string) => {
+    setDivision(value);
+    // El área depende de la división: si la que estaba ya no pertenece a la nueva, se limpia.
+    if (area && !inList(areasForDivision([...options.catalogAreas, ...addedAreas], value), area)) setArea('');
+  };
+
+  const addArea = async (confirmSimilar = false) => {
+    const name = (newArea ?? '').trim();
+    if (!name) return setAreaMsg({ text: 'Escribe el nombre del área.' });
+    if (!division.trim()) return setAreaMsg({ text: 'Primero captura la división: las áreas se agregan por división.' });
+    setAreaBusy(true);
+    setAreaMsg(null);
+    try {
+      const res = await fetch('/api/hr/job-position-areas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ division: division.trim(), name, confirmSimilar }),
+      });
+      if (res.status === 409) {
+        const body = (await res.json().catch(() => null)) as { message?: string; suggestion?: string } | null;
+        return setAreaMsg({ text: body?.message ?? 'Ya existe un área parecida.', ...(body?.suggestion ? { suggestion: body.suggestion } : {}) });
+      }
+      if (!res.ok) throw new Error(await readError(res, 'No se pudo agregar el área.'));
+      const body = (await res.json()) as { created: boolean; area: { name: string; division: string } };
+      setAddedAreas((a) => [...a, { name: body.area.name, division: body.area.division }]);
+      setArea(body.area.name);
+      setNewArea(null);
+      setAreaMsg(body.created ? null : { text: `Ya existía «${body.area.name}»; se usó esa.` });
+    } catch (err) {
+      setAreaMsg({ text: err instanceof Error ? err.message : 'No se pudo agregar el área.' });
+    } finally {
+      setAreaBusy(false);
     }
   };
 
@@ -120,18 +170,62 @@ export function PositionFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-division" className={LABEL}>División (Opcional)</label>
-              <input id="jp-division" list="jp-divisions" value={division} onChange={(e) => setDivision(e.target.value)} maxLength={100} className={INPUT} />
+              <input id="jp-division" list="jp-divisions" value={division} onChange={(e) => changeDivision(e.target.value)} maxLength={100} className={INPUT} />
               <datalist id="jp-divisions">{options.divisions.map((a) => <option key={a} value={a} />)}</datalist>
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-area" className={LABEL}>Área</label>
-              <input id="jp-area" list="jp-areas" value={area} onChange={(e) => setArea(e.target.value)} maxLength={100} className={INPUT} />
-              <datalist id="jp-areas">{options.areas.map((a) => <option key={a} value={a} />)}</datalist>
+              <select
+                id="jp-area"
+                value={area}
+                onChange={(e) => {
+                  if (e.target.value === '__new__') { setNewArea(''); setAreaMsg(null); } else { setArea(e.target.value); setNewArea(null); }
+                }}
+                className={INPUT}
+              >
+                <option value="">Selecciona…</option>
+                {legacyArea && <option value={legacyArea}>{legacyArea} (Fuera de Catálogo)</option>}
+                {areaOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+                {canAddArea && <option value="__new__">+ Agregar área nueva…</option>}
+              </select>
+              {newArea !== null && (
+                <div className="mt-1 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+                  <input aria-label="Nombre del área nueva" value={newArea} onChange={(e) => setNewArea(e.target.value)} maxLength={100} placeholder="Nombre del área nueva" className={INPUT} />
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={areaBusy} onClick={() => void addArea(false)} className="rounded-md bg-black px-3 py-1 text-xs font-semibold text-white disabled:opacity-60">{areaBusy ? 'Agregando…' : 'Agregar al Catálogo'}</button>
+                    <button type="button" onClick={() => { setNewArea(null); setAreaMsg(null); }} className="rounded-md border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">Cancelar</button>
+                  </div>
+                </div>
+              )}
+              {areaMsg && (
+                <div role="alert" className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <p>{areaMsg.text}</p>
+                  {areaMsg.suggestion && (
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <button type="button" onClick={() => { setArea(areaMsg.suggestion as string); setNewArea(null); setAreaMsg(null); }} className="rounded-md bg-black px-2 py-1 font-semibold text-white">Usar «{areaMsg.suggestion}»</button>
+                      <button type="button" disabled={areaBusy} onClick={() => void addArea(true)} className="rounded-md border border-amber-300 px-2 py-1 font-medium">Crear de Todos Modos</button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-level" className={LABEL}>Nivel (Opcional)</label>
-              <input id="jp-level" list="jp-levels" value={level} onChange={(e) => setLevel(e.target.value)} maxLength={50} className={INPUT} />
-              <datalist id="jp-levels">{options.levels.map((a) => <option key={a} value={a} />)}</datalist>
+              <select id="jp-level" value={level} onChange={(e) => setLevel(e.target.value)} className={INPUT}>
+                <option value="">Sin nivel</option>
+                {legacyLevel && <option value={legacyLevel}>{legacyLevel} (Fuera de Catálogo)</option>}
+                {options.levels.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+              </select>
+              {position?.levelOriginal && (
+                <p className="text-xs text-slate-400">Nivel original (Excel): {position.levelOriginal}</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="jp-seniority" className={LABEL}>Categoría (Opcional)</label>
+              <select id="jp-seniority" value={seniority} onChange={(e) => setSeniority(e.target.value)} className={INPUT}>
+                <option value="">Sin categoría</option>
+                {options.seniorities.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
             <TextField id="jp-meot" label="Jerarquía (MEOT) (Opcional)" value={meot} onChange={setMeot} max={100} />
             <TextField id="jp-reports" label="Reporta a (Opcional)" value={reportsTo} onChange={setReportsTo} max={500} />

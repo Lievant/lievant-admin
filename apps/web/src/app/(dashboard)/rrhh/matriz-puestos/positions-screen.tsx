@@ -6,12 +6,14 @@ import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
 import { PositionFormDialog } from './position-form-dialog';
 import {
+  EMPTY_OPTIONS,
   STATUS_BADGE,
   STATUS_LABELS,
   VALIDATION_BADGE,
   VALIDATION_LABELS,
   VALIDATION_STATUSES,
   type PositionListItem,
+  type PositionOptions,
   type PositionStatus,
 } from './positions-constants';
 
@@ -23,12 +25,6 @@ interface PositionPage {
   totalPages: number;
 }
 
-interface Options {
-  areas: string[];
-  divisions: string[];
-  levels: string[];
-}
-
 const PAGE_SIZE = 25;
 const SELECT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -38,10 +34,11 @@ export function PositionsScreen() {
   const canCreate = usePermission('rrhh', 'matriz-puestos', 'create');
   const canImport = usePermission('rrhh', 'matriz-puestos', 'import');
 
-  const [options, setOptions] = useState<Options>({ areas: [], divisions: [], levels: [] });
+  const [options, setOptions] = useState<PositionOptions>(EMPTY_OPTIONS);
   const [division, setDivision] = useState('');
   const [area, setArea] = useState('');
   const [level, setLevel] = useState('');
+  const [seniority, setSeniority] = useState('');
   const [status, setStatus] = useState('');
   const [validation, setValidation] = useState('');
   const [search, setSearch] = useState('');
@@ -62,7 +59,7 @@ export function PositionsScreen() {
 
   const loadOptions = useCallback(() => {
     fetch('/api/hr/job-positions/options')
-      .then((r) => (r.ok ? (r.json() as Promise<Options>) : null))
+      .then((r) => (r.ok ? (r.json() as Promise<PositionOptions>) : null))
       .then((o) => o && setOptions(o))
       .catch(() => undefined);
   }, []);
@@ -75,6 +72,7 @@ export function PositionsScreen() {
     if (division) q.set('division', division);
     if (area) q.set('area', area);
     if (level) q.set('level', level);
+    if (seniority) q.set('seniority', seniority);
     if (status) q.set('status', status);
     if (validation) q.set('validationStatus', validation);
     if (debounced) q.set('search', debounced);
@@ -91,7 +89,7 @@ export function PositionsScreen() {
     } finally {
       if (ticket === latest.current) setLoading(false);
     }
-  }, [page, division, area, level, status, validation, debounced]);
+  }, [page, division, area, level, seniority, status, validation, debounced]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -102,7 +100,7 @@ export function PositionsScreen() {
     setPage(1);
   };
 
-  const filtered = Boolean(division || area || level || status || validation || debounced);
+  const filtered = Boolean(division || area || level || seniority || status || validation || debounced);
 
   return (
     <div className="space-y-5">
@@ -126,7 +124,7 @@ export function PositionsScreen() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <div className="flex flex-col gap-1 lg:col-span-1">
           <label htmlFor="mp-search" className={LABEL}>Buscar</label>
           <input id="mp-search" type="search" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Código o puesto" className={SELECT} />
@@ -149,7 +147,14 @@ export function PositionsScreen() {
           <label htmlFor="mp-level" className={LABEL}>Nivel</label>
           <select id="mp-level" value={level} onChange={onFilter(setLevel)} className={SELECT}>
             <option value="">Todos</option>
-            {options.levels.map((a) => <option key={a} value={a}>{a}</option>)}
+            {options.levels.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="mp-seniority" className={LABEL}>Categoría</label>
+          <select id="mp-seniority" value={seniority} onChange={onFilter(setSeniority)} className={SELECT}>
+            <option value="">Todas</option>
+            {options.seniorities.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">

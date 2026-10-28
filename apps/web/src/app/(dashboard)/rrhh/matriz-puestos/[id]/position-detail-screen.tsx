@@ -10,6 +10,7 @@ import { ActivityDialog, ConfirmDelete, KpiDialog, OkrDialog } from '../item-dia
 import { PositionFormDialog, readError } from '../position-form-dialog';
 import {
   BASE_PERIOD,
+  EMPTY_OPTIONS,
   STATUS_BADGE,
   STATUS_LABELS,
   VALIDATION_BADGE,
@@ -28,6 +29,7 @@ import {
   okrsOfPeriod,
   periodLabel,
   plazasLabel,
+  seniorityLabel,
   parsePeriod,
   sumPeriodWeights,
   weightState,
@@ -36,6 +38,7 @@ import {
   type KpiItem,
   type OkrItem,
   type PositionDetail,
+  type PositionOptions,
   type ValidationStatus,
 } from '../positions-constants';
 
@@ -77,7 +80,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const [position, setPosition] = useState<PositionDetail | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'missing' | 'error'>('loading');
   const [tab, setTab] = useState<TabId>('info');
-  const [options, setOptions] = useState({ areas: [] as string[], divisions: [] as string[], levels: [] as string[] });
+  const [options, setOptions] = useState<PositionOptions>(EMPTY_OPTIONS);
 
   const [editing, setEditing] = useState(false);
   const [deletingPosition, setDeletingPosition] = useState(false);
@@ -218,6 +221,10 @@ export function PositionDetailScreen({ id }: { id: string }) {
               <Field label="División" value={position.division ?? '—'} />
               <Field label="Área" value={position.area} />
               <Field label="Nivel" value={position.level ?? '—'} />
+              {position.levelOriginal && position.levelOriginal.trim().toUpperCase() !== (position.level ?? '') && (
+                <Field label="Nivel Original (Excel)" value={position.levelOriginal} />
+              )}
+              <Field label="Categoría" value={seniorityLabel(position.seniority)} />
               <Field label="Jerarquía (MEOT)" value={position.meotHierarchy ?? '—'} />
               <Field label="Reporta a" value={position.reportsTo ?? '—'} />
               <Field label="Supervisa a" value={position.supervises ?? '—'} />

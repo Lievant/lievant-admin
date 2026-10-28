@@ -4,8 +4,11 @@ import {
   currentYearMx,
   formatDateTimeMx,
   formatPct,
+  areasForDivision,
   frequencyLabel,
   groupActivities,
+  inList,
+  seniorityLabel,
   groupOkrs,
   hasAnyWeight,
   okrCode,
@@ -125,5 +128,29 @@ describe('Matriz de Puestos (web) · plantilla, grupos y etiquetas (M6-B)', () =
     expect(frequencyLabel('semanal')).toBe('Semanal');
     expect(frequencyLabel('diario')).toBe('Diario');
     expect(frequencyLabel('eventual')).toBe('Eventual');
+  });
+});
+
+describe('Matriz de Puestos (web) · listas cerradas', () => {
+  const catalog = [
+    { name: 'Marketplace', division: 'E-Commerce' },
+    { name: 'Performance', division: 'E-Commerce' },
+    { name: 'Soporte', division: 'Operaciones' },
+    { name: 'marketplace ', division: 'e-commerce' },
+  ];
+  it('el desplegable de áreas se filtra por la división elegida, sin repetidos ni distinguir mayúsculas', () => {
+    expect(areasForDivision(catalog, 'E-Commerce')).toEqual(['Marketplace', 'Performance']);
+    expect(areasForDivision(catalog, ' operaciones ')).toEqual(['Soporte']);
+    expect(areasForDivision(catalog, 'Finanzas')).toEqual([]);
+    expect(areasForDivision(catalog, '')).toEqual(['Marketplace', 'Performance', 'Soporte']);
+  });
+  it('detecta si un valor está en la lista sin distinguir mayúsculas, acentos ni espacios', () => {
+    expect(inList(['Dirección'], ' DIRECCION ')).toBe(true);
+    expect(inList(['Dirección'], 'Finanzas')).toBe(false);
+  });
+  it('etiquetas de categoría', () => {
+    expect(seniorityLabel('semi_senior')).toBe('Semi Senior');
+    expect(seniorityLabel('junior')).toBe('Junior');
+    expect(seniorityLabel(null)).toBe('—');
   });
 });

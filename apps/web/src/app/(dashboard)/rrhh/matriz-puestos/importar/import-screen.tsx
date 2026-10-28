@@ -18,9 +18,11 @@ interface ImportResult {
   sheet: string | null;
   division: string;
   divisionHint: string | null;
+  /** Áreas que no están en el catálogo y se agregan al confirmar. */
+  newAreas: string[];
   positions: { row: number; title: string; area: string; action: Action; activities: number; okrRows: number; objectives: number; kpis: number }[];
   summary: {
-    positions: number; created: number; updated: number; unchanged: number; plazas: number; areas: number; groups: number;
+    positions: number; created: number; updated: number; unchanged: number; newAreas: number; plazas: number; areas: number; groups: number;
     activities: number; activitiesWithNote: number; objectives: number; okrRows: number; kpis: number;
   };
   warnings: Issue[];
@@ -128,6 +130,7 @@ export function ImportScreen() {
         ['A crear', preview.summary.created],
         ['A actualizar', preview.summary.updated],
         ['Sin cambios', preview.summary.unchanged],
+        ['Áreas nuevas', preview.summary.newAreas],
         ['Actividades', preview.summary.activities],
         ['Filas de OKR', preview.summary.okrRows],
         ['KPIs', preview.summary.kpis],
@@ -190,7 +193,7 @@ export function ImportScreen() {
           <p>
             {done.summary.created} {done.summary.created === 1 ? 'puesto creado' : 'puestos creados'}, {done.summary.updated}{' '}
             {done.summary.updated === 1 ? 'actualizado' : 'actualizados'} y {done.summary.unchanged} sin cambios · {done.warnings.length}{' '}
-            {done.warnings.length === 1 ? 'aviso' : 'avisos'}.
+            {done.warnings.length === 1 ? 'aviso' : 'avisos'}{done.newAreas.length > 0 ? ` · ${done.newAreas.length} ${done.newAreas.length === 1 ? 'área agregada' : 'áreas agregadas'} al catálogo` : ''}.
           </p>
           <Link href="/rrhh/matriz-puestos" className="inline-block rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">
             Ir a la Matriz de Puestos
@@ -210,6 +213,12 @@ export function ImportScreen() {
           </div>
           <p className="text-xs text-slate-500">Hoja: {preview.sheet ?? '—'} · División: {preview.division}</p>
 
+          {preview.newAreas.length > 0 && (
+            <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+              <p className="font-semibold">Área nueva, se agregará al catálogo ({preview.newAreas.length})</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">{preview.newAreas.map((a) => <li key={a}>{a}</li>)}</ul>
+            </div>
+          )}
           {preview.errors.length > 0 && (
             <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
               <p className="font-semibold">Errores que impiden importar ({preview.errors.length})</p>

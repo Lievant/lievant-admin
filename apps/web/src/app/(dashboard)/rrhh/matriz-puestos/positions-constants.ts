@@ -17,6 +17,8 @@ export interface PositionListItem {
   hasDescription: boolean;
   descriptionApproved: boolean;
   division: string | null;
+  /** Categoría: junior, semi_senior o senior. */
+  seniority: string | null;
   plazas: number | null;
   /** `plazas = 0`: se muestra como "Vacante". */
   vacant: boolean;
@@ -59,6 +61,8 @@ export interface KpiItem {
 }
 
 export interface PositionDetail extends PositionListItem {
+  /** Texto del nivel como venía en el Excel (solo lectura). */
+  levelOriginal: string | null;
   meotHierarchy: string | null;
   reportsTo: string | null;
   supervises: string | null;
@@ -89,6 +93,38 @@ export const STATUS_BADGE: Record<PositionStatus, string> = {
   pendiente_aprobacion: 'bg-amber-50 text-amber-700',
   inactivo: 'bg-slate-100 text-slate-500',
 };
+
+/** Opciones de las listas de la Matriz (nivel y área salen de catálogos; categoría es una lista cerrada). */
+export interface PositionOptions {
+  /** Áreas para filtrar: las del catálogo más las que ya usan puestos. */
+  areas: string[];
+  catalogAreas: { name: string; division: string | null }[];
+  businessUnits: string[];
+  divisions: string[];
+  levels: { code: string; name: string }[];
+  seniorities: { value: string; label: string }[];
+  validationStatuses: ValidationStatus[];
+}
+
+export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], businessUnits: [], divisions: [], levels: [], seniorities: [], validationStatuses: [] };
+
+export const SENIORITY_LABELS: Record<string, string> = { junior: 'Junior', semi_senior: 'Semi Senior', senior: 'Senior' };
+export const seniorityLabel = (s: string | null): string => (s ? (SENIORITY_LABELS[s] ?? s) : '—');
+
+const plain = (t: string | null | undefined): string => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Áreas del desplegable del formulario: las del catálogo de la división elegida (sin división, todas, sin repetir).
+ * Si el puesto ya tiene un área fuera del catálogo (dato antiguo) se ofrece aparte para no perderla al editar.
+ */
+export function areasForDivision(catalogAreas: PositionOptions['catalogAreas'], division: string): string[] {
+  const d = plain(division);
+  const names = catalogAreas.filter((a) => d === '' || plain(a.division) === d).map((a) => a.name);
+  const seen = new Set<string>();
+  return names.filter((n) => (seen.has(plain(n)) ? false : (seen.add(plain(n)), true))).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+export const inList = (list: string[], value: string): boolean => list.some((x) => plain(x) === plain(value));
 
 export const VALIDATION_LABELS: Record<ValidationStatus, string> = {
   pendiente: 'Pendiente',
