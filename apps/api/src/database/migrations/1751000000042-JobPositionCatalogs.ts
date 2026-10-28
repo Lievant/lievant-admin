@@ -3,7 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Matriz de Puestos: Nivel, Categoría y Área como listas cerradas.
  *
- *  - `catalogs.job_position_levels`: niveles de los puestos (I–VIII). Es aparte de `catalogs.org_levels`
+ *  - `catalogs.job_position_levels`: niveles de los puestos (I–XV). Es aparte de `catalogs.org_levels`
  *    (niveles de los empleados, I–IV), que no se toca.
  *  - `hr.job_positions.seniority`: categoría Junior / Semi Senior / Senior (CHECK, nulable).
  *  - `hr.job_positions.level_original`: texto del nivel tal como venía en el Excel (solo lectura en la pantalla),
@@ -33,7 +33,9 @@ export class JobPositionCatalogs1751000000042 implements MigrationInterface {
     await queryRunner.query(`
       INSERT INTO catalogs.job_position_levels (code, name, sort_order)
       VALUES ('I','Nivel I',0),('II','Nivel II',1),('III','Nivel III',2),('IV','Nivel IV',3),
-             ('V','Nivel V',4),('VI','Nivel VI',5),('VII','Nivel VII',6),('VIII','Nivel VIII',7)
+             ('V','Nivel V',4),('VI','Nivel VI',5),('VII','Nivel VII',6),('VIII','Nivel VIII',7),
+             ('IX','Nivel IX',8),('X','Nivel X',9),('XI','Nivel XI',10),('XII','Nivel XII',11),
+             ('XIII','Nivel XIII',12),('XIV','Nivel XIV',13),('XV','Nivel XV',14)
       ON CONFLICT (code) DO NOTHING
     `);
 

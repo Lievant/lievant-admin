@@ -4,6 +4,7 @@ import {
   currentYearMx,
   formatDateTimeMx,
   formatPct,
+  EMPTY_OPTIONS,
   areasForDivision,
   frequencyLabel,
   groupActivities,
@@ -152,5 +153,14 @@ describe('Matriz de Puestos (web) · listas cerradas', () => {
     expect(seniorityLabel('semi_senior')).toBe('Semi Senior');
     expect(seniorityLabel('junior')).toBe('Junior');
     expect(seniorityLabel(null)).toBe('—');
+  });
+});
+
+describe('Matriz de Puestos (web) · niveles I a XV', () => {
+  it('el desplegable muestra los niveles del catálogo en su orden (sin lista fija)', () => {
+    const codes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
+    const options = { ...EMPTY_OPTIONS, levels: codes.map((code) => ({ code, name: `Nivel ${code}` })) };
+    expect(options.levels.map((l) => l.code)).toEqual(codes);
+    expect(options.levels).toHaveLength(15);
   });
 });

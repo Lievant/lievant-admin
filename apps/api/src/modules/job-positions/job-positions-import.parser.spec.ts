@@ -10,7 +10,7 @@ import {
   type RawSheet,
 } from './job-positions-import.parser';
 
-const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
 const parseMatrixSheets = (sheets: RawSheet[]) => parseSheets(sheets, { levelCodes: LEVELS });
 
 const issues = () => ({ warnings: [] as ImportIssue[], errors: [] as ImportIssue[] });

@@ -18,13 +18,14 @@ import {
   seniorityFromText,
 } from './job-positions-catalog.util';
 
-const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
 const ACTOR = { id: 'user-1', email: 'rrhh@lievant.com', name: 'RRHH' };
 
 describe('Listas cerradas · nivel', () => {
   it('«iv», « IV » y «4» son IV', () => {
     for (const v of ['iv', ' IV ', '4', 'Iv', 'IV']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'ok', code: 'IV' });
     expect(arabicToRoman(8)).toBe('VIII');
+    expect(arabicToRoman(15)).toBe('XV');
     expect(arabicToRoman(19)).toBe('XIX');
     expect(arabicToRoman(0)).toBe('');
   });
@@ -32,11 +33,25 @@ describe('Listas cerradas · nivel', () => {
     expect(resolveLevel('', LEVELS)).toEqual({ kind: 'empty' });
     expect(resolveLevel(null, LEVELS)).toEqual({ kind: 'empty' });
     for (const v of ['Sin nivel', 'Por definir', 'V / VI', 'VII / VIII', 'Sin nivel (MEOT: III)']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'ambiguous' });
-    for (const v of ['IX', 'XV', '15', 'Gerencia', 'Senior']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'invalid' });
+    for (const v of ['XVI', '16', 'XX', 'Gerencia', 'Senior']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'invalid' });
   });
   it('código canónico para un valor ya escrito', () => {
     expect(canonicalLevel(' ii ', LEVELS)).toBe('II');
     expect(canonicalLevel('Gerencia', LEVELS)).toBeNull();
+  });
+});
+
+describe('Listas cerradas · niveles I a XV', () => {
+  it('XV es válido; «xv», « XV » y «15» se leen como XV; XVI no', () => {
+    for (const v of ['XV', 'xv', ' XV ', '15']) expect(resolveLevel(v, LEVELS)).toEqual({ kind: 'ok', code: 'XV' });
+    expect(resolveLevel('IX', LEVELS)).toEqual({ kind: 'ok', code: 'IX' });
+    expect(resolveLevel('XVI', LEVELS)).toEqual({ kind: 'invalid' });
+    expect(LEVELS).toHaveLength(15);
+  });
+  it('el API rechaza XVI con 400 y acepta XV', async () => {
+    const { service } = build();
+    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'XVI' }), ACTOR)).rejects.toThrow(/I, II, III, IV, V, VI, VII, VIII, IX, X, XI, XII, XIII, XIV, XV/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: '15' }), ACTOR)).resolves.toBeDefined();
   });
 });
 
@@ -123,7 +138,7 @@ describe('Matriz de Puestos · el API rechaza texto libre en nivel y área (400)
   it('nivel fuera del catálogo al crear: 400', async () => {
     const { service } = build();
     await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'Gerencia' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'IX' }), ACTOR)).rejects.toThrow(/debe ser uno de la lista/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'XVI' }), ACTOR)).rejects.toThrow(/debe ser uno de la lista/);
   });
   it('área fuera del catálogo de la división al crear: 400; con la división correcta, se guarda el nombre canónico', async () => {
     const { service, calls } = build();
