@@ -15,6 +15,7 @@ import {
   divisionOptions,
   levelLabel,
   levelShort,
+  sanitizeSelection,
   selectionToQuery,
   type FilterKey,
   type OrgFilterOptions,
@@ -374,11 +375,20 @@ export function OrganigramaScreen({
   useEffect(() => {
     fetch('/api/employees/org-chart/filters')
       .then((r) => (r.ok ? (r.json() as Promise<OrgFilterOptions>) : null))
-      .then((o) => o && setOptions(o))
+      .then((o) => {
+        if (!o) return;
+        setOptions(o);
+        // Una URL con una combinación que no existe (p. ej. una división de otra empresa) se limpia al cargar las opciones.
+        const clean = sanitizeSelection(initialSelection, o);
+        if (selectionToQuery(clean) !== selectionToQuery(initialSelection)) void applyFiltersRef.current(clean);
+      })
       .catch(() => undefined);
+    // Solo al montar: las opciones se piden una vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** Aplica una selección: pide el árbol, reajusta la vista y deja los filtros en la URL. */
+  const applyFiltersRef = useRef<(next: OrgSelection) => Promise<void>>(async () => undefined);
   async function applyFilters(next: OrgSelection) {
     setSelection(next);
     const ticket = ++latestRequest.current;
@@ -404,6 +414,8 @@ export function OrganigramaScreen({
       if (ticket === latestRequest.current) setLoading(false);
     }
   }
+
+  applyFiltersRef.current = applyFilters;
 
   function changeFilter(key: FilterKey, value: string) {
     void applyFilters(options ? applySelection(selection, key, value, options) : { ...selection, [key]: value });
