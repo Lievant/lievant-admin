@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { CloseIcon } from '@/components/icons';
 import { OrgPhoto } from './org-photo';
+import { levelLabel } from './org-filters';
 import type { OrgPerson } from './org-tree';
 
 /** Solo dígitos (y un + inicial) para el enlace tel:. */
@@ -52,10 +53,24 @@ export function OrgPersonModal({ person, canOpenFile, onFocus, onClose }: OrgPer
           <OrgPhoto name={person.fullName} photoUrl={person.photoUrl} size={96} />
           <h2 className="mt-3 text-lg font-bold text-navy">{person.fullName}</h2>
           <p className="text-sm text-slate-600">{person.position}</p>
-          {person.area && <p className="text-xs text-slate-400">{person.area}</p>}
+          {levelLabel(person.level) && <p className="mt-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">{levelLabel(person.level)}</p>}
         </div>
 
         <dl className="mt-5 space-y-2 text-sm">
+          {[
+            ['Empresa', person.companyName],
+            ['División', person.division],
+            ['Área', person.area],
+            ['Nivel', person.level ? person.level.trim().toUpperCase() : null],
+          ].map(
+            ([label, value]) =>
+              value && (
+                <div key={label} className="flex items-center justify-between gap-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt>
+                  <dd className="text-right text-navy">{value}</dd>
+                </div>
+              ),
+          )}
           {person.corporateEmail && (
             <div className="flex items-center justify-between gap-3">
               <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Correo</dt>

@@ -13,6 +13,10 @@ function row(id: string, name: string, parent: string | null = null, over: Parti
     fullName: name,
     position: `Cargo ${name}`,
     area: 'Operaciones',
+    level: null,
+    companyName: 'Lievant',
+    division: null,
+    location: 'León',
     corporateEmail: `${id}@lievant.com`,
     phone: '4770000000',
     directReportToId: parent,
@@ -119,7 +123,8 @@ describe('buildOrgTree', () => {
   it('la respuesta contiene solo los campos de la lista blanca', () => {
     const dirty = { ...row('a', 'Ana'), salary: 99999, curp: 'XXXX', rfc: 'YYYY', notes: 'interno', birthDate: '1990-01-01', address: 'Calle 1' } as OrgRow;
     const { root } = buildOrgTree([dirty, row('b', 'Beto', 'a')]);
-    const allowed = ['children', 'area', 'corporateEmail', 'displayId', 'fullName', 'id', 'phone', 'photoUrl', 'position'].sort();
+    // Lista blanca exacta: se amplió SOLO con level, companyName y division.
+    const allowed = ['children', 'area', 'companyName', 'corporateEmail', 'displayId', 'division', 'fullName', 'id', 'level', 'phone', 'photoUrl', 'position'].sort();
     const check = (n: OrgNode) => {
       expect(Object.keys(n).sort()).toEqual(allowed);
       n.children.forEach(check);
@@ -146,11 +151,8 @@ describe('photoUrlFor y ubicaciones', () => {
 });
 
 describe('OrgChartService', () => {
-  function setup(rows: Record<string, unknown>[], allLocations: string[] = ['León', 'Medellín']) {
-    const query = jest.fn(async (sql: string, _params?: unknown[]) => {
-      if (/SELECT DISTINCT location/.test(sql)) return allLocations.map((location) => ({ location }));
-      return rows;
-    });
+  function setup(rows: Record<string, unknown>[]) {
+    const query = jest.fn(async (_sql: string, _params?: unknown[]) => rows);
     const service = new OrgChartService({ query } as any);
     return { service, query };
   }
@@ -160,6 +162,9 @@ describe('OrgChartService', () => {
     full_name: name,
     position: 'Cargo',
     area: 'Área',
+    level: null,
+    company_name: 'Lievant',
+    division: null,
     location,
     corporate_email: `${id}@lievant.com`,
     direct_report_to_id: parent,
@@ -179,18 +184,23 @@ describe('OrgChartService', () => {
     expect(res.locations).toEqual(['León']);
   });
 
-  it('el filtro por ubicación va parametrizado y las opciones del filtro siguen saliendo de todos los activos', async () => {
-    const { service, query } = setup([raw('m', 'Mario', null, 'Medellín')]);
-    const res = await service.getOrgChart('Medellín');
-    const call = query.mock.calls.find(([sql]) => /FROM employees\.employee_records e/.test(sql))!;
-    expect(call[0]).toContain('e.location = $1');
-    expect(call[1]).toEqual(['Medellín']);
+  it('el filtro de país (ubicación) ya no va en SQL: sigue siendo UNA consulta y se resuelve con el mismo mecanismo que los demás (solo las coincidencias)', async () => {
+    const { service, query } = setup([raw('a', 'Ana', null, 'León'), raw('m', 'Mario', 'a', 'Medellín')]);
+    const res = await service.getOrgChart({ location: 'Medellín' });
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]![0]).not.toContain('location = $');
+    // las opciones del filtro siguen saliendo de todos los activos
     expect(res.locations).toEqual(['León', 'Medellín']);
+    // Ana (León) no coincide: desaparece y Mario queda como raíz
+    const root = res.root as OrgNode;
+    expect(root.fullName).toBe('Mario');
+    expect(root.children).toEqual([]);
+    expect(res.counts).toEqual({ matched: 1, total: 2 });
   });
 
-  it('un jefe de otra ubicación no está en la vista filtrada: el subordinado queda como raíz y no se pierde', async () => {
-    const { service } = setup([raw('b', 'Beto', 'jefe-en-leon', 'Medellín')]);
-    const res = await service.getOrgChart('Medellín');
+  it('un jefe ausente (inactivo) no está en los datos: el subordinado que coincide queda como raíz y no se pierde', async () => {
+    const { service } = setup([raw('b', 'Beto', 'jefe-inactivo', 'Medellín')]);
+    const res = await service.getOrgChart({ location: 'Medellín' });
     expect((res.root as OrgNode).fullName).toBe('Beto');
     expect(res.stats.orphans).toBe(1);
   });

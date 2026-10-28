@@ -4,6 +4,7 @@ import { getCurrentUser } from '@/lib/api';
 
 export default async function ReportesRrhhPage() {
   const user = await getCurrentUser().catch(() => null);
+  const showOkrs = user?.permissions.some((p) => p.section === 'rrhh' && p.module === 'okrs' && p.action === 'read');
   const showRiac = user?.permissions.some(
     (p) => p.section === 'rrhh' && p.module === 'capacitaciones' && p.action === 'read',
   );
@@ -88,6 +89,23 @@ export default async function ReportesRrhhPage() {
               <h2 className="font-semibold text-navy">RIAC</h2>
               <p className="mt-0.5 text-sm text-slate-500">
                 Capacitaciones y reconocimientos por periodo, con filtros y exportación a Excel
+              </p>
+            </div>
+          </Link>
+        )}
+
+        {showOkrs && (
+          <Link
+            href="/rrhh/reportes/okrs"
+            className="group flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-black/40 hover:shadow-md"
+          >
+            <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-violet-50 text-violet-600 transition group-hover:bg-violet-100">
+              <IdCardIcon className="h-6 w-6" />
+            </span>
+            <div>
+              <h2 className="font-semibold text-navy">OKRs</h2>
+              <p className="mt-0.5 text-sm text-slate-500">
+                Evaluación semestral de los OKRs, con promedios por colaborador, área y periodo, y exportación
               </p>
             </div>
           </Link>
