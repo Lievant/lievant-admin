@@ -1,41 +1,30 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * Matriz de Puestos: Nivel, Categoría y Área como listas cerradas.
+ * Matriz de Puestos: Categoría (seniority), nivel original del Excel y niveles V–IX de la escala oficial.
  *
- *  - `catalogs.job_position_levels`: niveles de los puestos (I–XV). Es aparte de `catalogs.org_levels`
- *    (niveles de los empleados, I–IV), que no se toca.
+ *  - `catalogs.org_levels` es la ÚNICA escala de niveles (empleados y puestos). Aquí solo se agregan, si no
+ *    existen, los niveles V a IX; I a IV no se tocan (se renombran en Admin › Catálogos, coordinado con RRHH).
  *  - `hr.job_positions.seniority`: categoría Junior / Semi Senior / Senior (CHECK, nulable).
  *  - `hr.job_positions.level_original`: texto del nivel tal como venía en el Excel (solo lectura en la pantalla),
  *    para no perder valores ambiguos como «V / VI» o «Sin nivel (MEOT: III)».
  *  - Las áreas usan el `catalogs.areas` que ya existe (con `division_name`); no se siembra nada.
  *
- * Aditiva e idempotente. `down()` quita las columnas y la tabla nuevas.
+ * Aditiva e idempotente (`org_levels.code` es único). `down()` quita las columnas nuevas y borra la tabla
+ * `catalogs.job_position_levels` (de una versión anterior de esta migración, solo existe en BD locales); los
+ * niveles V–IX agregados a `org_levels` se dejan, porque pueden estar en uso.
  */
 export class JobPositionCatalogs1751000000042 implements MigrationInterface {
   name = 'JobPositionCatalogs1751000000042';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS catalogs.job_position_levels (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        code VARCHAR(10) NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        is_active BOOLEAN DEFAULT true,
-        sort_order SMALLINT DEFAULT 0,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    await queryRunner.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS uq_job_position_levels_code ON catalogs.job_position_levels (code)
-    `);
-    await queryRunner.query(`
-      INSERT INTO catalogs.job_position_levels (code, name, sort_order)
-      VALUES ('I','Nivel I',0),('II','Nivel II',1),('III','Nivel III',2),('IV','Nivel IV',3),
-             ('V','Nivel V',4),('VI','Nivel VI',5),('VII','Nivel VII',6),('VIII','Nivel VIII',7),
-             ('IX','Nivel IX',8),('X','Nivel X',9),('XI','Nivel XI',10),('XII','Nivel XII',11),
-             ('XIII','Nivel XIII',12),('XIV','Nivel XIV',13),('XV','Nivel XV',14)
+      INSERT INTO catalogs.org_levels (code, name, sort_order)
+      VALUES ('V', 'Especialista Senior / Key Account', 4),
+             ('VI', 'Senior', 5),
+             ('VII', 'Semi Senior', 6),
+             ('VIII', 'Junior / Auxiliar', 7),
+             ('IX', 'Practicante / Trainee', 8)
       ON CONFLICT (code) DO NOTHING
     `);
 
