@@ -9,9 +9,14 @@ export interface OrgPerson {
   fullName: string;
   position: string;
   area: string | null;
+  level: string | null;
+  companyName: string | null;
+  division: string | null;
   photoUrl: string | null;
   corporateEmail: string | null;
   phone?: string | null;
+  /** Solo está por ser jefe de alguien que coincide con los filtros. */
+  inContext: boolean;
   children: OrgPerson[];
 }
 

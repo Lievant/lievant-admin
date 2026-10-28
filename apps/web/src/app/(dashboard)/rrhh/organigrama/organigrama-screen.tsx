@@ -5,6 +5,21 @@ import { SearchIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
 import { useCurrentUser } from '@/components/user-provider';
 import { OrgPersonModal } from './org-person-modal';
+import {
+  CONTEXT_TOOLTIP,
+  EMPTY_SELECTION,
+  activeFilterCount,
+  applySelection,
+  areaOptions,
+  countsLabel,
+  divisionOptions,
+  levelLabel,
+  levelShort,
+  selectionToQuery,
+  type FilterKey,
+  type OrgFilterOptions,
+  type OrgSelection,
+} from './org-filters';
 import { OrgPhoto } from './org-photo';
 import {
   ancestorsOf,
@@ -28,6 +43,7 @@ export interface OrgChartData {
   root: OrgTreeNode | null;
   stats: { employees: number; roots: number; orphans: number; cycles: number };
   locations: string[];
+  counts: { matched: number; total: number };
 }
 
 const NODE_W = 208;
@@ -81,10 +97,14 @@ function NodeCard({
   }
   return (
     <div
+      title={node.inContext ? CONTEXT_TOOLTIP : undefined}
       className={`relative flex h-full w-full items-center gap-3 rounded-xl border bg-white px-3 shadow-sm ${
-        highlighted ? 'border-black ring-2 ring-black' : 'border-slate-200'
+        node.inContext ? 'border-dashed border-slate-300 opacity-50' : highlighted ? 'border-black ring-2 ring-black' : 'border-slate-200'
       }`}
     >
+      {levelLabel(node.level) && (
+        <span className="absolute right-2 top-1.5 rounded-full bg-slate-100 px-1.5 text-[10px] font-semibold text-slate-600">{levelLabel(node.level)}</span>
+      )}
       <button
         type="button"
         onClick={() => onOpen(node)}
@@ -93,7 +113,7 @@ function NodeCard({
       >
         <OrgPhoto name={node.fullName} photoUrl={node.photoUrl} size={44} />
         <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold text-navy">{node.fullName}</span>
+          <span className="block truncate pr-12 text-sm font-semibold text-navy">{node.fullName}</span>
           <span className="block truncate text-xs text-slate-600">{node.position}</span>
           {node.area && <span className="block truncate text-[11px] text-slate-400">{node.area}</span>}
         </span>
@@ -151,9 +171,12 @@ function MobileNode({
         {isSynthetic(node) ? (
           <span className="text-sm font-semibold text-slate-500">{node.fullName}</span>
         ) : (
-          <button type="button" onClick={() => onOpen(node)} className="min-w-0 text-left">
+          <button type="button" onClick={() => onOpen(node)} title={node.inContext ? CONTEXT_TOOLTIP : undefined} className={`min-w-0 text-left ${node.inContext ? 'opacity-50' : ''}`}>
             <span className="block truncate text-sm font-semibold text-navy">{node.fullName}</span>
-            <span className="block truncate text-xs text-slate-500">{node.position}</span>
+            <span className="block truncate text-xs text-slate-500">
+              {node.position}
+              {levelShort(node.level) && ` · ${levelShort(node.level)}`}
+            </span>
           </button>
         )}
       </div>
@@ -168,7 +191,15 @@ function MobileNode({
   );
 }
 
-export function OrganigramaScreen({ initial, initialError }: { initial: OrgChartData | null; initialError: boolean }) {
+export function OrganigramaScreen({
+  initial,
+  initialError,
+  initialSelection = EMPTY_SELECTION,
+}: {
+  initial: OrgChartData | null;
+  initialError: boolean;
+  initialSelection?: OrgSelection;
+}) {
   const isMobile = useIsMobile();
   const user = useCurrentUser();
   const hasFilePermission = usePermission('rrhh', 'empleados', 'read');
@@ -178,7 +209,11 @@ export function OrganigramaScreen({ initial, initialError }: { initial: OrgChart
   const [data, setData] = useState<OrgChartData | null>(initial);
   const [error, setError] = useState(initialError);
   const [loading, setLoading] = useState(false);
-  const [location, setLocation] = useState('');
+  const [selection, setSelection] = useState<OrgSelection>(initialSelection);
+  const [options, setOptions] = useState<OrgFilterOptions | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  // Solo cuenta la respuesta de la consulta más reciente (si no, una respuesta lenta pisa a una nueva).
+  const latestRequest = useRef(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => defaultCollapsed(initial?.root ?? null));
   const [focusId, setFocusId] = useState<string | null>(null);
   const [selected, setSelected] = useState<OrgPerson | null>(null);
@@ -335,36 +370,57 @@ export function OrganigramaScreen({ initial, initialError }: { initial: OrgChart
     setQuery('');
   }
 
-  async function changeLocation(value: string) {
-    setLocation(value);
+  // Opciones de los filtros (valores reales de los activos, con conteos y combinaciones para la cascada).
+  useEffect(() => {
+    fetch('/api/employees/org-chart/filters')
+      .then((r) => (r.ok ? (r.json() as Promise<OrgFilterOptions>) : null))
+      .then((o) => o && setOptions(o))
+      .catch(() => undefined);
+  }, []);
+
+  /** Aplica una selección: pide el árbol, reajusta la vista y deja los filtros en la URL. */
+  async function applyFilters(next: OrgSelection) {
+    setSelection(next);
+    const ticket = ++latestRequest.current;
     setLoading(true);
     setError(false);
+    const query = selectionToQuery(next);
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname);
+    }
     try {
-      const res = await fetch(`/api/employees/org-chart${value ? `?location=${encodeURIComponent(value)}` : ''}`);
+      const res = await fetch(`/api/employees/org-chart${query ? `?${query}` : ''}`);
       if (!res.ok) throw new Error();
-      const next = (await res.json()) as OrgChartData;
-      setData({ ...next, locations: next.locations.length > 0 ? next.locations : (data?.locations ?? []) });
-      setCollapsed(defaultCollapsed(next.root));
+      const body = (await res.json()) as OrgChartData;
+      if (ticket !== latestRequest.current) return;
+      setData({ ...body, locations: body.locations.length > 0 ? body.locations : (data?.locations ?? []) });
+      setCollapsed(defaultCollapsed(body.root));
       setFocusId(null);
       setHighlightId(null);
       needsFit.current = true;
     } catch {
-      setError(true);
+      if (ticket === latestRequest.current) setError(true);
     } finally {
-      setLoading(false);
+      if (ticket === latestRequest.current) setLoading(false);
     }
   }
 
-  const people = data?.stats.employees ?? 0;
+  function changeFilter(key: FilterKey, value: string) {
+    void applyFilters(options ? applySelection(selection, key, value, options) : { ...selection, [key]: value });
+  }
+
+  const activeFilters = activeFilterCount(selection);
+  const hasContext = useMemo(() => flatten(fullRoot).some((n) => !isSynthetic(n) && n.inContext), [fullRoot]);
+
+  const counts = data?.counts ?? { matched: data?.stats.employees ?? 0, total: data?.stats.employees ?? 0 };
 
   return (
     <div>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy">Organigrama</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {people} persona{people !== 1 ? 's' : ''} activa{people !== 1 ? 's' : ''}
-            {location ? ` en ${location}` : ''} · se genera solo desde «Reporta a» del expediente
+          <p className="mt-1 text-sm text-slate-500" aria-live="polite">
+            {countsLabel(counts.matched, counts.total)} · se genera solo desde «Reporta a» del expediente
           </p>
         </div>
       </header>
@@ -402,22 +458,44 @@ export function OrganigramaScreen({ initial, initialError }: { initial: OrgChart
           )}
         </div>
 
-        {(data?.locations.length ?? 0) > 0 && (
-          <select
-            aria-label="Ubicación"
-            value={location}
-            onChange={(e) => void changeLocation(e.target.value)}
-            disabled={loading}
-            className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-black focus:outline-none"
-          >
-            <option value="">Ubicación: Todas</option>
-            {data!.locations.map((l) => (
-              <option key={l} value={l}>
-                {l}
-              </option>
-            ))}
-          </select>
-        )}
+        {/* En móvil los filtros viven en un panel plegable; en escritorio van en la barra. */}
+        <button type="button" onClick={() => setFiltersOpen((o) => !o)} aria-expanded={filtersOpen} className={`${BTN} md:hidden`}>
+          Filtros{activeFilters > 0 ? ` (${activeFilters})` : ''}
+        </button>
+        <div className={`${filtersOpen ? 'flex' : 'hidden'} w-full flex-col gap-2 md:flex md:w-auto md:flex-row md:flex-wrap md:items-center`}>
+          {(
+            [
+              ['company', 'Empresa', 'Empresa: Todas', options?.companies ?? []],
+              ['division', 'División', 'División: Todas', options ? divisionOptions(options, selection) : []],
+              ['area', 'Área', 'Área: Todas', options ? areaOptions(options, selection) : []],
+              ['level', 'Nivel', 'Nivel: Todos', options?.levels ?? []],
+              ['location', 'Ubicación', 'Ubicación: Todas', options?.locations ?? data?.locations.map((l) => ({ value: l, label: l, count: 0 })) ?? []],
+            ] as [FilterKey, string, string, { value: string; label: string; count: number }[]][]
+          ).map(
+            ([key, label, all, list]) =>
+              (list.length > 0 || selection[key]) && (
+                <select
+                  key={key}
+                  aria-label={label}
+                  value={selection[key]}
+                  onChange={(e) => changeFilter(key, e.target.value)}
+                  className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-600 focus:border-black focus:outline-none"
+                >
+                  <option value="">{all}</option>
+                  {list.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.count > 0 ? `${o.label} (${o.count})` : o.label}
+                    </option>
+                  ))}
+                </select>
+              ),
+          )}
+          {activeFilters > 0 && (
+            <button type="button" onClick={() => void applyFilters(EMPTY_SELECTION)} className={BTN}>
+              Limpiar Filtros
+            </button>
+          )}
+        </div>
 
         <button type="button" onClick={expandAll} className={BTN}>
           Expandir Todo
@@ -446,11 +524,18 @@ export function OrganigramaScreen({ initial, initialError }: { initial: OrgChart
         )}
       </div>
 
+      {hasContext && !loading && (
+        <p className="mt-3 text-xs text-slate-500">
+          <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-slate-400 align-middle opacity-60" />
+          Los nodos atenuados se muestran por ser jefes de un colaborador del filtro.
+        </p>
+      )}
+
       {loading ? (
         <p className="mt-6 text-sm text-slate-400">Cargando…</p>
       ) : !visible ? (
         <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-6 py-12 text-center text-sm text-slate-500">
-          No hay empleados activos para mostrar{location ? ` en ${location}` : ''}.
+          {activeFilters > 0 ? 'Ningún Colaborador Coincide con los Filtros' : 'No hay empleados activos para mostrar.'}
         </div>
       ) : isMobile ? (
         <ul className="mt-4 rounded-xl border border-slate-200 bg-white p-2">
