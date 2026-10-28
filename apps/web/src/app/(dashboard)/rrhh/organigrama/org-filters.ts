@@ -138,4 +138,22 @@ export function countsLabel(matched: number, total: number): string {
   return `Mostrando ${matched} de ${total} Colaboradores`;
 }
 
-export const CONTEXT_TOOLTIP = 'Se muestra por ser jefe de un colaborador del filtro';
+/** Aviso bajo la barra de filtros (solo con filtros activos): el árbol se corta y se reconecta. */
+export const FILTER_CUT_NOTE = 'Los colaboradores cuyo jefe directo queda fuera del filtro se muestran bajo el siguiente jefe visible.';
+
+/** Vista del organigrama: jerarquía (por defecto) o filas por nivel. */
+export type OrgView = 'hierarchy' | 'levels';
+export const VIEW_PARAM = 'vista';
+export const LEVELS_VIEW_VALUE = 'niveles';
+
+export function viewFromParams(params: Record<string, string | string[] | undefined> | URLSearchParams): OrgView {
+  const v = params instanceof URLSearchParams ? params.get(VIEW_PARAM) : params[VIEW_PARAM];
+  return (Array.isArray(v) ? v[0] : v) === LEVELS_VIEW_VALUE ? 'levels' : 'hierarchy';
+}
+
+/** Query de la URL de la pantalla: filtros + vista (la vista nunca se manda al API). */
+export function pageQuery(sel: OrgSelection, view: OrgView): string {
+  const q = new URLSearchParams(selectionToQuery(sel));
+  if (view === 'levels') q.set(VIEW_PARAM, LEVELS_VIEW_VALUE);
+  return q.toString();
+}

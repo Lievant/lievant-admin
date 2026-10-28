@@ -15,8 +15,6 @@ export interface OrgPerson {
   photoUrl: string | null;
   corporateEmail: string | null;
   phone?: string | null;
-  /** Solo está por ser jefe de alguien que coincide con los filtros. */
-  inContext: boolean;
   children: OrgPerson[];
 }
 

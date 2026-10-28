@@ -6,8 +6,8 @@ import { usePermission } from '@/hooks/use-permission';
 import { useCurrentUser } from '@/components/user-provider';
 import { OrgPersonModal } from './org-person-modal';
 import {
-  CONTEXT_TOOLTIP,
   EMPTY_SELECTION,
+  FILTER_CUT_NOTE,
   activeFilterCount,
   applySelection,
   areaOptions,
@@ -15,12 +15,15 @@ import {
   divisionOptions,
   levelLabel,
   levelShort,
+  pageQuery,
   sanitizeSelection,
   selectionToQuery,
   type FilterKey,
   type OrgFilterOptions,
   type OrgSelection,
+  type OrgView,
 } from './org-filters';
+import { bandEdgePath, layoutByLevels, type BandLayout } from './org-bands';
 import { OrgPhoto } from './org-photo';
 import {
   ancestorsOf,
@@ -36,6 +39,7 @@ import {
   layoutTree,
   searchNodes,
   visibleTree,
+  type Layout,
   type OrgPerson,
   type OrgTreeNode,
 } from './org-tree';
@@ -98,9 +102,8 @@ function NodeCard({
   }
   return (
     <div
-      title={node.inContext ? CONTEXT_TOOLTIP : undefined}
       className={`relative flex h-full w-full items-center gap-3 rounded-xl border bg-white px-3 shadow-sm ${
-        node.inContext ? 'border-dashed border-slate-300 opacity-50' : highlighted ? 'border-black ring-2 ring-black' : 'border-slate-200'
+        highlighted ? 'border-black ring-2 ring-black' : 'border-slate-200'
       }`}
     >
       {levelLabel(node.level) && (
@@ -172,7 +175,7 @@ function MobileNode({
         {isSynthetic(node) ? (
           <span className="text-sm font-semibold text-slate-500">{node.fullName}</span>
         ) : (
-          <button type="button" onClick={() => onOpen(node)} title={node.inContext ? CONTEXT_TOOLTIP : undefined} className={`min-w-0 text-left ${node.inContext ? 'opacity-50' : ''}`}>
+          <button type="button" onClick={() => onOpen(node)} className="min-w-0 text-left">
             <span className="block truncate text-sm font-semibold text-navy">{node.fullName}</span>
             <span className="block truncate text-xs text-slate-500">
               {node.position}
@@ -196,12 +199,17 @@ export function OrganigramaScreen({
   initial,
   initialError,
   initialSelection = EMPTY_SELECTION,
+  initialView = 'hierarchy',
 }: {
   initial: OrgChartData | null;
   initialError: boolean;
   initialSelection?: OrgSelection;
+  initialView?: OrgView;
 }) {
   const isMobile = useIsMobile();
+  const [viewChoice, setViewChoice] = useState<OrgView>(initialView);
+  // En móvil (vista compacta en lista) no existen las bandas: siempre jerarquía.
+  const view: OrgView = isMobile ? 'hierarchy' : viewChoice;
   const user = useCurrentUser();
   const hasFilePermission = usePermission('rrhh', 'empleados', 'read');
   // Sin usuario resuelto no se asume permiso: el expediente es más sensible que el organigrama.
@@ -231,7 +239,12 @@ export function OrganigramaScreen({
   const fullRoot = data?.root ?? null;
   const displayRoot = useMemo(() => (focusId ? findNode(fullRoot, focusId) : fullRoot), [fullRoot, focusId]);
   const visible = useMemo(() => (displayRoot ? visibleTree(displayRoot, collapsed) : null), [displayRoot, collapsed]);
-  const layout = useMemo(() => (visible ? layoutTree(visible, LAYOUT) : null), [visible]);
+  const preferredLevels = useMemo(() => (options?.levels ?? []).map((o) => o.value), [options]);
+  const layout = useMemo<Layout | BandLayout | null>(
+    () => (visible ? (view === 'levels' ? layoutByLevels(visible, LAYOUT, preferredLevels) : layoutTree(visible, LAYOUT)) : null),
+    [visible, view, preferredLevels],
+  );
+  const bands = layout && 'bands' in layout ? layout.bands : [];
   const nodeById = useMemo(() => new Map(flatten(displayRoot).map((n) => [n.id, n])), [displayRoot]);
   const positions = useMemo(() => new Map((layout?.nodes ?? []).map((n) => [n.id, n])), [layout]);
   const results = useMemo(() => searchNodes(fullRoot, query), [fullRoot, query]);
@@ -387,6 +400,20 @@ export function OrganigramaScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Filtros y vista quedan en la URL (la vista nunca viaja al API). */
+  function syncUrl(sel: OrgSelection, v: OrgView) {
+    if (typeof window === 'undefined') return;
+    const q = pageQuery(sel, v);
+    window.history.replaceState(null, '', q ? `${window.location.pathname}?${q}` : window.location.pathname);
+  }
+
+  function changeView(v: OrgView) {
+    if (v === viewChoice) return;
+    needsFit.current = true;
+    setViewChoice(v);
+    syncUrl(selection, v);
+  }
+
   /** Aplica una selección: pide el árbol, reajusta la vista y deja los filtros en la URL. */
   const applyFiltersRef = useRef<(next: OrgSelection) => Promise<void>>(async () => undefined);
   async function applyFilters(next: OrgSelection) {
@@ -395,9 +422,7 @@ export function OrganigramaScreen({
     setLoading(true);
     setError(false);
     const query = selectionToQuery(next);
-    if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', query ? `${window.location.pathname}?${query}` : window.location.pathname);
-    }
+    syncUrl(next, viewChoice);
     try {
       const res = await fetch(`/api/employees/org-chart${query ? `?${query}` : ''}`);
       if (!res.ok) throw new Error();
@@ -422,7 +447,6 @@ export function OrganigramaScreen({
   }
 
   const activeFilters = activeFilterCount(selection);
-  const hasContext = useMemo(() => flatten(fullRoot).some((n) => !isSynthetic(n) && n.inContext), [fullRoot]);
 
   const counts = data?.counts ?? { matched: data?.stats.employees ?? 0, total: data?.stats.employees ?? 0 };
 
@@ -536,11 +560,30 @@ export function OrganigramaScreen({
         )}
       </div>
 
-      {hasContext && !loading && (
-        <p className="mt-3 text-xs text-slate-500">
-          <span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-slate-400 align-middle opacity-60" />
-          Los nodos atenuados se muestran por ser jefes de un colaborador del filtro.
-        </p>
+      {activeFilters > 0 && (
+        <p className="mt-3 text-xs text-slate-500">{FILTER_CUT_NOTE}</p>
+      )}
+
+      {!isMobile && (
+        <div className="mt-3 flex items-center gap-2 text-sm text-slate-600" role="group" aria-label="Vista del organigrama">
+          <span>Vista:</span>
+          {(
+            [
+              ['hierarchy', 'Jerarquía'],
+              ['levels', 'Por Niveles'],
+            ] as [OrgView, string][]
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => changeView(v)}
+              aria-pressed={view === v}
+              className={`rounded-md border px-3 py-1 text-sm ${view === v ? 'border-black bg-black text-white' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       )}
 
       {loading ? (
@@ -563,6 +606,17 @@ export function OrganigramaScreen({
           className="relative mt-4 h-[calc(100vh-260px)] min-h-[420px] cursor-grab touch-none select-none overflow-hidden rounded-xl border border-slate-200 bg-slate-50 active:cursor-grabbing"
           aria-label="Organigrama: arrastra para mover y usa la rueda para acercar"
         >
+          {view === 'levels' && bands.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+              {bands.map((b, i) => (
+                <div
+                  key={b.key}
+                  className={`absolute inset-x-0 border-b border-slate-200 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-100'}`}
+                  style={{ top: transform.y + b.top * transform.k, height: b.height * transform.k }}
+                />
+              ))}
+            </div>
+          )}
           {layout && (
             <div
               className="absolute left-0 top-0"
@@ -583,7 +637,8 @@ export function OrganigramaScreen({
                     const x2 = n.x + NODE_W / 2;
                     const y2 = n.y;
                     const mid = (y1 + y2) / 2;
-                    return <path key={n.id} d={`M${x1},${y1} V${mid} H${x2} V${y2}`} fill="none" stroke="#cbd5e1" strokeWidth={1.5} />;
+                    const d = view === 'levels' ? bandEdgePath(parent, n, { width: NODE_W, height: NODE_H }) : `M${x1},${y1} V${mid} H${x2} V${y2}`;
+                    return <path key={n.id} d={d} fill="none" stroke="#cbd5e1" strokeWidth={1.5} />;
                   })}
               </svg>
               {layout.nodes.map((n) => {
@@ -603,6 +658,22 @@ export function OrganigramaScreen({
               })}
             </div>
           )}
+          {view === 'levels' &&
+            bands.map((b) => {
+              // Etiqueta fija a la izquierda (no se mueve con el arrastre horizontal); sigue a su banda en vertical.
+              const topPx = transform.y + b.top * transform.k;
+              const bottomPx = topPx + b.height * transform.k;
+              const y = Math.min(Math.max(topPx + 6, 6), bottomPx - 26);
+              return (
+                <span
+                  key={b.key}
+                  className="pointer-events-none absolute left-2 z-10 rounded-md bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200"
+                  style={{ top: y, visibility: bottomPx < 0 || topPx > (viewportRef.current?.clientHeight ?? 10000) ? 'hidden' : 'visible' }}
+                >
+                  {b.label}
+                </span>
+              );
+            })}
         </div>
       )}
 

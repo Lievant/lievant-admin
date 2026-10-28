@@ -21,7 +21,7 @@ import {
 } from '../../../../web/src/app/(dashboard)/rrhh/organigrama/org-tree';
 
 function p(id: string, name: string, children: OrgPerson[] = []): OrgPerson {
-  return { id, displayId: id, fullName: name, position: 'Cargo', area: null, level: null, companyName: null, division: null, photoUrl: null, corporateEmail: null, inContext: false, children };
+  return { id, displayId: id, fullName: name, position: 'Cargo', area: null, level: null, companyName: null, division: null, photoUrl: null, corporateEmail: null, children };
 }
 
 // Ana
