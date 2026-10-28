@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SearchIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
+import { DownloadIcon } from '@/components/icons';
 import { useCurrentUser } from '@/components/user-provider';
 import { OrgPersonModal } from './org-person-modal';
 import {
@@ -25,6 +26,7 @@ import {
 } from './org-filters';
 import { bandEdgePath, layoutByLevels, type BandLayout } from './org-bands';
 import { OrgPhoto } from './org-photo';
+import { PAPERS, filtersText, pdfFileName, planPages, type PaperKey } from './org-pdf-plan';
 import {
   ancestorsOf,
   allCollapsed,
@@ -212,6 +214,8 @@ export function OrganigramaScreen({
   const view: OrgView = isMobile ? 'hierarchy' : viewChoice;
   const user = useCurrentUser();
   const hasFilePermission = usePermission('rrhh', 'empleados', 'read');
+  // Exportar a PDF: solo con rrhh.organigrama.export (el API lo vuelve a exigir al autorizar la exportación).
+  const canExport = usePermission('rrhh', 'organigrama', 'export');
   // Sin usuario resuelto no se asume permiso: el expediente es más sensible que el organigrama.
   const canOpenFile = Boolean(user?.roles.some((r) => r.name === 'SUPER_ADMIN')) || hasFilePermission;
 
@@ -229,6 +233,9 @@ export function OrganigramaScreen({
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [transform, setTransform] = useState({ x: 0, y: 0, k: 1 });
+  const [paper, setPaper] = useState<PaperKey>('carta');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const viewportRef = useRef<HTMLDivElement>(null);
   const needsFit = useRef(true);
@@ -446,6 +453,49 @@ export function OrganigramaScreen({
     void applyFilters(options ? applySelection(selection, key, value, options) : { ...selection, [key]: value });
   }
 
+  /**
+   * Exporta a PDF lo que se está viendo (vista, filtros, lo contraído y la rama enfocada). Primero pide el visto
+   * bueno al API (permiso + auditoría) y solo después dibuja el PDF en el navegador.
+   */
+  async function exportPdf() {
+    if (!visible || exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const preferred = options?.levels.map((o) => o.value) ?? [];
+      const pageCount = planPages(visible, view, paper, preferred).length;
+      const body: Record<string, unknown> = { view, paper, pages: pageCount, employees: counts.matched };
+      for (const key of ['company', 'division', 'area', 'level', 'location'] as const) if (selection[key]) body[key] = selection[key];
+      const res = await fetch('/api/employees/org-chart/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(res.status === 403 ? 'No tienes permiso para exportar el organigrama.' : 'No se pudo autorizar la exportación.');
+      const grant = (await res.json()) as { generatedAt: string; organization: string };
+      const { buildOrgPdf } = await import('./org-pdf');
+      const { bytes } = await buildOrgPdf({
+        root: visible,
+        view,
+        paper,
+        preferredLevels: preferred,
+        filtersText: filtersText(selection),
+        counts,
+        generatedAt: grant.generatedAt,
+        organization: grant.organization,
+        hiddenCount: (id) => (collapsed.has(id) && nodeById.get(id) ? descendantCount(nodeById.get(id)!) : 0),
+      });
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = pdfFileName(grant.generatedAt);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'No se pudo generar el PDF.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const activeFilters = activeFilterCount(selection);
 
   const counts = data?.counts ?? { matched: data?.stats.employees ?? 0, total: data?.stats.employees ?? 0 };
@@ -544,6 +594,25 @@ export function OrganigramaScreen({
             Ver Árbol Completo
           </button>
         )}
+        {canExport && !isMobile && (
+          <div className="flex items-center gap-1">
+            <select
+              aria-label="Papel del PDF"
+              value={paper}
+              onChange={(e) => setPaper(e.target.value as PaperKey)}
+              disabled={exporting}
+              className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-600 focus:border-black focus:outline-none"
+            >
+              {(Object.keys(PAPERS) as PaperKey[]).map((k) => (
+                <option key={k} value={k}>{PAPERS[k].label}</option>
+              ))}
+            </select>
+            <button type="button" onClick={() => void exportPdf()} disabled={exporting || loading || !visible} className={`${BTN} inline-flex items-center gap-1.5`}>
+              <DownloadIcon className="h-4 w-4" />
+              {exporting ? 'Generando PDF…' : 'Exportar PDF'}
+            </button>
+          </div>
+        )}
         {!isMobile && (
           <div className="ml-auto flex items-center gap-1">
             <button type="button" onClick={() => zoomBy(1 / 1.2)} className={BTN} aria-label="Alejar">
@@ -559,6 +628,10 @@ export function OrganigramaScreen({
           </div>
         )}
       </div>
+
+      {exportError && (
+        <p role="alert" className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{exportError}</p>
+      )}
 
       {activeFilters > 0 && (
         <p className="mt-3 text-xs text-slate-500">{FILTER_CUT_NOTE}</p>
