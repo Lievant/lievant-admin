@@ -5,6 +5,15 @@ import {
   formatDateTimeMx,
   formatPct,
   frequencyLabel,
+  groupActivities,
+  groupOkrs,
+  hasAnyWeight,
+  okrCode,
+  okrPeriodLabel,
+  okrsOfPeriod,
+  plazasLabel,
+  selectorToPeriod,
+  type ActivityItem,
   makePeriod,
   parsePeriod,
   periodLabel,
@@ -14,8 +23,8 @@ import {
   type OkrItem,
 } from '../../../../web/src/app/(dashboard)/rrhh/matriz-puestos/positions-constants';
 
-const okr = (period: string, weight: number | null, isActive = true): OkrItem => ({
-  id: Math.random().toString(), jobPositionId: 'p', period, objective: 'o', keyResult: 'k', weight, sortOrder: 0, isActive,
+const okr = (period: string | null, weight: number | null, isActive = true, over: Partial<OkrItem> = {}): OkrItem => ({
+  id: Math.random().toString(), jobPositionId: 'p', period, objectiveCode: null, krCode: null, objective: 'o', keyResult: 'k', weight, sortOrder: 0, isActive, ...over,
 });
 
 describe('Matriz de Puestos (web) · periodo', () => {
@@ -68,5 +77,53 @@ describe('Matriz de Puestos (web) · formato', () => {
   it('etiquetas de frecuencia', () => {
     expect(frequencyLabel('trimestral')).toBe('Trimestral');
     expect(frequencyLabel(null)).toBe('—');
+  });
+});
+
+describe('Matriz de Puestos (web) · plantilla, grupos y etiquetas (M6-B)', () => {
+  it('la plantilla («base») es su propio grupo de periodo y no se mezcla con los semestres', () => {
+    const okrs = [okr(null, 40), okr(null, 60), okr('2026-S1', 100), okr(null, 50, false)];
+    expect(selectorToPeriod('base')).toBeNull();
+    expect(selectorToPeriod('2026-S1')).toBe('2026-S1');
+    expect(okrsOfPeriod(okrs, 'base')).toHaveLength(3);
+    expect(sumPeriodWeights(okrs, 'base')).toBe(100);
+    expect(sumPeriodWeights(okrs, '2026-S1')).toBe(100);
+    expect(sumPeriodWeights(okrs, '2026-S2')).toBe(0);
+  });
+  it('sin pesos la suma no se muestra (—): hasAnyWeight es falso', () => {
+    const okrs = [okr(null, null), okr(null, null)];
+    expect(hasAnyWeight(okrs, 'base')).toBe(false);
+    expect(hasAnyWeight([...okrs, okr(null, 10)], 'base')).toBe(true);
+    expect(hasAnyWeight([okr(null, 10, false)], 'base')).toBe(false);
+  });
+  it('agrupa los OKRs por objetivo con sus resultados clave, en orden', () => {
+    const rows = [
+      okr(null, null, true, { objectiveCode: 'O1', krCode: 'KR1', objective: 'A' }),
+      okr(null, null, true, { objectiveCode: 'O1', krCode: 'KR2', objective: 'A' }),
+      okr(null, null, true, { objectiveCode: 'O2', krCode: 'KR1', objective: 'B' }),
+    ];
+    const g = groupOkrs(rows);
+    expect(g.map((x) => [x.code, x.items.length])).toEqual([['O1', 2], ['O2', 1]]);
+  });
+  it('agrupa las actividades por grupo, ordenadas por grupo y por actividad', () => {
+    const a = (groupOrder: number, groupTitle: string, sortOrder: number, description: string): ActivityItem => ({
+      id: description, jobPositionId: 'p', groupOrder, groupTitle, sortOrder, description, frequency: 'mensual', note: null,
+    });
+    const groups = groupActivities([a(2, 'Dos', 1, 'd'), a(1, 'Uno', 2, 'b'), a(1, 'Uno', 1, 'a')]);
+    expect(groups.map((g) => [g.order, g.items.map((i) => i.description)])).toEqual([[1, ['a', 'b']], [2, ['d']]]);
+  });
+  it('etiquetas: periodo de plantilla, plazas, vacante, códigos y frecuencias nuevas', () => {
+    expect(okrPeriodLabel(null)).toBe('Plantilla (Sin Periodo)');
+    expect(okrPeriodLabel('base')).toBe('Plantilla (Sin Periodo)');
+    expect(okrPeriodLabel('2026-S2')).toBe('Semestre 2 · 2026');
+    expect(plazasLabel(0)).toBe('Vacante');
+    expect(plazasLabel(3)).toBe('3');
+    expect(plazasLabel(null)).toBe('—');
+    expect(okrCode({ objectiveCode: 'O1', krCode: 'KR2' })).toBe('O1 · KR2');
+    expect(okrCode({ objectiveCode: 'O1', krCode: null })).toBe('O1');
+    expect(okrCode({})).toBe('');
+    expect(frequencyLabel('semanal')).toBe('Semanal');
+    expect(frequencyLabel('diario')).toBe('Diario');
+    expect(frequencyLabel('eventual')).toBe('Eventual');
   });
 });
