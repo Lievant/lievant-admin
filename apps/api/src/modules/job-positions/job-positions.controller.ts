@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   CreateActivityDto,
+  CreateAreaDto,
   CreateKpiDto,
   CreateOkrDto,
   CreatePositionDto,
@@ -69,6 +70,13 @@ export class JobPositionsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES + 1, files: 1 } }))
   importPositions(@Body() body: ImportBodyDto, @UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: User) {
     return this.importer.run(body.mode, body.division, file, actorOf(user));
+  }
+
+  /** Agrega un área al catálogo (la Matriz no deja capturar áreas como texto libre). */
+  @Post('job-position-areas')
+  @RequirePermission('rrhh', 'matriz-puestos', 'update')
+  createArea(@Body() dto: CreateAreaDto, @CurrentUser() user: User) {
+    return this.positions.createArea(dto, actorOf(user));
   }
 
   @Get('job-positions')

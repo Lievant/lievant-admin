@@ -151,6 +151,7 @@ export interface PositionFilters {
   businessUnit?: string | undefined;
   division?: string | undefined;
   level?: string | undefined;
+  seniority?: string | undefined;
   status?: PositionStatus | undefined;
   validationStatus?: ValidationStatus | undefined;
   search?: string | undefined;
@@ -179,6 +180,10 @@ export function buildPositionWhere(f: PositionFilters): { where: string; params:
   if (f.level) {
     params.push(f.level);
     clauses.push(`p.level = $${params.length}`);
+  }
+  if (f.seniority) {
+    params.push(f.seniority);
+    clauses.push(`p.seniority = $${params.length}`);
   }
   if (f.validationStatus) {
     params.push(f.validationStatus);
@@ -212,6 +217,8 @@ export interface PositionRow {
   description_approved_at: Date | null;
   status: PositionStatus;
   division: string | null;
+  level_original: string | null;
+  seniority: string | null;
   meot_hierarchy: string | null;
   reports_to_text: string | null;
   supervises_text: string | null;
@@ -240,6 +247,7 @@ export interface PositionListItem {
   hasDescription: boolean;
   descriptionApproved: boolean;
   division: string | null;
+  seniority: string | null;
   plazas: number | null;
   /** `plazas = 0`: se muestra como "Vacante". */
   vacant: boolean;
@@ -258,6 +266,7 @@ export function toListItem(r: PositionRow): PositionListItem {
     hasDescription: r.description !== null && r.description !== '',
     descriptionApproved: r.description_approved,
     division: r.division,
+    seniority: r.seniority,
     plazas: r.plazas,
     vacant: r.plazas === 0,
     validationStatus: r.validation_status,
@@ -390,6 +399,8 @@ export function applyValidationChange(current: ValidationState, next: Validation
 }
 
 export interface PositionDetail extends PositionListItem {
+  /** Texto del nivel como venía en el Excel (solo lectura). */
+  levelOriginal: string | null;
   meotHierarchy: string | null;
   reportsTo: string | null;
   supervises: string | null;
@@ -412,6 +423,7 @@ export interface PositionDetail extends PositionListItem {
 export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = []): PositionDetail {
   return {
     ...toListItem(r),
+    levelOriginal: r.level_original,
     meotHierarchy: r.meot_hierarchy,
     reportsTo: r.reports_to_text,
     supervises: r.supervises_text,

@@ -13,6 +13,8 @@ class FakeDb {
   activities: Row[] = [];
   okrs: Row[] = [];
   kpis: Row[] = [];
+  areas: Row[] = [];
+  levelCodes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
   calls: { sql: string; params: unknown[] }[] = [];
   failOn: RegExp | null = null;
   private seq = 0;
@@ -23,7 +25,7 @@ class FakeDb {
   }
 
   async transaction<T>(cb: (m: FakeDb) => Promise<T>): Promise<T> {
-    const snap = structuredClone({ positions: this.positions, activities: this.activities, okrs: this.okrs, kpis: this.kpis });
+    const snap = structuredClone({ positions: this.positions, activities: this.activities, okrs: this.okrs, kpis: this.kpis, areas: this.areas });
     try {
       return await cb(this);
     } catch (e) {
@@ -38,6 +40,12 @@ class FakeDb {
     if (this.failOn && this.failOn.test(sql)) throw new Error('fallo simulado');
     const live = (rows: Row[]) => rows.filter((r) => !r.deleted_at);
     if (/pg_advisory_xact_lock/.test(sql)) return [];
+    if (/FROM catalogs\.job_position_levels/.test(sql)) return this.levelCodes.map((code) => ({ code }));
+    if (/^SELECT name, division_name FROM catalogs\.areas/.test(sql)) return this.areas.map((a) => ({ ...a }));
+    if (/^INSERT INTO catalogs\.areas/.test(sql)) {
+      this.areas.push({ name: params[0], division_name: params[1] });
+      return [];
+    }
     if (/^SELECT \* FROM hr\.job_positions WHERE deleted_at IS NULL/.test(sql)) return live(this.positions).map((r) => ({ ...r }));
     if (/^SELECT code FROM hr\.job_positions/.test(sql)) return this.positions.map((r) => ({ code: r.code }));
     if (/^SELECT group_order.* FROM hr\.job_position_activities/.test(sql)) {
@@ -49,11 +57,11 @@ class FakeDb {
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
     if (/^INSERT INTO hr\.job_positions/.test(sql)) {
-      const [code, title, area, level, createdBy, division, meot, reports, supervises, plazas, role, objective, points, comments, vstatus, vby, vat] = params;
+      const [code, title, area, level, createdBy, division, meot, reports, supervises, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
       const row: Row = {
         id: this.id('P'), code, title, area, level, status: 'activo', description: null, description_approved: false, business_unit: null, created_by: createdBy,
         division, meot_hierarchy: meot, reports_to_text: reports, supervises_text: supervises, plazas, role_summary: role, position_objective: objective,
-        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, deleted_at: null,
+        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, deleted_at: null,
       };
       this.positions.push(row);
       return [{ id: row.id }];
@@ -174,16 +182,19 @@ describe('Importación de la Matriz · aplicar', () => {
     expect(db.activities.filter((a) => a.job_position_id === db.positions[0]!.id).map((a) => [a.frequency, a.note])).toEqual([['mensual', null], ['semanal', 'con nota']]);
   });
 
-  it('audita archivo, división y conteos', async () => {
+  it('audita archivo, división y conteos, y cada área nueva del catálogo', async () => {
     const { audit, service } = setup();
     await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
-    expect(audit.logActivity).toHaveBeenCalledTimes(1);
-    const call = audit.logActivity.mock.calls[0]![0];
-    expect(call).toMatchObject({ action: 'import', module: 'matriz-puestos', userId: 'user-1', entityName: 'TEST-matriz.xlsx' });
-    expect(call.changes).toEqual({
+    const calls = audit.logActivity.mock.calls.map((c) => c[0]);
+    const imp = calls.find((c) => c.action === 'import');
+    expect(imp).toMatchObject({ module: 'matriz-puestos', userId: 'user-1', entityName: 'TEST-matriz.xlsx' });
+    expect(imp.changes).toEqual({
       fileName: { from: null, to: 'TEST-matriz.xlsx' }, division: { from: null, to: 'TEST-Ecom' },
-      created: { from: null, to: 2 }, updated: { from: null, to: 0 }, unchanged: { from: null, to: 0 },
+      created: { from: null, to: 2 }, updated: { from: null, to: 0 }, unchanged: { from: null, to: 0 }, newAreas: { from: null, to: 2 },
     });
+    const areas = calls.filter((c) => c.entityType === 'catalog_area');
+    expect(areas.map((c) => c.entityName)).toEqual(['TEST-Ecom · TEST-Marketplace', 'TEST-Ecom · TEST-Performance']);
+    expect(areas.every((c) => c.action === 'create')).toBe(true);
   });
 
   it('es idempotente: la segunda vez todo sale «sin cambios», sin escribir ni duplicar', async () => {
@@ -372,5 +383,114 @@ describe('Matriz de Puestos · actividades', () => {
     await svc.remove('a1', ACTOR);
     expect(audit.logActivity.mock.calls.map((c) => c[0].action)).toEqual(['create', 'update', 'delete']);
     expect(audit.logActivity.mock.calls[1]![0].changes).toMatchObject({ frequency: { from: 'diario', to: 'semanal' }, description: { from: 'modificada', to: 'modificada' } });
+  });
+});
+
+describe('Importación de la Matriz · listas cerradas (nivel, categoría y área)', () => {
+  const names = (db: FakeDb) => db.areas.map((a) => a.name);
+
+  it('área nueva: la vista previa avisa y no escribe; al aplicar queda en el catálogo, una sola vez', async () => {
+    const { db, service } = setup();
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    expect(prev.newAreas).toEqual(['TEST-Marketplace', 'TEST-Performance']);
+    expect(prev.warnings.filter((w) => /Área nueva/.test(w.message))).toHaveLength(2);
+    expect(db.areas).toEqual([]);
+    expect(db.writes).toEqual([]);
+    await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    expect(names(db)).toEqual(['TEST-Marketplace', 'TEST-Performance']);
+    expect(db.areas.every((a) => a.division_name === 'TEST-Ecom')).toBe(true);
+  });
+
+  it('con las áreas ya en el catálogo no hay avisos de área y se usa el nombre canónico', async () => {
+    const { db, service } = setup();
+    db.areas.push({ name: 'TEST-Marketplace', division_name: 'TEST-Ecom' }, { name: 'TEST-Performance', division_name: 'test-ecom ' });
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row(' test-marketplace', 'TEST-A'), row('TEST-PERFORMANCE ', 'TEST-B')]), ACTOR);
+    expect(r.warnings.filter((w) => /Área nueva/.test(w.message))).toEqual([]);
+    expect(r.newAreas).toEqual([]);
+    expect(db.positions.map((p) => p.area)).toEqual(['TEST-Marketplace', 'TEST-Performance']);
+    expect(db.areas).toHaveLength(2);
+  });
+
+  it('«Marketplace» y «marketplace » en el mismo archivo no crean dos áreas', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('Marketplace', 'TEST-A'), row('marketplace ', 'TEST-B'), row('MARKETPLACE', 'TEST-C')]), ACTOR);
+    expect(r.newAreas).toEqual(['Marketplace']);
+    expect(names(db)).toEqual(['Marketplace']);
+    expect(db.positions.map((p) => p.area)).toEqual(['Marketplace', 'Marketplace', 'Marketplace']);
+  });
+
+  it('el área de otra división no cuenta: se crea la de esta división', async () => {
+    const { db, service } = setup();
+    db.areas.push({ name: 'TEST-Marketplace', division_name: 'Otra División' });
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-A')]), ACTOR);
+    expect(db.areas).toHaveLength(2);
+  });
+
+  it('todo o nada: si falla el alta de un puesto, el área nueva tampoco queda en el catálogo', async () => {
+    const { db, service } = setup();
+    db.failOn = /^INSERT INTO hr\.job_positions/;
+    await expect(service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR)).rejects.toThrow('fallo simulado');
+    expect(db.areas).toEqual([]);
+  });
+
+  it('reimportar el mismo archivo con las áreas ya creadas sigue dando «sin cambios» y sin áreas nuevas', async () => {
+    const { db, service } = setup();
+    const file = await xlsx(FILE_ROWS);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    expect(again.positions.map((p) => p.action)).toEqual(['sin cambios', 'sin cambios']);
+    expect(again.newAreas).toEqual([]);
+    expect(db.areas).toHaveLength(2);
+  });
+
+  it('nivel: «iv», « IV » y «4» se leen como IV', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'iv' }), row('A1', 'P2', { 3: ' IV ' }), row('A1', 'P3', { 3: '4' }), row('A1', 'P4', { 3: 'VIII' })]), ACTOR);
+    expect(db.positions.map((p) => p.level)).toEqual(['IV', 'IV', 'IV', 'VIII']);
+    expect(db.positions[2]!.level_original).toBe('4');
+  });
+
+  it('nivel fuera del catálogo: error bloqueante con su fila; no se importa nada', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 3: 'XV' })]), ACTOR);
+    expect(r.applied).toBe(false);
+    expect(r.errors).toEqual([{ row: 5, message: expect.stringMatching(/El nivel «XV» no está en el catálogo de niveles/) }]);
+    expect(db.positions).toHaveLength(0);
+  });
+
+  it('nivel ambiguo (rango, «Sin nivel», «Por definir»): queda vacío con aviso y guarda el texto original', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' }), row('A1', 'P2', { 3: 'Sin nivel (MEOT: III)' }), row('A1', 'P3', { 3: 'Por definir' }), row('A1', 'P4', { 3: '' })]), ACTOR);
+    expect(r.errors).toEqual([]);
+    expect(db.positions.map((p) => [p.level, p.level_original])).toEqual([[null, 'V / VI'], [null, 'Sin nivel (MEOT: III)'], [null, 'Por definir'], [null, null]]);
+    expect(r.warnings.filter((w) => /es ambiguo/.test(w.message))).toHaveLength(3);
+  });
+
+  it('un nivel elegido a mano no se pisa con un valor ambiguo ni se reporta como cambio; uno válido del archivo sí lo actualiza', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR);
+    db.positions[0]!.level = 'III'; // elegido a mano en el desplegable
+    const same = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR);
+    expect(same.positions[0]!.action).toBe('sin cambios');
+    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'Sin nivel' })]), ACTOR);
+    expect(other.positions[0]!.action).toBe('sin cambios');
+    expect(db.positions[0]).toMatchObject({ level: 'III', level_original: 'V / VI' });
+    const valid = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'VI' })]), ACTOR);
+    expect(valid.positions[0]!.action).toBe('actualizar');
+    expect(db.positions[0]).toMatchObject({ level: 'VI', level_original: 'VI' });
+  });
+
+  it('categoría: sale de la jerarquía (MEOT); sin coincidencia queda vacía sin bloquear, y no pisa la elegida a mano', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([
+      row('A1', 'P1', { 4: 'Especialista Semi Senior (MEOT)' }), row('A1', 'P2', { 4: 'Operativo Junior' }),
+      row('A1', 'P3', { 4: 'Especialista Senior' }), row('A1', 'P4', { 4: 'Liderazgo Operativo' }),
+    ]), ACTOR);
+    expect(r.errors).toEqual([]);
+    expect(db.positions.map((p) => p.seniority)).toEqual(['semi_senior', 'junior', 'senior', null]);
+    db.positions[3]!.seniority = 'senior'; // elegida a mano
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P4', { 4: 'Liderazgo Operativo' })]), ACTOR);
+    expect(again.positions[0]!.action).toBe('sin cambios');
+    expect(db.positions[3]!.seniority).toBe('senior');
   });
 });

@@ -4,11 +4,14 @@ import {
   norm,
   parseActivities,
   parseKpis,
-  parseMatrixSheets,
+  parseMatrixSheets as parseSheets,
   parseOkrs,
   type ImportIssue,
   type RawSheet,
 } from './job-positions-import.parser';
+
+const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII'];
+const parseMatrixSheets = (sheets: RawSheet[]) => parseSheets(sheets, { levelCodes: LEVELS });
 
 const issues = () => ({ warnings: [] as ImportIssue[], errors: [] as ImportIssue[] });
 

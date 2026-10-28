@@ -14,6 +14,7 @@ import {
   type ParseResult,
   type RawSheet,
 } from './job-positions-import.parser';
+import { findAreaExact, type CatalogArea } from './job-positions-catalog.util';
 import { applyValidationChange, nextPositionCode, type ValidationStatus } from './job-positions.util';
 
 type Q = { query: DataSource['query'] };
@@ -36,6 +37,8 @@ export interface ImportSummary {
   created: number;
   updated: number;
   unchanged: number;
+  /** Áreas que no estaban en el catálogo y se agregan al aplicar. */
+  newAreas: number;
   plazas: number;
   areas: number;
   groups: number;
@@ -55,6 +58,8 @@ export interface ImportResult {
   division: string;
   divisionHint: string | null;
   positions: ImportPositionPreview[];
+  /** Nombres (canónicos) de las áreas nuevas que se agregarán al catálogo. */
+  newAreas: string[];
   summary: ImportSummary;
   warnings: ImportIssue[];
   errors: ImportIssue[];
@@ -67,6 +72,8 @@ interface ExistingPosition {
   area: string;
   division: string | null;
   level: string | null;
+  level_original: string | null;
+  seniority: string | null;
   meot_hierarchy: string | null;
   reports_to_text: string | null;
   supervises_text: string | null;
@@ -103,7 +110,6 @@ interface Plan {
 const same = (a: unknown, b: unknown): boolean => (a ?? null) === (b ?? null);
 
 const SIMPLE_MAP: { column: ColumnKey; field: keyof ParsedPosition; col: keyof ExistingPosition }[] = [
-  { column: 'level', field: 'level', col: 'level' },
   { column: 'meot', field: 'meotHierarchy', col: 'meot_hierarchy' },
   { column: 'reportsTo', field: 'reportsTo', col: 'reports_to_text' },
   { column: 'supervises', field: 'supervises', col: 'supervises_text' },
@@ -162,33 +168,49 @@ export class JobPositionsImportService {
     actor: Actor,
   ): Promise<ImportResult> {
     const sheets = await this.readWorkbook(file);
-    const parsed = parseMatrixSheets(sheets);
+    const levelCodes = await this.levelCodes(this.dataSource);
+    const parsed = parseMatrixSheets(sheets, { levelCodes });
     if (parsed.dataRows > MAX_IMPORT_ROWS) throw new BadRequestException(`El archivo pasa del límite de ${MAX_IMPORT_ROWS} filas.`);
     const fileName = file?.originalname ?? '';
     const div = division.trim();
 
-    if (parsed.errors.length > 0) return this.result(mode, false, fileName, div, parsed, [], new Map());
+    if (parsed.errors.length > 0) return this.result(mode, false, fileName, div, parsed, [], new Map(), []);
 
     if (mode === 'preview') {
-      const plans = await this.plan(this.dataSource, parsed, div, actor);
-      return this.result(mode, false, fileName, div, parsed, parsed.positions, plans);
+      const areas = await this.resolveAreas(this.dataSource, parsed, div, false);
+      const plans = await this.plan(this.dataSource, areas.parsed, div, actor);
+      return this.result(mode, false, fileName, div, areas.parsed, areas.parsed.positions, plans, areas.created);
     }
 
-    const plans = await this.dataSource.transaction(async (m) => {
+    const { plans, areas } = await this.dataSource.transaction(async (m) => {
       // Mismo candado que el alta de puestos: dos importaciones (o un alta) simultáneas no repiten códigos.
       await m.query(`SELECT pg_advisory_xact_lock(hashtext('hr.job_positions.code'))`);
-      const plans = await this.plan(m, parsed, div, actor);
+      // Las áreas nuevas se crean en la misma transacción: si algo falla, tampoco queda el área.
+      const areas = await this.resolveAreas(m, parsed, div, true);
+      const plans = await this.plan(m, areas.parsed, div, actor);
       const codes = ((await m.query(`SELECT code FROM hr.job_positions`)) as { code: string }[]).map((c) => c.code);
-      for (const p of parsed.positions) {
+      for (const p of areas.parsed.positions) {
         const plan = plans.get(p.row)!;
         if (plan.action === 'sin cambios') continue;
         const code = plan.action === 'crear' ? nextPositionCode(codes) : plan.existing!.code;
         if (plan.action === 'crear') codes.push(code);
-        await this.write(m, p, plan, div, code, parsed.columns, actor);
+        await this.write(m, p, plan, div, code, areas.parsed.columns, actor);
       }
-      return plans;
+      return { plans, areas };
     });
-    const result = this.result(mode, true, fileName, div, parsed, parsed.positions, plans);
+    const result = this.result(mode, true, fileName, div, areas.parsed, areas.parsed.positions, plans, areas.created);
+    for (const name of areas.created) {
+      await this.audit.logActivity({
+        userId: actor.id ?? null,
+        userEmail: actor.email ?? null,
+        userName: actor.name ?? null,
+        action: 'create',
+        module: 'matriz-puestos',
+        entityType: 'catalog_area',
+        entityName: `${div} · ${name}`,
+        changes: { name: { from: null, to: name }, division: { from: null, to: div }, source: { from: null, to: 'importación' } },
+      });
+    }
     await this.audit.logActivity({
       userId: actor.id ?? null,
       userEmail: actor.email ?? null,
@@ -203,9 +225,43 @@ export class JobPositionsImportService {
         created: { from: null, to: result.summary.created },
         updated: { from: null, to: result.summary.updated },
         unchanged: { from: null, to: result.summary.unchanged },
+        newAreas: { from: null, to: result.summary.newAreas },
       },
     });
     return result;
+  }
+
+  private async levelCodes(m: Q): Promise<string[]> {
+    const rows = (await m.query(`SELECT code FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[];
+    return rows.map((r) => r.code);
+  }
+
+  /**
+   * Compara cada Sub-área del archivo con el catálogo de áreas de la división (sin mayúsculas, acentos ni espacios
+   * extra): si existe usa su nombre canónico; si no, es un área nueva (aviso) que se agrega al catálogo cuando `create`.
+   * Dos escrituras distintas de la misma área nueva («Marketplace» y «marketplace ») cuentan como una sola.
+   */
+  private async resolveAreas(m: Q, parsed: ParseResult, division: string, create: boolean): Promise<{ parsed: ParseResult; created: string[] }> {
+    if (create) await m.query(`SELECT pg_advisory_xact_lock(hashtext('catalogs.areas'))`);
+    const rows = (await m.query(`SELECT name, division_name FROM catalogs.areas WHERE is_active IS NOT FALSE`)) as { name: string; division_name: string | null }[];
+    const catalog: CatalogArea[] = rows.map((r) => ({ name: r.name, divisionName: r.division_name }));
+    const created: string[] = [];
+    const warnings = [...parsed.warnings];
+    const positions = parsed.positions.map((p) => {
+      const hit = findAreaExact(catalog, division, p.area);
+      if (hit) return { ...p, area: hit.name };
+      // Área nueva: el primer nombre con que aparece es el canónico.
+      catalog.push({ name: p.area, divisionName: division });
+      created.push(p.area);
+      warnings.push({ row: p.row, message: `Área nueva «${p.area}»: se agregará al catálogo de áreas` });
+      return p;
+    });
+    if (create) {
+      for (const name of created) {
+        await m.query(`INSERT INTO catalogs.areas (name, division_name, is_active) VALUES ($1, $2, true)`, [name, division]);
+      }
+    }
+    return { parsed: { ...parsed, positions, warnings }, created };
   }
 
   // ── Plan ───────────────────────────────────────────────────────────────────
@@ -248,6 +304,18 @@ export class JobPositionsImportService {
     }
 
     // El estatus y los comentarios del Head del sistema solo se pisan si el archivo trae algo.
+    // Nivel: un valor ambiguo del Excel (rango, «Sin nivel»…) no pisa un nivel ya elegido a mano ni cuenta como cambio.
+    if (columns.has('level')) {
+      if (p.levelAmbiguous && e.level !== null) {
+        // se conserva el nivel y su texto original tal cual
+      } else {
+        if (!same(e.level, p.level)) simple.level = p.level;
+        if (!same(e.level_original, p.levelOriginal)) simple.level_original = p.levelOriginal;
+      }
+    }
+    // Categoría: solo si la jerarquía (MEOT) del archivo trae una; si no, se conserva la del sistema.
+    if (columns.has('meot') && p.seniority !== null && p.seniority !== e.seniority) simple.seniority = p.seniority;
+
     let validation: Plan['validation'] = null;
     if (columns.has('status') && p.validationStatus !== 'pendiente' && p.validationStatus !== e.validation_status) {
       validation = applyValidationChange({ status: e.validation_status, by: e.validated_by, at: e.validated_at }, p.validationStatus, actor.id ?? null, new Date());
@@ -339,12 +407,13 @@ export class JobPositionsImportService {
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, meot_hierarchy, reports_to_text,
            supervises_text, plazas, role_summary, position_objective, validation_points, head_comments,
-           validation_status, validated_by, validated_at)
-         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+           validation_status, validated_by, validated_at, level_original, seniority)
+         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
         [
           code, p.title, p.area, p.level, actor.id ?? null, division, p.meotHierarchy, p.reportsTo, p.supervises, p.plazas,
           p.roleSummary, p.positionObjective, p.validationPoints, plan.headComments?.value ?? null,
           plan.validation?.status ?? 'pendiente', plan.validation?.by ?? null, plan.validation?.at ?? null,
+          p.levelOriginal, p.seniority,
         ],
       )) as { id: string }[];
       positionId = rows[0]!.id;
@@ -424,6 +493,7 @@ export class JobPositionsImportService {
     parsed: ParseResult,
     positions: ParsedPosition[],
     plans: Map<number, Plan>,
+    newAreas: string[],
   ): ImportResult {
     const rows: ImportPositionPreview[] = positions.map((p) => ({
       row: p.row,
@@ -442,6 +512,7 @@ export class JobPositionsImportService {
       created: count('crear'),
       updated: count('actualizar'),
       unchanged: count('sin cambios'),
+      newAreas: newAreas.length,
       plazas: positions.reduce((n, p) => n + (p.plazas ?? 0), 0),
       areas: new Set(positions.map((p) => norm(p.area))).size,
       groups,
@@ -459,6 +530,7 @@ export class JobPositionsImportService {
       division,
       divisionHint: parsed.divisionHint,
       positions: rows,
+      newAreas,
       summary,
       warnings: parsed.warnings,
       errors: parsed.errors,

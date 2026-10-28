@@ -23,6 +23,7 @@ import {
   POSITION_STATUSES,
   VALIDATION_STATUSES,
 } from '../job-positions.util';
+import { SENIORITIES } from '../job-positions-catalog.util';
 
 
 /** Texto recortado; la cadena vacía se vuelve null (opcionales). */
@@ -51,6 +52,11 @@ export class CreatePositionDto {
   @IsString()
   @MaxLength(50)
   level?: string | null;
+
+  @IsOptional()
+  @emptyToNull
+  @IsIn(SENIORITIES, { message: 'La categoría debe ser Junior, Semi Senior o Senior' })
+  seniority?: string | null;
 
 
   @IsOptional()
@@ -135,6 +141,11 @@ export class UpdatePositionDto {
   @IsString()
   @MaxLength(50)
   level?: string | null;
+
+  @IsOptional()
+  @emptyToNull
+  @IsIn(SENIORITIES, { message: 'La categoría debe ser Junior, Semi Senior o Senior' })
+  seniority?: string | null;
 
 
   @IsOptional()
@@ -225,6 +236,11 @@ export class PositionQueryDto {
   @IsString()
   @MaxLength(50)
   level?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  seniority?: string;
 
   @IsOptional()
   @IsIn(POSITION_STATUSES)
@@ -482,4 +498,21 @@ export class ImportBodyDto {
   @IsNotEmpty()
   @MaxLength(100)
   division!: string;
+}
+
+export class CreateAreaDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  division!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(100)
+  name!: string;
+
+  /** Confirma crear un área «casi igual» a otra ya existente. */
+  @IsOptional()
+  @IsBoolean()
+  confirmSimilar?: boolean;
 }

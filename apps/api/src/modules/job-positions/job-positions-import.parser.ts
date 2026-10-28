@@ -3,6 +3,7 @@
  * Mapea columnas por nombre normalizado, separa actividades, OKRs y KPIs de sus celdas de texto y devuelve
  * avisos (no bloquean) y errores (bloquean la importación).
  */
+import { resolveLevel, seniorityFromText, type Seniority } from './job-positions-catalog.util';
 import {
   ACTIVITY_FREQUENCIES,
   MEASUREMENT_FREQUENCIES,
@@ -53,7 +54,14 @@ export interface ParsedPosition {
   row: number;
   title: string;
   area: string;
+  /** Código del catálogo de niveles, o null (vacío o ambiguo). */
   level: string | null;
+  /** Texto del nivel tal como venía en el Excel (para no perder «V / VI», «Sin nivel (MEOT: III)»…). */
+  levelOriginal: string | null;
+  /** El nivel venía ambiguo (rango, «Sin nivel», «Por definir»…): no debe pisar un nivel elegido a mano. */
+  levelAmbiguous: boolean;
+  /** Categoría Junior / Semi Senior / Senior leída de la «Jerarquía (MEOT)»; null si no trae. */
+  seniority: Seniority | null;
   meotHierarchy: string | null;
   reportsTo: string | null;
   supervises: string | null;
@@ -304,7 +312,7 @@ export function pickSheet(sheets: RawSheet[]): { sheet: RawSheet; headerRow: num
   return null;
 }
 
-export function parseMatrixSheets(sheets: RawSheet[]): ParseResult {
+export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: readonly string[] } = { levelCodes: [] }): ParseResult {
   const warnings: ImportIssue[] = [];
   const errors: ImportIssue[] = [];
   const picked = pickSheet(sheets);
@@ -362,11 +370,19 @@ export function parseMatrixSheets(sheets: RawSheet[]): ParseResult {
     };
     checkLen(title, LIMITS.title, 'El Puesto');
     checkLen(area, LIMITS.area, 'La Sub-área');
-    const level = text(r, 'level');
+    const levelRaw = text(r, 'level');
+    const resolved = resolveLevel(levelRaw, options.levelCodes);
+    let level: string | null = null;
+    if (resolved.kind === 'ok') level = resolved.code;
+    else if (resolved.kind === 'ambiguous') {
+      warnings.push({ row: rowNumber, message: `El nivel «${(levelRaw ?? '').slice(0, 40)}» es ambiguo; se dejó sin nivel y se guardó el texto original` });
+    } else if (resolved.kind === 'invalid') {
+      errors.push({ row: rowNumber, message: `El nivel «${(levelRaw ?? '').slice(0, 40)}» no está en el catálogo de niveles (${options.levelCodes.join(', ')})` });
+    }
     const meot = text(r, 'meot');
     const reportsTo = text(r, 'reportsTo');
     const supervises = text(r, 'supervises');
-    checkLen(level, LIMITS.level, 'El Nivel');
+    checkLen(levelRaw, 100, 'El Nivel');
     checkLen(meot, LIMITS.meot, 'La Jerarquía (MEOT)');
     checkLen(reportsTo, LIMITS.reportsTo, '«Reporta a»');
     checkLen(supervises, LIMITS.supervises, '«Supervisa a»');
@@ -390,6 +406,9 @@ export function parseMatrixSheets(sheets: RawSheet[]): ParseResult {
       title,
       area,
       level,
+      levelOriginal: levelRaw,
+      levelAmbiguous: resolved.kind === 'ambiguous',
+      seniority: seniorityFromText(meot),
       meotHierarchy: meot,
       reportsTo,
       supervises,
