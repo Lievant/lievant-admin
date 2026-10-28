@@ -220,3 +220,36 @@ describe('Organigrama PDF · archivo generado', () => {
     expect(await text(bytes)).toContain('+7');
   });
 });
+
+describe('Organigrama · escala única de 9 niveles y un nivel fuera de catálogo', () => {
+  const NINE = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+  const tree = () =>
+    person('TEST-Dirección', 'I', [
+      person('TEST-Head', 'III', [person('TEST-Senior', 'VI'), person('TEST-Semi', 'VII'), person('TEST-Junior', 'VIII'), person('TEST-Trainee', 'IX')]),
+      person('TEST-Rara', 'IA'),
+      person('TEST-Sin nivel', null),
+    ]);
+  const base = { counts: { matched: 8, total: 8 }, generatedAt: '2026-10-28T19:45:00.000Z', organization: 'Lievant', hiddenCount: () => 0 };
+
+  it('Por Niveles ordena I…IX por el catálogo, el fuera de catálogo («IA») antes de «Sin Nivel», y no rompe', () => {
+    const [page] = charts(planPages(tree(), 'levels', 'a3', NINE));
+    const labels = (page!.layout as { bands: { label: string }[] }).bands.map((b) => b.label);
+    expect(labels).toEqual(['Nivel I', 'Nivel III', 'Nivel VI', 'Nivel VII', 'Nivel VIII', 'Nivel IX', 'Nivel IA', 'Sin Nivel']);
+  });
+
+  it('las bandas siguen el orden del catálogo aunque el catálogo lo cambie (sort_order)', () => {
+    const [page] = charts(planPages(tree(), 'levels', 'a3', ['IX', 'VIII', 'VII', 'VI', 'V', 'IV', 'III', 'II', 'I']));
+    const labels = (page!.layout as { bands: { label: string }[] }).bands.map((b) => b.label);
+    expect(labels.slice(0, 6)).toEqual(['Nivel IX', 'Nivel VIII', 'Nivel VII', 'Nivel VI', 'Nivel III', 'Nivel I']);
+    expect(labels.slice(-2)).toEqual(['Nivel IA', 'Sin Nivel']);
+  });
+
+  it('el PDF se genera en ambas vistas con los 9 niveles y «IA» (texto de las bandas y de las tarjetas)', async () => {
+    const lv = await buildOrgPdf({ ...base, root: tree(), view: 'levels', paper: 'a3', preferredLevels: NINE, filtersText: 'Nivel: IX' });
+    const hier = await buildOrgPdf({ ...base, root: tree(), view: 'hierarchy', paper: 'carta', preferredLevels: NINE, filtersText: 'Sin filtros' });
+    for (const bytes of [lv.bytes, hier.bytes]) expect(Buffer.from(bytes).subarray(0, 5).toString()).toBe('%PDF-');
+    const doc = await PDFDocument.load(lv.bytes);
+    expect(doc.getPageCount()).toBe(1);
+    expect(lv.pages).toHaveLength(1);
+  });
+});
