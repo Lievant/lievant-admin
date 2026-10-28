@@ -4,11 +4,14 @@ import { useState } from 'react';
 import { CloseIcon } from '@/components/icons';
 import { readError } from './position-form-dialog';
 import {
+  ACTIVITY_FREQUENCY_OPTIONS,
+  BASE_PERIOD,
   FREQUENCY_OPTIONS,
   currentYearMx,
   makePeriod,
   parsePeriod,
   yearOptions,
+  type ActivityItem,
   type KpiItem,
   type OkrItem,
 } from './positions-constants';
@@ -43,7 +46,10 @@ function Actions({ onClose, saving }: { onClose: () => void; saving: boolean }) 
   );
 }
 
-/** Alta o edición de un OKR. El periodo es un selector (año y semestre), nunca texto libre. */
+/**
+ * Alta o edición de un OKR. El periodo es un selector: «Plantilla (Sin Periodo)» o año y semestre, nunca texto libre.
+ * `defaultPeriod` es el valor del selector de la pantalla ('base' = plantilla).
+ */
 export function OkrDialog({
   positionId,
   okr,
@@ -57,7 +63,11 @@ export function OkrDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const initial = parsePeriod(okr?.period ?? defaultPeriod) ?? { year: currentYearMx(), semester: 1 as const };
+  const startPeriod = okr ? (okr.period ?? BASE_PERIOD) : defaultPeriod;
+  const initial = parsePeriod(startPeriod) ?? { year: currentYearMx(), semester: 1 as const };
+  const [isTemplate, setIsTemplate] = useState(startPeriod === BASE_PERIOD);
+  const [objectiveCode, setObjectiveCode] = useState(okr?.objectiveCode ?? '');
+  const [krCode, setKrCode] = useState(okr?.krCode ?? '');
   const [year, setYear] = useState(initial.year);
   const [semester, setSemester] = useState<1 | 2>(initial.semester);
   const [objective, setObjective] = useState(okr?.objective ?? '');
@@ -78,7 +88,15 @@ export function OkrDialog({
 
     setSaving(true);
     try {
-      const payload = { period: makePeriod(year, semester), objective: objective.trim(), keyResult: keyResult.trim(), weight: w, isActive };
+      const payload = {
+        period: isTemplate ? null : makePeriod(year, semester),
+        objectiveCode: objectiveCode.trim() || null,
+        krCode: krCode.trim() || null,
+        objective: objective.trim(),
+        keyResult: keyResult.trim(),
+        weight: w,
+        isActive,
+      };
       const res = await fetch(okr ? `/api/hr/job-position-okrs/${okr.id}` : `/api/hr/job-positions/${positionId}/okrs`, {
         method: okr ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -95,19 +113,33 @@ export function OkrDialog({
   return (
     <Shell title={okr ? 'Editar OKR' : 'Nuevo OKR'} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
-        <div className="grid grid-cols-2 gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
+          Plantilla (Sin Periodo): vale para cualquier semestre
+        </label>
+        <div className={`grid grid-cols-2 gap-4 ${isTemplate ? 'opacity-50' : ''}`}>
           <div className="flex flex-col gap-1">
             <label htmlFor="okr-year" className={LABEL}>Año</label>
-            <select id="okr-year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={INPUT}>
+            <select id="okr-year" value={year} disabled={isTemplate} onChange={(e) => setYear(Number(e.target.value))} className={INPUT}>
               {yearOptions(currentYearMx(), [initial.year]).map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="okr-sem" className={LABEL}>Semestre</label>
-            <select id="okr-sem" value={semester} onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)} className={INPUT}>
+            <select id="okr-sem" value={semester} disabled={isTemplate} onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)} className={INPUT}>
               <option value={1}>Semestre 1 (Ene–Jun)</option>
               <option value={2}>Semestre 2 (Jul–Dic)</option>
             </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="okr-ocode" className={LABEL}>Código del Objetivo (Opcional)</label>
+            <input id="okr-ocode" value={objectiveCode} onChange={(e) => setObjectiveCode(e.target.value)} maxLength={10} placeholder="O1" className={INPUT} />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="okr-krcode" className={LABEL}>Código del Resultado (Opcional)</label>
+            <input id="okr-krcode" value={krCode} onChange={(e) => setKrCode(e.target.value)} maxLength={10} placeholder="KR1" className={INPUT} />
           </div>
         </div>
         <div className="flex flex-col gap-1">
@@ -215,7 +247,89 @@ export function KpiDialog({
   );
 }
 
-/** Confirmación de una baja (puesto, OKR o KPI). */
+/** Alta o edición de una actividad (responsabilidad) con su grupo, frecuencia y nota. */
+export function ActivityDialog({
+  positionId,
+  activity,
+  defaultGroup,
+  onClose,
+  onSaved,
+}: {
+  positionId: string;
+  activity: ActivityItem | null;
+  defaultGroup: { order: number; title: string } | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [groupOrder, setGroupOrder] = useState(String(activity?.groupOrder ?? defaultGroup?.order ?? 1));
+  const [groupTitle, setGroupTitle] = useState(activity?.groupTitle ?? defaultGroup?.title ?? '');
+  const [description, setDescription] = useState(activity?.description ?? '');
+  const [frequency, setFrequency] = useState<string>(activity?.frequency ?? '');
+  const [note, setNote] = useState(activity?.note ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    const order = Number(groupOrder);
+    if (!Number.isInteger(order) || order < 1) return setError('El número de grupo debe ser un entero de 1 o más.');
+    if (!groupTitle.trim()) return setError('El título del grupo es obligatorio.');
+    if (!description.trim()) return setError('La descripción de la actividad es obligatoria.');
+    setSaving(true);
+    try {
+      const payload = { groupOrder: order, groupTitle: groupTitle.trim(), description: description.trim(), frequency: frequency || null, note: note.trim() || null };
+      const res = await fetch(activity ? `/api/hr/job-position-activities/${activity.id}` : `/api/hr/job-positions/${positionId}/activities`, {
+        method: activity ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await readError(res, 'No se pudo guardar la actividad.'));
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la actividad.');
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Shell title={activity ? 'Editar Actividad' : 'Nueva Actividad'} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="act-order" className={LABEL}>Grupo Núm.</label>
+            <input id="act-order" type="number" min={1} step={1} value={groupOrder} onChange={(e) => setGroupOrder(e.target.value)} className={INPUT} />
+          </div>
+          <div className="flex flex-col gap-1 sm:col-span-3">
+            <label htmlFor="act-group" className={LABEL}>Título del Grupo</label>
+            <input id="act-group" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={300} className={INPUT} />
+          </div>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="act-desc" className={LABEL}>Actividad</label>
+          <textarea id="act-desc" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={2000} className={INPUT} />
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="act-freq" className={LABEL}>Frecuencia</label>
+            <select id="act-freq" value={frequency} onChange={(e) => setFrequency(e.target.value)} className={INPUT}>
+              <option value="">Sin frecuencia</option>
+              {ACTIVITY_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="act-note" className={LABEL}>Nota (Opcional)</label>
+            <input id="act-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={2000} className={INPUT} />
+          </div>
+        </div>
+        {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        <Actions onClose={onClose} saving={saving} />
+      </form>
+    </Shell>
+  );
+}
+
+/** Confirmación de una baja (puesto, OKR, KPI o actividad). */
 export function ConfirmDelete({
   title,
   message,

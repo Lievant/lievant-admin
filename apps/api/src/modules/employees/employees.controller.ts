@@ -109,7 +109,20 @@ export class EmployeesController {
   @Get('org-chart')
   @SetMetadata(PERMISSION_KEY, null)
   getOrgChart(@Query() query: OrgChartQueryDto) {
-    return this.orgChartService.getOrgChart(query.location);
+    return this.orgChartService.getOrgChart({
+      company: query.company,
+      division: query.division,
+      area: query.area,
+      level: query.level,
+      location: query.location,
+    });
+  }
+
+  /** Opciones de los filtros del organigrama con conteos y combinaciones reales (cascada). Solo sesión. */
+  @Get('org-chart/filters')
+  @SetMetadata(PERMISSION_KEY, null)
+  getOrgChartFilters() {
+    return this.orgChartService.getFilters();
   }
 
   // Mi Información (RRHH 2.0, C2): cualquier usuario autenticado, SOLO su propio

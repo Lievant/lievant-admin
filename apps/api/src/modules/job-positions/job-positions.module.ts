@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { JobPositionActivitiesService } from './job-position-activities.service';
+import { JobPositionsImportService } from './job-positions-import.service';
 import { JobPositionItemsService } from './job-position-items.service';
 import { JobPositionsController } from './job-positions.controller';
 import { JobPositionsService } from './job-positions.service';
@@ -9,6 +11,6 @@ import { JobPositionsService } from './job-positions.service';
  */
 @Module({
   controllers: [JobPositionsController],
-  providers: [JobPositionsService, JobPositionItemsService],
+  providers: [JobPositionsService, JobPositionItemsService, JobPositionActivitiesService, JobPositionsImportService],
 })
 export class JobPositionsModule {}

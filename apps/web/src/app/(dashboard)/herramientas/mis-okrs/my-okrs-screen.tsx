@@ -8,6 +8,8 @@ interface TeamMember { employeeId: string; fullName: string; position: string | 
 interface TeamResponse { period: string; editable: boolean; team: TeamMember[] }
 interface MemberOkr {
   employeeOkrId: string;
+  objectiveCode: string | null;
+  krCode: string | null;
   objective: string;
   keyResult: string;
   weight: number | null;
@@ -83,9 +85,9 @@ function OkrCard({ okr, employeeId, editable, onSaved }: { okr: MemberOkr; emplo
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Objetivo</p>
-          <p className="whitespace-pre-line text-sm font-medium text-navy">{okr.objective}</p>
+          <p className="whitespace-pre-line text-sm font-medium text-navy">{okr.objectiveCode ? `${okr.objectiveCode} · ` : ''}{okr.objective}</p>
           <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Resultado Clave</p>
-          <p className="whitespace-pre-line text-sm text-slate-700">{okr.keyResult}</p>
+          <p className="whitespace-pre-line text-sm text-slate-700">{okr.krCode ? `${okr.krCode} · ` : ''}{okr.keyResult}</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{okr.weight !== null ? formatPct(okr.weight) : 'Sin peso'}</span>

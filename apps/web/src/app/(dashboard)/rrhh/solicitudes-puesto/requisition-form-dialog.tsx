@@ -22,6 +22,7 @@ export interface PositionOption {
   code: string;
   title: string;
   area: string;
+  division: string | null;
 }
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
@@ -132,9 +133,13 @@ export function RequisitionFormDialog({
               <label htmlFor="rq-position" className={LABEL}>Puesto</label>
               <select id="rq-position" value={v.positionChoice} onChange={(e) => set('positionChoice', e.target.value)} className={INPUT}>
                 <option value="">Selecciona…</option>
-                {positions.map((p) => <option key={p.id} value={p.id}>{p.title} ({p.code})</option>)}
+                {positions.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.title}</option>)}
                 <option value={OTHER_POSITION}>Otro (Puesto Nuevo)</option>
               </select>
+              {(() => {
+                const chosen = positions.find((p) => p.id === v.positionChoice);
+                return chosen ? <p className="text-xs text-slate-500">{[chosen.division, chosen.area].filter(Boolean).join(' · ')}</p> : null;
+              })()}
             </div>
             {v.positionChoice === OTHER_POSITION ? (
               <div className="flex flex-col gap-1">
