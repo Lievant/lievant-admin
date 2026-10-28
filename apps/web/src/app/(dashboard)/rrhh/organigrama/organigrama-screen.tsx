@@ -617,6 +617,22 @@ export function OrganigramaScreen({
               ))}
             </div>
           )}
+          {view === 'levels' &&
+            bands.map((b) => {
+              // Etiqueta fija a la izquierda (no se mueve con el arrastre horizontal); sigue a su banda en vertical.
+              const topPx = transform.y + b.top * transform.k;
+              const bottomPx = topPx + b.height * transform.k;
+              const y = Math.min(Math.max(topPx + 6, 6), bottomPx - 26);
+              return (
+                <span
+                  key={b.key}
+                  className="pointer-events-none absolute left-2 rounded-md bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200"
+                  style={{ top: y, visibility: bottomPx < 0 || topPx > (viewportRef.current?.clientHeight ?? 10000) ? 'hidden' : 'visible' }}
+                >
+                  {b.label}
+                </span>
+              );
+            })}
           {layout && (
             <div
               className="absolute left-0 top-0"
@@ -658,22 +674,6 @@ export function OrganigramaScreen({
               })}
             </div>
           )}
-          {view === 'levels' &&
-            bands.map((b) => {
-              // Etiqueta fija a la izquierda (no se mueve con el arrastre horizontal); sigue a su banda en vertical.
-              const topPx = transform.y + b.top * transform.k;
-              const bottomPx = topPx + b.height * transform.k;
-              const y = Math.min(Math.max(topPx + 6, 6), bottomPx - 26);
-              return (
-                <span
-                  key={b.key}
-                  className="pointer-events-none absolute left-2 z-10 rounded-md bg-white/90 px-2 py-0.5 text-xs font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200"
-                  style={{ top: y, visibility: bottomPx < 0 || topPx > (viewportRef.current?.clientHeight ?? 10000) ? 'hidden' : 'visible' }}
-                >
-                  {b.label}
-                </span>
-              );
-            })}
         </div>
       )}
 

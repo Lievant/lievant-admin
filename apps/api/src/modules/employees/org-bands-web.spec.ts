@@ -1,5 +1,5 @@
 import { NONE_VALUE, pageQuery, viewFromParams, EMPTY_SELECTION, FILTER_CUT_NOTE } from '../../../../web/src/app/(dashboard)/rrhh/organigrama/org-filters';
-import { bandEdgePath, layoutByLevels, levelKey, orderBandKeys } from '../../../../web/src/app/(dashboard)/rrhh/organigrama/org-bands';
+import { LABEL_GUTTER, bandEdgePath, layoutByLevels, levelKey, orderBandKeys } from '../../../../web/src/app/(dashboard)/rrhh/organigrama/org-bands';
 import type { OrgPerson, OrgSynthetic, OrgTreeNode } from '../../../../web/src/app/(dashboard)/rrhh/organigrama/org-tree';
 
 const CFG = { nodeWidth: 200, nodeHeight: 90, gapX: 20, gapY: 40 };
@@ -67,7 +67,7 @@ describe('Organigrama (web) · vista por niveles', () => {
       for (let i = 1; i < sorted.length; i++) expect(sorted[i]! - sorted[i - 1]!).toBeGreaterThanOrEqual(CFG.nodeWidth + CFG.gapX);
     }
     expect(l.width).toBeGreaterThanOrEqual(Math.max(...l.nodes.map((n) => n.x)) + CFG.nodeWidth);
-    expect(Math.min(...l.nodes.map((n) => n.x))).toBeGreaterThanOrEqual(0);
+    expect(Math.min(...l.nodes.map((n) => n.x))).toBeGreaterThanOrEqual(LABEL_GUTTER);
   });
 
   it('los nodos caen dentro de su banda y el layout cubre todas las bandas', () => {
@@ -83,6 +83,11 @@ describe('Organigrama (web) · vista por niveles', () => {
     const l = layoutByLevels(p('j', 'I', [p('s', 'IV')]), CFG);
     expect(at(l, 's').parentId).toBe('j');
     expect(at(l, 's').y).toBeGreaterThan(at(l, 'j').y);
+  });
+
+  it('un jefe y su subordinado en la misma banda: el jefe queda a la izquierda', () => {
+    const l = layoutByLevels(p('z-jefe', 'II', [p('a-sub', 'II')]), CFG);
+    expect(at(l, 'z-jefe').x).toBeLessThan(at(l, 'a-sub').x);
   });
 
   it('un solo nivel filtrado deja una sola banda', () => {

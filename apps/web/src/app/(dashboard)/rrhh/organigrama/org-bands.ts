@@ -7,6 +7,9 @@
 import { NONE_VALUE, levelLabel, normalizeValue } from './org-filters';
 import { isSynthetic, layoutTree, type Layout, type LayoutConfig, type OrgTreeNode } from './org-tree';
 
+/** Margen izquierdo del layout reservado para las etiquetas de nivel. */
+export const LABEL_GUTTER = 120;
+
 export interface Band {
   key: string;
   /** "Nivel II", "Sin Nivel". */
@@ -92,18 +95,19 @@ export function layoutByLevels(root: OrgTreeNode, config: LayoutConfig, preferre
   const pitch = nodeHeight + gapY;
 
   // Fila de cada nodo y choques: dentro de una fila se ordena por x y se separa lo que quede más cerca que el mínimo.
-  const rows = new Map<number, { id: string; x: number }[]>();
+  const rows = new Map<number, { id: string; x: number; depth: number }[]>();
   for (const n of base.nodes) {
     const k = keyOf(n.id);
     const row = k === null ? 0 : rowOfKey.get(k)!;
     const list = rows.get(row) ?? [];
-    list.push({ id: n.id, x: n.x });
+    list.push({ id: n.id, x: n.x, depth: n.depth });
     rows.set(row, list);
   }
   const xOf = new Map<string, number>();
   const minStep = nodeWidth + gapX;
   for (const list of rows.values()) {
-    list.sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
+    // A igual x (un jefe y su subordinado en la misma banda) va primero el de menor profundidad: el jefe queda a la izquierda.
+    list.sort((a, b) => a.x - b.x || a.depth - b.depth || a.id.localeCompare(b.id));
     let cursor = -Infinity;
     for (const item of list) {
       const x = Math.max(item.x, cursor);
@@ -116,7 +120,7 @@ export function layoutByLevels(root: OrgTreeNode, config: LayoutConfig, preferre
   const nodes = base.nodes.map((n) => {
     const k = keyOf(n.id);
     const row = k === null ? 0 : rowOfKey.get(k)!;
-    return { ...n, x: xOf.get(n.id)!, y: row * pitch + gapY / 2, depth: row };
+    return { ...n, x: xOf.get(n.id)! + LABEL_GUTTER, y: row * pitch + gapY / 2, depth: row };
   });
   const labelFor = (key: string): string => {
     if (key === NONE_VALUE) return 'Sin Nivel';
@@ -124,7 +128,7 @@ export function layoutByLevels(root: OrgTreeNode, config: LayoutConfig, preferre
     return sample && !isSynthetic(sample) ? levelLabel(sample.level) : key;
   };
   const bands: Band[] = order.map((key, i) => ({ key, label: labelFor(key), top: (firstRow + i) * pitch, height: pitch }));
-  const width = Math.max(nodeWidth, ...nodes.map((n) => n.x + nodeWidth));
+  const width = Math.max(nodeWidth + LABEL_GUTTER, ...nodes.map((n) => n.x + nodeWidth));
   return { nodes, width, height: rowCount * pitch, bands };
 }
 
