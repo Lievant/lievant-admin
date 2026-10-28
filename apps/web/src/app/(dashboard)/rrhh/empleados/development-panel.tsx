@@ -24,6 +24,8 @@ interface PositionSummary {
 }
 interface DevOkr {
   id: string;
+  objectiveCode: string | null;
+  krCode: string | null;
   objective: string;
   keyResult: string;
   weight: number | null;
@@ -272,8 +274,8 @@ export function DevelopmentPanel(props: Source) {
               <tbody className="divide-y divide-slate-100">
                 {data.okrs.map((o) => (
                   <tr key={o.id} className="align-top">
-                    <td className="whitespace-pre-line px-3 py-2 text-navy">{o.objective}</td>
-                    <td className="whitespace-pre-line px-3 py-2 text-slate-700">{o.keyResult}</td>
+                    <td className="whitespace-pre-line px-3 py-2 text-navy">{o.objectiveCode ? `${o.objectiveCode} · ` : ''}{o.objective}</td>
+                    <td className="whitespace-pre-line px-3 py-2 text-slate-700">{o.krCode ? `${o.krCode} · ` : ''}{o.keyResult}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-700">{o.weight !== null ? formatPct(o.weight) : '—'}</td>
                     {showScore && (
                       <td className="whitespace-nowrap px-3 py-2">
