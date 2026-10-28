@@ -14,6 +14,7 @@ import { EmployeesService } from './employees.service';
 import { EmployeeStorageService } from './employee-storage.service';
 import { HeadcountService } from './headcount.service';
 import { OrgChartService } from './org-chart.service';
+import { OrgChartExportService } from './org-chart-export.service';
 import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { Compensation } from './entities/compensation.entity';
@@ -66,6 +67,7 @@ import { TerminationData } from './entities/termination-data.entity';
     EmployeePhotosService,
     HeadcountService,
     OrgChartService,
+    OrgChartExportService,
     MyProfileService,
     EmployeeUserLinkService,
     TrainingsService,

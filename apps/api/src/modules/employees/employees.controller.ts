@@ -44,6 +44,8 @@ import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
 import { HeadcountService } from './headcount.service';
 import { OrgChartService } from './org-chart.service';
+import { OrgChartExportService } from './org-chart-export.service';
+import { ExportOrgChartDto } from './dto/export-org-chart.dto';
 import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { LinkUserDto } from './dto/link-user.dto';
@@ -79,6 +81,7 @@ export class EmployeesController {
     private readonly photosService: EmployeePhotosService,
     private readonly headcountService: HeadcountService,
     private readonly orgChartService: OrgChartService,
+    private readonly orgChartExportService: OrgChartExportService,
     private readonly myProfileService: MyProfileService,
     private readonly userLinkService: EmployeeUserLinkService,
     private readonly trainingsService: TrainingsService,
@@ -123,6 +126,16 @@ export class EmployeesController {
   @SetMetadata(PERMISSION_KEY, null)
   getOrgChartFilters() {
     return this.orgChartService.getFilters();
+  }
+
+  /**
+   * Visto bueno para exportar el organigrama a PDF: exige `rrhh.organigrama.export` y audita la exportación
+   * (vista, filtros y papel). El PDF se dibuja en el navegador; ver `OrgChartExportService`.
+   */
+  @Post('org-chart/export')
+  @RequirePermission('rrhh', 'organigrama', 'export')
+  registerOrgChartExport(@Body() dto: ExportOrgChartDto, @CurrentUser() user: User) {
+    return this.orgChartExportService.register(dto, { id: user.id, email: user.email, name: user.name });
   }
 
   // Mi Información (RRHH 2.0, C2): cualquier usuario autenticado, SOLO su propio
