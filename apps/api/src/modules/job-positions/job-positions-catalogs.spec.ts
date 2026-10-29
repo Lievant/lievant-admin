@@ -129,6 +129,7 @@ function build(opts: { areas?: { name: string; division_name: string | null }[];
     const sql = rawSql.replace(/\s+/g, ' ').trim();
     calls.push({ sql, params });
     if (/FROM catalogs\.org_levels/.test(sql)) return LEVELS.map((code) => ({ code, name: `Nivel ${code}` }));
+    if (/^SELECT name FROM catalogs\.divisions/.test(sql)) return ['E-Commerce', 'Finanzas', 'Otra'].map((name) => ({ name }));
     if (/^SELECT name, division_name FROM catalogs\.areas/.test(sql)) return areas;
     if (/^INSERT INTO catalogs\.areas/.test(sql)) {
       areas.push({ name: params[0] as string, division_name: params[1] as string });

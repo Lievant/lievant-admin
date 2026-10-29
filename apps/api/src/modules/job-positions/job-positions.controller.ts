@@ -65,6 +65,14 @@ export class JobPositionsController {
     return this.positions.getOptions();
   }
 
+  /** Antes de analizar: división deducida del título de la hoja y su coincidencia con el catálogo. Va antes de `:id`. */
+  @Post('job-positions/import/inspect')
+  @RequirePermission('rrhh', 'matriz-puestos', 'import')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES + 1, files: 1 } }))
+  inspectImport(@UploadedFile() file: Express.Multer.File | undefined) {
+    return this.importer.inspect(file);
+  }
+
   /** Importación desde Excel (`mode` = preview | apply; el mismo archivo se reenvía para aplicar). Va antes de `:id`. */
   @Post('job-positions/import')
   @RequirePermission('rrhh', 'matriz-puestos', 'import')

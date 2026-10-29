@@ -138,7 +138,8 @@ function mapHeaders(row: string[]): Map<ColumnKey, number> | null {
 
 /** "División E-Commerce · Propuesta…" → "E-Commerce". */
 export function deduceDivision(title: string | null | undefined): string | null {
-  const m = /divisi[oó]n\s+(.+?)\s*(?:[·•|–—]|$)/i.exec(title ?? '');
+  // «División X» al inicio o tras un separador («Matriz de Puestos – División E-Commerce · …»); «sin división…» no cuenta.
+  const m = /(?:^|[–—\-·:|]\s*)divisi[oó]n\s+(.+?)\s*(?:[·•|–—]|$)/i.exec(title ?? '');
   return m && m[1] ? m[1].trim() : null;
 }
 
