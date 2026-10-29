@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CloseIcon } from '@/components/icons';
+import { ModalShell } from '../matriz-puestos/modal-shell';
 import {
   COUNTRY_OPTIONS,
   MODALITY_OPTIONS,
@@ -105,16 +105,24 @@ export function RequisitionFormDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-      <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-bold text-navy">{draft ? `Editar ${draft.code}` : 'Nueva Solicitud de Puesto'}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <CloseIcon className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="space-y-4 px-5 py-5 sm:px-6">
+    <>
+      <ModalShell
+        title={draft ? `Editar ${draft.code}` : 'Nueva Solicitud de Puesto'}
+        onClose={onClose}
+        maxWidth="max-w-2xl"
+        footer={
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
+            <button type="button" onClick={saveDraft} disabled={saving} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50 disabled:opacity-60">
+              {saving && !confirming ? 'Guardando…' : 'Guardar Borrador'}
+            </button>
+            <button type="button" onClick={askToSend} disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
+              Enviar a RRHH
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="rq-type" className={LABEL}>Tipo</label>
@@ -188,17 +196,8 @@ export function RequisitionFormDialog({
 
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
 
-          <div className="flex flex-wrap justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
-            <button type="button" onClick={saveDraft} disabled={saving} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50 disabled:opacity-60">
-              {saving && !confirming ? 'Guardando…' : 'Guardar Borrador'}
-            </button>
-            <button type="button" onClick={askToSend} disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
-              Enviar a RRHH
-            </button>
-          </div>
         </div>
-      </div>
+      </ModalShell>
 
       {confirming && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-navy/40 px-4">
@@ -214,6 +213,6 @@ export function RequisitionFormDialog({
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

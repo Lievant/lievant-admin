@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CloseIcon } from '@/components/icons';
+import { ModalShell } from './modal-shell';
 import { readError } from './position-form-dialog';
 import {
   ACTIVITY_FREQUENCY_OPTIONS,
@@ -19,30 +19,22 @@ import {
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
 
-function Shell({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Shell({ title, onClose, onSubmit, footer, children }: { title: string; onClose: () => void; onSubmit?: (e: React.FormEvent) => void; footer?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-      <div role="dialog" aria-modal="true" className="w-full max-w-xl rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-bold text-navy">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <CloseIcon className="h-5 w-5" />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
+    <ModalShell title={title} onClose={onClose} {...(onSubmit ? { onSubmit } : {})} {...(footer ? { footer } : {})}>
+      {children}
+    </ModalShell>
   );
 }
 
 function Actions({ onClose, saving }: { onClose: () => void; saving: boolean }) {
   return (
-    <div className="flex justify-end gap-2 pt-2">
+    <>
       <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
       <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
         {saving ? 'Guardando…' : 'Guardar'}
       </button>
-    </div>
+    </>
   );
 }
 
@@ -111,8 +103,8 @@ export function OkrDialog({
   };
 
   return (
-    <Shell title={okr ? 'Editar OKR' : 'Nuevo OKR'} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+    <Shell title={okr ? 'Editar OKR' : 'Nuevo OKR'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
+      <div className="space-y-4">
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
           Plantilla (Sin Periodo): vale para cualquier semestre
@@ -161,8 +153,7 @@ export function OkrDialog({
           </label>
         </div>
         {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-        <Actions onClose={onClose} saving={saving} />
-      </form>
+      </div>
     </Shell>
   );
 }
@@ -213,8 +204,8 @@ export function KpiDialog({
   };
 
   return (
-    <Shell title={kpi ? 'Editar KPI' : 'Nuevo KPI'} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+    <Shell title={kpi ? 'Editar KPI' : 'Nuevo KPI'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
+      <div className="space-y-4">
         <div className="flex flex-col gap-1">
           <label htmlFor="kpi-name" className={LABEL}>Nombre</label>
           <input id="kpi-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200} className={INPUT} />
@@ -241,8 +232,7 @@ export function KpiDialog({
           Activo
         </label>
         {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-        <Actions onClose={onClose} saving={saving} />
-      </form>
+      </div>
     </Shell>
   );
 }
@@ -293,8 +283,8 @@ export function ActivityDialog({
   };
 
   return (
-    <Shell title={activity ? 'Editar Actividad' : 'Nueva Actividad'} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+    <Shell title={activity ? 'Editar Actividad' : 'Nueva Actividad'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
+      <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="act-order" className={LABEL}>Grupo Núm.</label>
@@ -323,8 +313,7 @@ export function ActivityDialog({
           </div>
         </div>
         {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-        <Actions onClose={onClose} saving={saving} />
-      </form>
+      </div>
     </Shell>
   );
 }
@@ -346,18 +335,21 @@ export function ConfirmDelete({
   onConfirm: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
-      <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-semibold text-navy">{title}</h2>
-        <p className="mt-3 text-sm text-slate-600">{message}</p>
-        {error && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-        <div className="mt-6 flex justify-end gap-2">
+    <ModalShell
+      title={title}
+      role="alertdialog"
+      maxWidth="max-w-md"
+      footer={
+        <>
           <button type="button" onClick={onCancel} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
           <button type="button" onClick={onConfirm} disabled={busy} className="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
             {busy ? 'Eliminando…' : 'Eliminar'}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="text-sm text-slate-600">{message}</p>
+      {error && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    </ModalShell>
   );
 }

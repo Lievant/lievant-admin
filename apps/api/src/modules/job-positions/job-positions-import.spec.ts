@@ -57,10 +57,10 @@ class FakeDb {
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
     if (/^INSERT INTO hr\.job_positions/.test(sql)) {
-      const [code, title, area, level, createdBy, division, meot, reports, supervises, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
+      const [code, title, area, level, createdBy, division, meot, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
       const row: Row = {
         id: this.id('P'), code, title, area, level, status: 'activo', description: null, description_approved: false, business_unit: null, created_by: createdBy,
-        division, meot_hierarchy: meot, reports_to_text: reports, supervises_text: supervises, plazas, role_summary: role, position_objective: objective,
+        division, meot_hierarchy: meot, reports_to_text: reports, plazas, role_summary: role, position_objective: objective,
         validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, deleted_at: null,
       };
       this.positions.push(row);
@@ -500,5 +500,54 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
     const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P4', { 4: 'Liderazgo Operativo' })]), ACTOR);
     expect(again.positions[0]!.action).toBe('sin cambios');
     expect(db.positions[3]!.seniority).toBe('senior');
+  });
+});
+
+describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos obligatorios', () => {
+  it('«Supervisa a» ya no se lee: la columna del archivo se ignora sin avisos y no se guarda', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    expect(r.errors).toEqual([]);
+    expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false);
+    expect(db.positions[0]).not.toHaveProperty('supervises_text');
+    expect(db.writes.some((c) => /supervises_text/.test(c.sql))).toBe(false);
+    // el texto de «Reporta a» del Excel sí se guarda
+    expect(db.positions[0]!.reports_to_text).toBe('TEST-Jefe');
+  });
+
+  it('la importación nunca escribe ni pisa reports_to_employee_id', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    expect(db.writes.some((c) => /reports_to_employee_id/.test(c.sql))).toBe(false);
+    db.positions[0]!.reports_to_employee_id = 'emp-jefe';
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 5: 'TEST-Otro jefe en el Excel', 3: 'IV' })]), ACTOR);
+    expect(db.positions[0]).toMatchObject({ reports_to_text: 'TEST-Otro jefe en el Excel', level: 'IV', reports_to_employee_id: 'emp-jefe' });
+    expect(db.writes.some((c) => /reports_to_employee_id/.test(c.sql))).toBe(false);
+  });
+
+  it('un aviso por fila con los campos obligatorios que faltan (sin errores bloqueantes); la descripción nunca viene en el Excel', async () => {
+    const { db, service } = setup();
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR);
+    expect(prev.errors).toEqual([]);
+    const missing = prev.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message));
+    expect(missing).toEqual([
+      { row: 4, message: 'Faltan campos obligatorios: Descripción del puesto; complétalos en la pantalla del puesto' },
+      { row: 5, message: 'Faltan campos obligatorios: Rol, Objetivo del puesto, Puntos a validar, Descripción del puesto; complétalos en la pantalla del puesto' },
+    ]);
+    expect(db.writes).toEqual([]);
+    // aplicar importa igual
+    const applied = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR);
+    expect(applied.applied).toBe(true);
+    expect(db.positions).toHaveLength(2);
+    expect(applied.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message))).toHaveLength(2);
+  });
+
+  it('un puesto que ya tiene descripción y los campos llenos no avisa; la reimportación sigue dando «sin cambios»', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    db.positions[0]!.description = 'TEST-Descripción formal';
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    expect(again.positions[0]!.action).toBe('sin cambios');
+    expect(again.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message))).toEqual([]);
   });
 });

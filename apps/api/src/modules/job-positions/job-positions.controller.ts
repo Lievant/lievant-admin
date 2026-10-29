@@ -26,6 +26,7 @@ import {
   CreateKpiDto,
   CreateOkrDto,
   CreatePositionDto,
+  EmployeeSearchQueryDto,
   ImportBodyDto,
   OkrQueryDto,
   PositionQueryDto,
@@ -70,6 +71,13 @@ export class JobPositionsController {
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES + 1, files: 1 } }))
   importPositions(@Body() body: ImportBodyDto, @UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: User) {
     return this.importer.run(body.mode, body.division, file, actorOf(user));
+  }
+
+  /** Buscador de empleados activos para «Reporta a» (solo id, nombre, cargo y área). Va antes de `:id`. */
+  @Get('job-positions/employee-search')
+  @RequirePermission('rrhh', 'matriz-puestos', 'update')
+  searchEmployees(@Query() query: EmployeeSearchQueryDto) {
+    return this.positions.searchEmployees(query.q ?? '', query.limit);
   }
 
   /** Agrega un área al catálogo (la Matriz no deja capturar áreas como texto libre). */

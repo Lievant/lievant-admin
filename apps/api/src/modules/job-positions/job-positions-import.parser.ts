@@ -18,7 +18,7 @@ export const MAX_KPI_TARGET = 100;
 export const NO_KEY_RESULT = 'Por definir';
 
 // Límites de las columnas de la base (los textos más largos bloquean la importación).
-const LIMITS = { title: 200, area: 100, level: 50, meot: 100, reportsTo: 500, supervises: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
+const LIMITS = { title: 200, area: 100, level: 50, meot: 100, reportsTo: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
 
 export interface ImportIssue {
   /** Fila del Excel (null = del archivo en general). */
@@ -64,7 +64,6 @@ export interface ParsedPosition {
   seniority: Seniority | null;
   meotHierarchy: string | null;
   reportsTo: string | null;
-  supervises: string | null;
   plazas: number | null;
   roleSummary: string | null;
   positionObjective: string | null;
@@ -78,7 +77,7 @@ export interface ParsedPosition {
 
 /** Columnas del archivo que se encontraron (las que faltan no se tocan al actualizar). */
 export type ColumnKey =
-  | 'area' | 'title' | 'level' | 'meot' | 'reportsTo' | 'supervises' | 'plazas' | 'role' | 'objective'
+  | 'area' | 'title' | 'level' | 'meot' | 'reportsTo' | 'plazas' | 'role' | 'objective'
   | 'activities' | 'okrs' | 'kpis' | 'validationPoints' | 'status' | 'comments';
 
 export interface ParseResult {
@@ -114,7 +113,6 @@ const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string }[]
   { key: 'level', test: (h) => h.startsWith('nivel'), label: 'Nivel tabular' },
   { key: 'meot', test: (h) => h.startsWith('jerarquia'), label: 'Jerarquía (MEOT)' },
   { key: 'reportsTo', test: (h) => h.startsWith('reporta a'), label: 'Reporta a' },
-  { key: 'supervises', test: (h) => h.startsWith('supervisa'), label: 'Supervisa a' },
   { key: 'plazas', test: (h) => h.startsWith('plazas'), label: 'Plazas ocupadas' },
   { key: 'role', test: (h) => h === 'rol', label: 'Rol' },
   { key: 'objective', test: (h) => h.startsWith('objetivo del puesto'), label: 'Objetivo del puesto' },
@@ -381,11 +379,9 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     }
     const meot = text(r, 'meot');
     const reportsTo = text(r, 'reportsTo');
-    const supervises = text(r, 'supervises');
     checkLen(levelRaw, 100, 'El Nivel');
     checkLen(meot, LIMITS.meot, 'La Jerarquía (MEOT)');
     checkLen(reportsTo, LIMITS.reportsTo, '«Reporta a»');
-    checkLen(supervises, LIMITS.supervises, '«Supervisa a»');
 
     let plazas: number | null = null;
     const plazasText = cell(r, 'plazas');
@@ -411,7 +407,6 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       seniority: seniorityFromText(meot),
       meotHierarchy: meot,
       reportsTo,
-      supervises,
       plazas,
       roleSummary: text(r, 'role'),
       positionObjective: text(r, 'objective'),
