@@ -16,8 +16,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * Permisos: `clientes.homologacion.read|write` solo para SUPER_ADMIN.
  */
-export class CreateHomologationTables1751000000044 implements MigrationInterface {
-  name = 'CreateHomologationTables1751000000044';
+export class CreateHomologationTables1751000000045 implements MigrationInterface {
+  name = 'CreateHomologationTables1751000000045';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS homologation`);
