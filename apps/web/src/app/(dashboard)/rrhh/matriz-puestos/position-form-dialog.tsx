@@ -61,7 +61,6 @@ export function PositionFormDialog({
   const [areaMsg, setAreaMsg] = useState<{ text: string; suggestion?: string } | null>(null);
   const [areaBusy, setAreaBusy] = useState(false);
   const canAddArea = usePermission('rrhh', 'matriz-puestos', 'update');
-  const [meot, setMeot] = useState(position?.meotHierarchy ?? '');
   const [reportsToEmployee, setReportsToEmployee] = useState<ReportsToValue | null>(position?.reportsToEmployee ?? null);
   const [submitted, setSubmitted] = useState(false);
   const [plazas, setPlazas] = useState(position?.plazas != null ? String(position.plazas) : '');
@@ -94,7 +93,6 @@ export function PositionFormDialog({
         division: division.trim() || null,
         level: level.trim() || null,
         seniority: seniority || null,
-        meotHierarchy: meot.trim() || null,
         reportsToEmployeeId: reportsToEmployee?.id ?? null,
         plazas: n,
         roleSummary: roleSummary.trim() || null,
@@ -250,7 +248,6 @@ export function PositionFormDialog({
                 {options.seniorities.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <TextField id="jp-meot" label="Jerarquía (MEOT) (Opcional)" value={meot} onChange={setMeot} max={100} />
             <div className="flex flex-col gap-1 sm:col-span-2">
               <label htmlFor="jp-reports" className={LABEL}>Reporta a (Opcional)</label>
               <ReportsToPicker id="jp-reports" value={reportsToEmployee} onChange={setReportsToEmployee} />

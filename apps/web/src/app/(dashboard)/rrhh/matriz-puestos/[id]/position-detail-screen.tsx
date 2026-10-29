@@ -227,7 +227,6 @@ export function PositionDetailScreen({ id }: { id: string }) {
                 <Field label="Nivel Original (Excel)" value={position.levelOriginal} />
               )}
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
-              <Field label="Jerarquía (MEOT)" value={position.meotHierarchy ?? '—'} />
               <Field label="Reporta a" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
               {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
               <Field label="Plazas" value={plazasLabel(position.plazas)} />
