@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { SortColumnHeader } from '@/components/ui/sort-column-header';
 import { usePermission } from '@/hooks/use-permission';
+import { nextSortCycle } from '@/lib/sort-rows';
 import { cn } from '@/lib/utils';
 import { PositionFormDialog } from './position-form-dialog';
 import {
   EMPTY_OPTIONS,
   levelOptionLabel,
+  seniorityLabel,
   STATUS_BADGE,
   STATUS_LABELS,
   VALIDATION_BADGE,
@@ -17,6 +20,7 @@ import {
   type PositionOptions,
   type PositionStatus,
 } from './positions-constants';
+import { SORT_COLUMNS, applySortParams, sortQuery, type PositionSort, type PositionSortKey } from './positions-sort';
 
 interface PositionPage {
   data: PositionListItem[];
@@ -29,9 +33,9 @@ interface PositionPage {
 const PAGE_SIZE = 25;
 const SELECT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
-const COLUMNS = ['Código', 'Puesto', 'División', 'Área', 'Nivel', 'Plazas', 'Validación', 'Estado'];
 
-export function PositionsScreen() {
+/** `initialSort` viene de la URL (`sortBy` y `sortDir`): al recargar o compartir el enlace el orden se mantiene. */
+export function PositionsScreen({ initialSort = null }: { initialSort?: PositionSort | null }) {
   const canCreate = usePermission('rrhh', 'matriz-puestos', 'create');
   const canImport = usePermission('rrhh', 'matriz-puestos', 'import');
 
@@ -45,6 +49,8 @@ export function PositionsScreen() {
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
   const [page, setPage] = useState(1);
+  // Una sola columna ordenada a la vez; null = el orden original (código). El orden se aplica en el servidor.
+  const [sort, setSort] = useState<PositionSort | null>(initialSort);
   const [result, setResult] = useState<PositionPage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,6 +83,7 @@ export function PositionsScreen() {
     if (status) q.set('status', status);
     if (validation) q.set('validationStatus', validation);
     if (debounced) q.set('search', debounced);
+    applySortParams(q, sort);
     const ticket = ++latest.current;
     try {
       const res = await fetch(`/api/hr/job-positions?${q}`);
@@ -90,10 +97,22 @@ export function PositionsScreen() {
     } finally {
       if (ticket === latest.current) setLoading(false);
     }
-  }, [page, division, area, level, seniority, status, validation, debounced]);
+  }, [page, division, area, level, seniority, status, validation, debounced, sort]);
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Clic en el encabezado: ascendente, luego descendente y luego sin orden. Conserva búsqueda y filtros y vuelve a la página 1.
+  const onSort = useCallback((key: PositionSortKey) => {
+    setSort((current) => nextSortCycle(current, key));
+    setPage(1);
+  }, []);
+
+  // El orden queda en la URL (como el del Organigrama): se mantiene al recargar y al compartir el enlace.
+  useEffect(() => {
+    const q = sortQuery(sort);
+    window.history.replaceState(null, '', q ? `${window.location.pathname}?${q}` : window.location.pathname);
+  }, [sort]);
 
   // Cambiar un filtro regresa a la primera página.
   const onFilter = (set: (v: string) => void) => (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -193,10 +212,12 @@ export function PositionsScreen() {
           <>
             {/* El scroll horizontal vive dentro del contenedor, no en la página. */}
             <div className={cn('max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm', loading && 'opacity-60')}>
-              <table className="w-full min-w-[920px] text-left text-sm">
+              <table className="w-full min-w-[1020px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {COLUMNS.map((c) => <th key={c} className="whitespace-nowrap px-4 py-3">{c}</th>)}
+                    {SORT_COLUMNS.map((c) => (
+                      <SortColumnHeader key={c.key} label={c.label} column={c.key} sort={sort} onSort={onSort} />
+                    ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -210,6 +231,7 @@ export function PositionsScreen() {
                       <td className="px-4 py-3 text-slate-600">{p.division ?? '—'}</td>
                       <td className="px-4 py-3 text-slate-600">{p.area}</td>
                       <td className="px-4 py-3 text-slate-600">{p.level ?? '—'}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">{seniorityLabel(p.seniority)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                         {p.vacant ? <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">Vacante</span> : (p.plazas ?? '—')}
                       </td>

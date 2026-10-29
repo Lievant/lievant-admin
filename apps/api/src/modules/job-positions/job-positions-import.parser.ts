@@ -18,7 +18,7 @@ export const MAX_KPI_TARGET = 100;
 export const NO_KEY_RESULT = 'Por definir';
 
 // Límites de las columnas de la base (los textos más largos bloquean la importación).
-const LIMITS = { title: 200, area: 100, level: 50, meot: 100, reportsTo: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
+const LIMITS = { title: 200, area: 100, level: 50, reportsTo: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
 
 export interface ImportIssue {
   /** Fila del Excel (null = del archivo en general). */
@@ -60,9 +60,8 @@ export interface ParsedPosition {
   levelOriginal: string | null;
   /** El nivel venía ambiguo (rango, «Sin nivel», «Por definir»…): no debe pisar un nivel elegido a mano. */
   levelAmbiguous: boolean;
-  /** Categoría Junior / Semi Senior / Senior leída de la «Jerarquía (MEOT)»; null si no trae. */
+  /** Categoría Junior / Semi Senior / Senior deducida de la columna de jerarquía del Excel; null si no trae. */
   seniority: Seniority | null;
-  meotHierarchy: string | null;
   reportsTo: string | null;
   plazas: number | null;
   roleSummary: string | null;
@@ -77,7 +76,7 @@ export interface ParsedPosition {
 
 /** Columnas del archivo que se encontraron (las que faltan no se tocan al actualizar). */
 export type ColumnKey =
-  | 'area' | 'title' | 'level' | 'meot' | 'reportsTo' | 'plazas' | 'role' | 'objective'
+  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'plazas' | 'role' | 'objective'
   | 'activities' | 'okrs' | 'kpis' | 'validationPoints' | 'status' | 'comments';
 
 export interface ParseResult {
@@ -107,11 +106,12 @@ export function norm(text: string | null | undefined): string {
     .trim();
 }
 
-const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string }[] = [
+const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; silent?: boolean }[] = [
   { key: 'area', test: (h) => /^sub[- ]?area\b/.test(h) || h === 'area', label: 'Sub-área' },
   { key: 'title', test: (h) => h === 'puesto', label: 'Puesto' },
   { key: 'level', test: (h) => h.startsWith('nivel'), label: 'Nivel tabular' },
-  { key: 'meot', test: (h) => h.startsWith('jerarquia'), label: 'Jerarquía (MEOT)' },
+  // Solo sirve para deducir la Categoría: ya no es un campo del sistema, así que su ausencia no avisa y el texto no se guarda.
+  { key: 'hierarchy', test: (h) => h.startsWith('jerarquia'), label: 'Jerarquía', silent: true },
   { key: 'reportsTo', test: (h) => h.startsWith('reporta a'), label: 'Reporta a' },
   { key: 'plazas', test: (h) => h.startsWith('plazas'), label: 'Plazas ocupadas' },
   { key: 'role', test: (h) => h === 'rol', label: 'Rol' },
@@ -329,7 +329,7 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
   const { sheet, headerRow, map } = picked;
   const columns = new Set(map.keys()) as Set<ColumnKey>;
   for (const h of HEADERS) {
-    if (!columns.has(h.key)) warnings.push({ row: null, message: `No se encontró la columna «${h.label}»; ese campo no se llenará ni se modificará` });
+    if (!h.silent && !columns.has(h.key)) warnings.push({ row: null, message: `No se encontró la columna «${h.label}»; ese campo no se llenará ni se modificará` });
   }
   const divisionHint = deduceDivision(sheet.rows[0]?.find((c) => c && c.trim() !== '') ?? null) ?? deduceDivision(sheet.rows[1]?.[0] ?? null);
 
@@ -378,10 +378,9 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     } else if (resolved.kind === 'invalid') {
       errors.push({ row: rowNumber, message: `El nivel «${(levelRaw ?? '').slice(0, 40)}» no está en el catálogo de niveles (${options.levelCodes.join(', ')})` });
     }
-    const meot = text(r, 'meot');
+    const hierarchy = text(r, 'hierarchy');
     const reportsTo = text(r, 'reportsTo');
     checkLen(levelRaw, 100, 'El Nivel');
-    checkLen(meot, LIMITS.meot, 'La Jerarquía (MEOT)');
     checkLen(reportsTo, LIMITS.reportsTo, '«Reporta a»');
 
     let plazas: number | null = null;
@@ -405,8 +404,7 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       level,
       levelOriginal: levelRaw,
       levelAmbiguous: resolved.kind === 'ambiguous',
-      seniority: seniorityFromText(meot),
-      meotHierarchy: meot,
+      seniority: seniorityFromText(hierarchy),
       reportsTo,
       plazas,
       roleSummary: text(r, 'role'),

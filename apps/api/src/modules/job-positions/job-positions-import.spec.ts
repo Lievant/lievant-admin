@@ -60,10 +60,10 @@ class FakeDb {
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
     if (/^INSERT INTO hr\.job_positions/.test(sql)) {
-      const [code, title, area, level, createdBy, division, meot, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
+      const [code, title, area, level, createdBy, division, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
       const row: Row = {
         id: this.id('P'), code, title, area, level, status: 'activo', description: null, description_approved: false, business_unit: null, created_by: createdBy,
-        division, meot_hierarchy: meot, reports_to_text: reports, plazas, role_summary: role, position_objective: objective,
+        division, reports_to_text: reports, plazas, role_summary: role, position_objective: objective,
         validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, deleted_at: null,
       };
       this.positions.push(row);
@@ -175,7 +175,7 @@ describe('Importación de la Matriz · aplicar', () => {
       ['JP-001', 'TEST-Analista', 'TEST-Ecom', 'activo', null, 2],
       ['JP-002', 'TEST-Gerente', 'TEST-Ecom', 'activo', null, 0],
     ]);
-    expect(db.positions[0]).toMatchObject({ validation_status: 'pendiente', level: 'II', meot_hierarchy: 'Operativo', role_summary: 'TEST-Rol' });
+    expect(db.positions[0]).toMatchObject({ validation_status: 'pendiente', level: 'II', role_summary: 'TEST-Rol' });
     expect(db.okrs).toHaveLength(4);
     expect(db.okrs.every((o) => o.period === null && o.weight === null && o.is_active === true)).toBe(true);
     expect(db.okrs.slice(0, 2).map((o) => [o.objective_code, o.kr_code, o.objective])).toEqual([['O1', 'KR1', 'TEST-Obj uno.'], ['O1', 'KR2', 'TEST-Obj uno.']]);
@@ -491,7 +491,7 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
     expect(db.positions[0]).toMatchObject({ level: 'VI', level_original: 'VI' });
   });
 
-  it('categoría: sale de la jerarquía (MEOT); sin coincidencia queda vacía sin bloquear, y no pisa la elegida a mano', async () => {
+  it('categoría: sale de la columna de jerarquía; sin coincidencia queda vacía sin bloquear, y no pisa la elegida a mano', async () => {
     const { db, service } = setup();
     const r = await service.run('apply', 'TEST-Ecom', await xlsx([
       row('A1', 'P1', { 4: 'Especialista Semi Senior (MEOT)' }), row('A1', 'P2', { 4: 'Operativo Junior' }),
@@ -622,5 +622,52 @@ describe('Importación de la Matriz · la división es una lista cerrada (catalo
     expect(Reflect.getMetadata(PERMISSION_KEY, proto['inspectImport']!)).toEqual({ section: 'rrhh', module: 'matriz-puestos', action: 'import' });
     const names = Object.getOwnPropertyNames(JobPositionsController.prototype);
     expect(names.indexOf('inspectImport')).toBeLessThan(names.indexOf('detail'));
+  });
+});
+
+describe('Importación de la Matriz · la jerarquía del Excel solo sirve para la categoría', () => {
+  it('el texto de la columna de jerarquía ya no se guarda ni se escribe en ningún INSERT/UPDATE', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR);
+    expect(db.positions[0]).not.toHaveProperty('meot_hierarchy');
+    expect(db.positions[0]!.seniority).toBe('semi_senior');
+    expect(db.writes.some((c) => /meot_hierarchy/.test(c.sql) || c.params.includes('Especialista Semi Senior'))).toBe(false);
+    // reimportar el mismo texto no es un cambio
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR);
+    expect(again.positions[0]!.action).toBe('sin cambios');
+    // y cambiar solo ese texto (sin otra categoría) tampoco toca nada
+    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Liderazgo Funcional' })]), ACTOR);
+    expect(other.positions[0]!.action).toBe('sin cambios');
+    expect(db.positions[0]!.seniority).toBe('semi_senior');
+  });
+
+  it('las reglas de categoría siguen igual: «Operativo Junior» es Junior y «Especialista Senior» es Senior', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Operativo Junior' }), row('A1', 'P2', { 4: 'Especialista Senior' }), row('A1', 'P3', { 4: 'Dirección' })]), ACTOR);
+    expect(db.positions.map((p) => p.seniority)).toEqual(['junior', 'senior', null]);
+  });
+
+  it('un archivo sin la columna de jerarquía no avisa nada y la categoría queda vacía; la elegida a mano no se pisa', async () => {
+    const { db, service } = setup();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Matriz TEST');
+    ws.addRow(['Matriz de Puestos – División TEST-Ecom']);
+    ws.addRow([]);
+    ws.addRow(['Sub-área', 'Puesto', 'Plazas ocupadas']);
+    ws.addRow(['A1', 'P1', '2']);
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    const file = { buffer, originalname: 'sin-jerarquia.xlsx', size: buffer.length };
+    const r = await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    expect(r.warnings.some((w) => /Jerarqu/i.test(w.message) || /MEOT/i.test(w.message))).toBe(false);
+    expect(db.positions[0]!.seniority).toBeNull();
+    db.positions[0]!.seniority = 'senior'; // elegida a mano
+    await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    expect(db.positions[0]!.seniority).toBe('senior');
+  });
+
+  it('ningún aviso ni mensaje menciona MEOT', async () => {
+    const { service } = setup();
+    const r = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'x'.repeat(300) })]), ACTOR);
+    expect(JSON.stringify([r.warnings, r.errors])).not.toMatch(/MEOT/i);
   });
 });

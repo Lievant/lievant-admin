@@ -22,6 +22,7 @@ import {
   applyValidationChange,
   assertCanApprove,
   missingRequiredFields,
+  buildPositionOrder,
   buildPositionWhere,
   nextPositionCode,
   normalizeDescription,
@@ -71,7 +72,6 @@ type Q = { query: DataSource['query'] };
 /** Campos de texto/número simples del puesto: clave del DTO → columna. */
 const SIMPLE_FIELDS = {
   division: 'division',
-  meotHierarchy: 'meot_hierarchy',
   reportsTo: 'reports_to_text',
   plazas: 'plazas',
   roleSummary: 'role_summary',
@@ -161,11 +161,12 @@ export class JobPositionsService {
       validationStatus: q.validationStatus,
       search: q.search,
     });
-    // Total en la misma consulta; el orden numérico del código evita que JP-1000 quede antes que JP-200.
+    // Total en la misma consulta. El orden se aplica a todos los registros (no a la página); por omisión es el código
+    // numérico, que evita que JP-1000 quede antes que JP-200.
     const rows = (await this.dataSource.query(
       `SELECT p.*, COUNT(*) OVER() AS total_count FROM hr.job_positions p
        WHERE ${where}
-       ORDER BY length(p.code) ASC, p.code ASC
+       ORDER BY ${buildPositionOrder(q.sortBy, q.sortDir)}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, (page - 1) * limit],
     )) as PositionRow[];
@@ -225,12 +226,12 @@ export class JobPositionsService {
       const lists = await this.resolveCatalogs(m, { level: dto.level ?? null, area: dto.area.trim(), division: dto.division ?? null }, null);
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
-           division, meot_hierarchy, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
+           division, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
            reports_to_employee_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
           code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
-          lists.division, dto.meotHierarchy ?? null, dto.reportsTo ?? null, dto.plazas ?? null,
+          lists.division, dto.reportsTo ?? null, dto.plazas ?? null,
           dto.roleSummary ?? null, dto.positionObjective ?? null, dto.validationPoints ?? null, dto.seniority ?? null,
           dto.reportsToEmployeeId ?? null,
         ],
@@ -306,13 +307,13 @@ export class JobPositionsService {
       await m.query(
         `UPDATE hr.job_positions SET title=$2, area=$3, business_unit=$4, level=$5, description=$6,
            description_approved=$7, description_approved_by=$8, description_approved_at=$9,
-           status=$10, division=$11, meot_hierarchy=$12, reports_to_text=$13, plazas=$14,
-           role_summary=$15, position_objective=$16, validation_points=$17, head_comments=$18,
-           validation_status=$19, validated_by=$20, validated_at=$21, seniority=$22, reports_to_employee_id=$23, updated_at=NOW()
+           status=$10, division=$11, reports_to_text=$12, plazas=$13,
+           role_summary=$14, position_objective=$15, validation_points=$16, head_comments=$17,
+           validation_status=$18, validated_by=$19, validated_at=$20, seniority=$21, reports_to_employee_id=$22, updated_at=NOW()
          WHERE id=$1`,
         [
           id, next.title, next.area, next.business_unit, next.level, desc.description, desc.approved, desc.approvedBy, desc.approvedAt, status,
-          simple.division, simple.meotHierarchy, simple.reportsTo, simple.plazas,
+          simple.division, simple.reportsTo, simple.plazas,
           simple.roleSummary, simple.positionObjective, simple.validationPoints, simple.headComments,
           validation.status, validation.by, validation.at, seniority, reportsToEmployeeId ?? null,
         ],

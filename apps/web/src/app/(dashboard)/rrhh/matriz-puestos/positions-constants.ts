@@ -63,7 +63,6 @@ export interface KpiItem {
 export interface PositionDetail extends PositionListItem {
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
-  meotHierarchy: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura). */
   reportsTo: string | null;
   /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo. */

@@ -37,7 +37,7 @@ function build(opts: { current?: Partial<PositionRow>; catalog?: string[]; used?
   const current = {
     id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'TI', business_unit: null, level: null, description: 'TEST-Descripción', description_approved: false,
     description_approved_by: null, description_approved_at: null, status: 'pendiente_aprobacion', division: 'División Antigua', level_original: null, seniority: null,
-    meot_hierarchy: null, reports_to_text: null, reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
+    reports_to_text: null, reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
     validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null,
     created_at: new Date(), updated_at: new Date(), ...opts.current,
   } as PositionRow;
