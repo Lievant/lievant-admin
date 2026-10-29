@@ -30,6 +30,7 @@ import {
   okrsOfPeriod,
   periodLabel,
   plazasLabel,
+  reportsToLabel,
   seniorityLabel,
   parsePeriod,
   sumPeriodWeights,
@@ -227,8 +228,8 @@ export function PositionDetailScreen({ id }: { id: string }) {
               )}
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
               <Field label="Jerarquía (MEOT)" value={position.meotHierarchy ?? '—'} />
-              <Field label="Reporta a" value={position.reportsTo ?? '—'} />
-              <Field label="Supervisa a" value={position.supervises ?? '—'} />
+              <Field label="Reporta a" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
+              {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
               <Field label="Plazas" value={plazasLabel(position.plazas)} />
               <Field label="Estado" value={STATUS_LABELS[position.status]} />
             </div>

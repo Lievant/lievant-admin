@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
-import { areasForDivision, inList, levelOptionLabel, type PositionDetail, type PositionOptions } from './positions-constants';
+import { ReportsToPicker } from './reports-to-picker';
+import { areasForDivision, inList, levelOptionLabel, requiredErrors, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -14,15 +15,17 @@ export async function readError(res: Response, fallback: string): Promise<string
   return Array.isArray(body.message) ? body.message.join(' ') : body.message;
 }
 
-function TextField({ id, label, value, onChange, max, list, rows }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number }) {
+function TextField({ id, label, value, onChange, max, list, rows, required, error }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number; required?: boolean; error?: string | undefined }) {
+  const cls = `${INPUT}${error ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className={LABEL}>{label}</label>
+      <label htmlFor={id} className={LABEL}>{label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
       {rows ? (
-        <textarea id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} className={INPUT} />
+        <textarea id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
       ) : (
-        <input id={id} list={list} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} className={INPUT} />
+        <input id={id} list={list} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
       )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
@@ -56,8 +59,8 @@ export function PositionFormDialog({
   const [areaBusy, setAreaBusy] = useState(false);
   const canAddArea = usePermission('rrhh', 'matriz-puestos', 'update');
   const [meot, setMeot] = useState(position?.meotHierarchy ?? '');
-  const [reportsTo, setReportsTo] = useState(position?.reportsTo ?? '');
-  const [supervises, setSupervises] = useState(position?.supervises ?? '');
+  const [reportsToEmployee, setReportsToEmployee] = useState<ReportsToValue | null>(position?.reportsToEmployee ?? null);
+  const [submitted, setSubmitted] = useState(false);
   const [plazas, setPlazas] = useState(position?.plazas != null ? String(position.plazas) : '');
   const [roleSummary, setRoleSummary] = useState(position?.roleSummary ?? '');
   const [objective, setObjective] = useState(position?.positionObjective ?? '');
@@ -76,6 +79,9 @@ export function PositionFormDialog({
     if (description.length > 10000) return setError('La descripción no puede pasar de 10,000 caracteres.');
     const n = plazas.trim() === '' ? null : Number(plazas);
     if (n !== null && (!Number.isInteger(n) || n < 0)) return setError('Las plazas deben ser un número entero de 0 o más.');
+    setSubmitted(true);
+    const missing = requiredErrors({ roleSummary, positionObjective: objective, validationPoints: points, description });
+    if (Object.keys(missing).length > 0) return setError('Completa los campos obligatorios (marcados con *).');
 
     setSaving(true);
     try {
@@ -86,8 +92,7 @@ export function PositionFormDialog({
         level: level.trim() || null,
         seniority: seniority || null,
         meotHierarchy: meot.trim() || null,
-        reportsTo: reportsTo.trim() || null,
-        supervises: supervises.trim() || null,
+        reportsToEmployeeId: reportsToEmployee?.id ?? null,
         plazas: n,
         roleSummary: roleSummary.trim() || null,
         positionObjective: objective.trim() || null,
@@ -148,6 +153,9 @@ export function PositionFormDialog({
       setAreaBusy(false);
     }
   };
+
+  // Los mensajes aparecen al intentar guardar y se quitan al llenar el campo.
+  const errors = submitted ? requiredErrors({ roleSummary, positionObjective: objective, validationPoints: points, description }) : {};
 
   const approvedWarning = Boolean(position?.descriptionApproved) && description.trim() !== (position?.description ?? '');
 
@@ -234,8 +242,11 @@ export function PositionFormDialog({
               </select>
             </div>
             <TextField id="jp-meot" label="Jerarquía (MEOT) (Opcional)" value={meot} onChange={setMeot} max={100} />
-            <TextField id="jp-reports" label="Reporta a (Opcional)" value={reportsTo} onChange={setReportsTo} max={500} />
-            <TextField id="jp-supervises" label="Supervisa a (Opcional)" value={supervises} onChange={setSupervises} max={500} />
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label htmlFor="jp-reports" className={LABEL}>Reporta a (Opcional)</label>
+              <ReportsToPicker id="jp-reports" value={reportsToEmployee} onChange={setReportsToEmployee} />
+              {position?.reportsTo && !reportsToEmployee && <p className="text-xs text-slate-400">En el Excel venía: {position.reportsTo}</p>}
+            </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-plazas" className={LABEL}>Plazas (Opcional; 0 = Vacante)</label>
               <input id="jp-plazas" type="number" min={0} step={1} inputMode="numeric" value={plazas} onChange={(e) => setPlazas(e.target.value)} className={INPUT} />
@@ -248,12 +259,13 @@ export function PositionFormDialog({
               </select>
             </div>
           </div>
-          <TextField id="jp-role" label="Rol (Opcional)" value={roleSummary} onChange={setRoleSummary} max={10000} rows={3} />
-          <TextField id="jp-objective" label="Objetivo del Puesto (Opcional)" value={objective} onChange={setObjective} max={10000} rows={3} />
-          <TextField id="jp-points" label="Puntos a Validar (Opcional)" value={points} onChange={setPoints} max={10000} rows={3} />
+          <TextField id="jp-role" label="Rol" required error={errors.roleSummary} value={roleSummary} onChange={setRoleSummary} max={10000} rows={3} />
+          <TextField id="jp-objective" label="Objetivo del Puesto" required error={errors.positionObjective} value={objective} onChange={setObjective} max={10000} rows={3} />
+          <TextField id="jp-points" label="Puntos a Validar" required error={errors.validationPoints} value={points} onChange={setPoints} max={10000} rows={3} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="jp-desc" className={LABEL}>Descripción del Puesto (Opcional)</label>
-            <textarea id="jp-desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={10000} className={INPUT} />
+            <label htmlFor="jp-desc" className={LABEL}>Descripción del Puesto<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+            <textarea id="jp-desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={10000} aria-required aria-invalid={Boolean(errors.description)} className={`${INPUT}${errors.description ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`} />
+            {errors.description && <p className="text-xs text-red-600">{errors.description}</p>}
             <p className="text-xs text-slate-400">Una descripción nueva o modificada queda Pendiente de Aprobación.</p>
             {approvedWarning && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">

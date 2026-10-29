@@ -64,8 +64,10 @@ export interface PositionDetail extends PositionListItem {
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   meotHierarchy: string | null;
+  /** Texto de «Reporta a» que venía del Excel (solo lectura). */
   reportsTo: string | null;
-  supervises: string | null;
+  /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo. */
+  reportsToEmployee: { id: string; fullName: string; position: string | null; active: boolean } | null;
   roleSummary: string | null;
   positionObjective: string | null;
   validationPoints: string | null;
@@ -110,6 +112,36 @@ export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], bus
 
 /** Etiqueta del nivel en los desplegables: «I - Dirección General» (se guarda solo el número romano). */
 export const levelOptionLabel = (l: { code: string; name: string }): string => `${l.code} - ${l.name}`;
+
+/** Empleado elegido en «Reporta a». */
+export interface ReportsToValue {
+  id: string;
+  fullName: string;
+  position: string | null;
+  /** false = el empleado ya no está activo («Baja»). */
+  active?: boolean;
+}
+
+/** «Nombre (cargo)» y «(Baja)» cuando el empleado ya no está activo. */
+export function reportsToLabel(v: ReportsToValue): string {
+  return `${v.fullName}${v.position ? ` (${v.position})` : ''}${v.active === false ? ' (Baja)' : ''}`;
+}
+
+/** Campos obligatorios del formulario del puesto y su mensaje (el API valida lo mismo con un 400). */
+export const REQUIRED_FIELDS = [
+  { key: 'roleSummary', label: 'Rol', message: 'El rol es obligatorio' },
+  { key: 'positionObjective', label: 'Objetivo del puesto', message: 'El objetivo del puesto es obligatorio' },
+  { key: 'validationPoints', label: 'Puntos a validar', message: 'Los puntos a validar son obligatorios' },
+  { key: 'description', label: 'Descripción del puesto', message: 'La descripción del puesto es obligatoria' },
+] as const;
+export type RequiredFieldKey = (typeof REQUIRED_FIELDS)[number]['key'];
+
+/** Mensaje por cada campo obligatorio vacío (solo espacios cuenta como vacío). */
+export function requiredErrors(values: Record<RequiredFieldKey, string>): Partial<Record<RequiredFieldKey, string>> {
+  const out: Partial<Record<RequiredFieldKey, string>> = {};
+  for (const f of REQUIRED_FIELDS) if (values[f.key].trim() === '') out[f.key] = f.message;
+  return out;
+}
 
 export const SENIORITY_LABELS: Record<string, string> = { junior: 'Junior', semi_senior: 'Semi Senior', senior: 'Senior' };
 export const seniorityLabel = (s: string | null): string => (s ? (SENIORITY_LABELS[s] ?? s) : '—');
