@@ -134,7 +134,7 @@ export function PositionsScreen() {
           <label htmlFor="mp-division" className={LABEL}>División</label>
           <select id="mp-division" value={division} onChange={onFilter(setDivision)} className={SELECT}>
             <option value="">Todas</option>
-            {options.divisions.map((a) => <option key={a} value={a}>{a}</option>)}
+            {options.filterDivisions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </div>
         <div className="flex flex-col gap-1">

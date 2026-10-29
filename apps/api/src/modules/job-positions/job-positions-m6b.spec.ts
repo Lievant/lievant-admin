@@ -40,7 +40,8 @@ describe('Matriz de Puestos (M6-B) · periodo de plantilla y filtros', () => {
   });
   it('filtros de división y estado de validación como parámetros', () => {
     const { where, params } = buildPositionWhere({ division: 'E-Commerce', validationStatus: 'validado' });
-    expect(where).toContain('p.division = $1');
+    expect(where).toContain("translate(lower(btrim(p.division))");
+    expect(where).toContain('btrim($1)');
     expect(where).toContain('p.validation_status = $2');
     expect(params).toEqual(['E-Commerce', 'validado']);
   });

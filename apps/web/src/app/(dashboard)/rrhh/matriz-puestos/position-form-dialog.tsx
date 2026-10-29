@@ -48,7 +48,10 @@ export function PositionFormDialog({
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState(position?.title ?? '');
-  const [division, setDivision] = useState(position?.division ?? '');
+  const [division, setDivision] = useState(() => {
+    const current = position?.division ?? '';
+    return options.divisions.find((d) => inList([d], current)) ?? current;
+  });
   const [area, setArea] = useState(position?.area ?? '');
   const [level, setLevel] = useState(position?.level ?? '');
   const [seniority, setSeniority] = useState(position?.seniority ?? '');
@@ -117,6 +120,8 @@ export function PositionFormDialog({
   const areaOptions = areasForDivision([...options.catalogAreas, ...addedAreas], division);
   // Un valor antiguo fuera de catálogo se ofrece para no perderlo al editar otros campos.
   const legacyLevel = level !== '' && !inList(levelCodes, level) ? level : null;
+  // Una división antigua fuera del catálogo se ofrece para no perderla al editar otros campos.
+  const legacyDivision = division !== '' && !inList(options.divisions, division) ? division : null;
   const legacyArea = area !== '' && !inList(areaOptions, area) ? area : null;
 
   const changeDivision = (value: string) => {
@@ -184,8 +189,12 @@ export function PositionFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-division" className={LABEL}>División (Opcional)</label>
-              <input id="jp-division" list="jp-divisions" value={division} onChange={(e) => changeDivision(e.target.value)} maxLength={100} className={INPUT} />
-              <datalist id="jp-divisions">{options.divisions.map((a) => <option key={a} value={a} />)}</datalist>
+              <select id="jp-division" value={division} onChange={(e) => changeDivision(e.target.value)} className={INPUT}>
+                <option value="">Sin división</option>
+                {legacyDivision && <option value={legacyDivision}>{legacyDivision} (Fuera de Catálogo)</option>}
+                {options.divisions.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <p className="text-xs text-slate-400">Las divisiones se administran en Configuración › Catálogos.</p>
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-area" className={LABEL}>Área</label>

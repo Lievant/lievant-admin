@@ -14,6 +14,8 @@ import {
   type ParseResult,
   type RawSheet,
 } from './job-positions-import.parser';
+import { canonicalDivision, divisionNotInCatalog, loadCatalogDivisions } from './job-positions-divisions';
+import { deduceDivision } from './job-positions-import.parser';
 import { findAreaExact, type CatalogArea } from './job-positions-catalog.util';
 import { applyValidationChange, missingRequiredFields, nextPositionCode, type ValidationStatus } from './job-positions.util';
 
@@ -169,11 +171,15 @@ export class JobPositionsImportService {
     actor: Actor,
   ): Promise<ImportResult> {
     const sheets = await this.readWorkbook(file);
+    // La división es una lista cerrada (`catalogs.divisions`): se guarda el nombre canónico y no se crea ninguna.
+    const catalog = await loadCatalogDivisions(this.dataSource);
+    const canonical = canonicalDivision(catalog, division);
+    if (!canonical) throw divisionNotInCatalog(division.trim(), catalog);
     const levelCodes = await this.levelCodes(this.dataSource);
     const parsed = parseMatrixSheets(sheets, { levelCodes });
     if (parsed.dataRows > MAX_IMPORT_ROWS) throw new BadRequestException(`El archivo pasa del límite de ${MAX_IMPORT_ROWS} filas.`);
     const fileName = file?.originalname ?? '';
-    const div = division.trim();
+    const div = canonical;
 
     if (parsed.errors.length > 0) return this.result(mode, false, fileName, div, parsed, [], new Map(), []);
 
@@ -232,6 +238,23 @@ export class JobPositionsImportService {
       },
     });
     return result;
+  }
+
+  /**
+   * Lo que la pantalla necesita antes de analizar: la división deducida del título de la hoja, su coincidencia con
+   * el catálogo (nombre canónico, sin distinguir mayúsculas, acentos ni espacios) y las divisiones válidas.
+   */
+  async inspect(file: { buffer: Buffer; originalname: string; size: number } | undefined): Promise<{
+    sheet: string | null;
+    divisionHint: string | null;
+    division: string | null;
+    divisions: string[];
+  }> {
+    const sheets = await this.readWorkbook(file);
+    const parsed = parseMatrixSheets(sheets);
+    const divisions = await loadCatalogDivisions(this.dataSource);
+    const hint = parsed.divisionHint ?? deduceDivision(null);
+    return { sheet: parsed.sheetName, divisionHint: hint, division: canonicalDivision(divisions, hint), divisions };
   }
 
   /** Un aviso por fila con los campos obligatorios del formulario que quedarían vacíos (nunca bloquea). */

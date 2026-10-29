@@ -14,6 +14,8 @@ class FakeDb {
   okrs: Row[] = [];
   kpis: Row[] = [];
   areas: Row[] = [];
+  /** Divisiones activas del catálogo (la importación no crea ninguna). */
+  divisions: Row[] = [{ name: 'TEST-Ecom' }, { name: 'TEST-Otra' }, { name: 'E-Commerce' }];
   levelCodes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
   calls: { sql: string; params: unknown[] }[] = [];
   failOn: RegExp | null = null;
@@ -40,6 +42,7 @@ class FakeDb {
     if (this.failOn && this.failOn.test(sql)) throw new Error('fallo simulado');
     const live = (rows: Row[]) => rows.filter((r) => !r.deleted_at);
     if (/pg_advisory_xact_lock/.test(sql)) return [];
+    if (/^SELECT name FROM catalogs\.divisions/.test(sql)) return this.divisions.map((d) => ({ ...d }));
     if (/FROM catalogs\.org_levels/.test(sql)) return this.levelCodes.map((code) => ({ code }));
     if (/^SELECT name, division_name FROM catalogs\.areas/.test(sql)) return this.areas.map((a) => ({ ...a }));
     if (/^INSERT INTO catalogs\.areas/.test(sql)) {
@@ -549,5 +552,75 @@ describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos o
     const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
     expect(again.positions[0]!.action).toBe('sin cambios');
     expect(again.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message))).toEqual([]);
+  });
+});
+
+describe('Importación de la Matriz · la división es una lista cerrada (catalogs.divisions)', () => {
+  it('«e-commerce» se empareja con «E-Commerce» (sin mayúsculas, acentos ni espacios) y se guarda el nombre canónico', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', ' e-COMMERCE ', await xlsx([row('A1', 'P1')]), ACTOR);
+    expect(r.division).toBe('E-Commerce');
+    expect(db.positions[0]!.division).toBe('E-Commerce');
+    // la reimportación con otra escritura empareja por el nombre canónico: mismo puesto, sin cambios
+    const again = await service.run('apply', 'E-COMMERCE', await xlsx([row('A1', 'P1')]), ACTOR);
+    expect(again.positions[0]!.action).toBe('sin cambios');
+    expect(db.positions).toHaveLength(1);
+  });
+
+  it('una división que no existe en el catálogo da 400 con la lista de las válidas, en vista previa y al aplicar, y no escribe ni crea nada', async () => {
+    const { db, audit, service } = setup();
+    for (const mode of ['preview', 'apply'] as const) {
+      const err = await service.run(mode, 'División Inventada', await xlsx([row('A1', 'P1')]), ACTOR).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toMatch(/«División Inventada» no está en el catálogo de divisiones.*E-Commerce, TEST-Ecom, TEST-Otra/);
+    }
+    expect(db.writes).toEqual([]);
+    expect(db.divisions).toHaveLength(3);
+    expect(audit.logActivity).not.toHaveBeenCalled();
+  });
+
+  it('inspect: deduce la división del título y la empareja con el catálogo', async () => {
+    const { service } = setup();
+    const file = await xlsx(FILE_ROWS, 'Matriz TEST');
+    // el título de la hoja de la prueba es «División TEST-Ecom»
+    const r = await service.inspect(file);
+    expect(r.divisionHint).toBe('TEST-Ecom');
+    expect(r.division).toBe('TEST-Ecom');
+    expect(r.divisions).toEqual(['E-Commerce', 'TEST-Ecom', 'TEST-Otra']);
+  });
+
+  it('inspect: «E-COMMERCE» en el título se empareja con «E-Commerce»; sin coincidencia deja la división vacía y conserva el texto deducido', async () => {
+    const { db, service } = setup();
+    const withTitle = async (title: string) => {
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Matriz TEST');
+      ws.addRow([title]);
+      ws.addRow([]);
+      ws.addRow(HEADER);
+      ws.addRow(row('A1', 'P1'));
+      const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+      return { buffer, originalname: 'a.xlsx', size: buffer.length };
+    };
+    const ok = await service.inspect(await withTitle('Matriz de Puestos – División E-COMMERCE · Propuesta'));
+    expect(ok).toMatchObject({ divisionHint: 'E-COMMERCE', division: 'E-Commerce' });
+    const none = await service.inspect(await withTitle('Matriz de Puestos – División Marketing Digital · Propuesta'));
+    expect(none).toMatchObject({ divisionHint: 'Marketing Digital', division: null });
+    const noHint = await service.inspect(await withTitle('Matriz sin división en el título'));
+    expect(noHint).toMatchObject({ divisionHint: null, division: null });
+    expect(db.writes).toEqual([]);
+    expect(db.divisions).toHaveLength(3);
+  });
+
+  it('inspect rechaza lo que no es un .xlsx válido', async () => {
+    const { service } = setup();
+    await expect(service.inspect(undefined)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.inspect({ buffer: Buffer.from('a,b'), originalname: 'a.csv', size: 3 })).rejects.toThrow(/\.xlsx/);
+  });
+
+  it('la ruta inspect exige rrhh.matriz-puestos.import y va antes de las rutas con :id', () => {
+    const proto = JobPositionsController.prototype as unknown as Record<string, object>;
+    expect(Reflect.getMetadata(PERMISSION_KEY, proto['inspectImport']!)).toEqual({ section: 'rrhh', module: 'matriz-puestos', action: 'import' });
+    const names = Object.getOwnPropertyNames(JobPositionsController.prototype);
+    expect(names.indexOf('inspectImport')).toBeLessThan(names.indexOf('detail'));
   });
 });
