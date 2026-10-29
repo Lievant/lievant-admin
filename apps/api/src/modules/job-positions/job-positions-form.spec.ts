@@ -6,7 +6,7 @@ import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
 import { CreatePositionDto, EmployeeSearchQueryDto, UpdatePositionDto } from './dto/job-position.dto';
 import { JobPositionsController } from './job-positions.controller';
 import { JobPositionsService } from './job-positions.service';
-import { REQUIRED_POSITION_FIELDS, missingRequiredFields, toDetail, type PositionRow } from './job-positions.util';
+import { REQUIRED_POSITION_FIELDS, missingRequiredFields, toDetail, toListItem, type PositionRow } from './job-positions.util';
 
 const ACTOR = { id: 'user-1', email: 'rrhh@lievant.com', name: 'RRHH' };
 const FULL = { roleSummary: 'TEST-Rol', positionObjective: 'TEST-Objetivo', validationPoints: 'TEST-Puntos', description: 'TEST-Descripción' };
@@ -16,7 +16,7 @@ const E2 = '22222222-2222-4222-8222-222222222222';
 const baseRow = (over: Partial<PositionRow> = {}): PositionRow => ({
   id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'TI', business_unit: null, level: null, description: 'TEST-Descripción', description_approved: false,
   description_approved_by: null, description_approved_at: null, status: 'pendiente_aprobacion', division: null, level_original: null, seniority: null,
-  meot_hierarchy: null, reports_to_text: 'Texto del Excel', reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
+  reports_to_text: 'Texto del Excel', reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
   validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null,
   created_at: new Date(), updated_at: new Date(), ...over,
 });
@@ -127,8 +127,8 @@ describe('Matriz de Puestos · «Reporta a» como empleado', () => {
     const { service, calls, audit } = build();
     await service.update('p1', { ...FULL, reportsToEmployeeId: E1 }, ACTOR);
     const up = updateCalls(calls)[0]!;
-    expect(up.params[22]).toBe(E1);
-    expect(up.params[12]).toBe('Texto del Excel');
+    expect(up.params[21]).toBe(E1);
+    expect(up.params[11]).toBe('Texto del Excel');
     expect(audit.logActivity.mock.calls[0]![0].changes.reportsToEmployee).toEqual({ from: null, to: 'TEST-Ana' });
   });
 
@@ -137,7 +137,7 @@ describe('Matriz de Puestos · «Reporta a» como empleado', () => {
     await service.update('p1', { ...FULL, reportsToEmployeeId: E2 }, ACTOR);
     expect(audit.logActivity.mock.calls[0]![0].changes.reportsToEmployee).toEqual({ from: 'TEST-Ana', to: 'TEST-Beto' });
     await service.update('p1', { ...FULL, reportsToEmployeeId: null }, ACTOR);
-    expect(updateCalls(calls)[1]!.params[22]).toBeNull();
+    expect(updateCalls(calls)[1]!.params[21]).toBeNull();
     expect(audit.logActivity.mock.calls[1]![0].changes.reportsToEmployee).toEqual({ from: 'TEST-Ana', to: null });
   });
 
@@ -169,6 +169,31 @@ describe('Matriz de Puestos · «Reporta a» como empleado', () => {
     expect(await errs({ reportsToEmployeeId: null })).toEqual([]);
     expect(await errs({ reportsToEmployeeId: 'no-es-uuid' })).toEqual(['reportsToEmployeeId']);
     expect(await errs({ supervises: 'Alguien' })).toEqual(['supervises']);
+  });
+});
+
+describe('Matriz de Puestos · sin «Jerarquía (MEOT)»', () => {
+  it('ninguna respuesta del API devuelve el campo (detalle y lista)', () => {
+    const detail = toDetail(baseRow(), [], []);
+    expect(detail).not.toHaveProperty('meotHierarchy');
+    expect(JSON.stringify(detail)).not.toMatch(/meot/i);
+    expect(JSON.stringify(toListItem(baseRow()))).not.toMatch(/meot/i);
+  });
+
+  it('los DTO ya no lo aceptan (la validación global lo rechaza) y el servicio nunca lo escribe', async () => {
+    const strict = { whitelist: true, forbidNonWhitelisted: true };
+    expect((await validate(plainToInstance(UpdatePositionDto, { meotHierarchy: 'Operativo Junior' }), strict)).map((e) => e.property)).toEqual(['meotHierarchy']);
+    expect((await validate(plainToInstance(CreatePositionDto, { title: 'A', area: 'TI', meotHierarchy: 'X' }), strict)).map((e) => e.property)).toEqual(['meotHierarchy']);
+    const { service, calls } = build();
+    await service.create(createDto(), ACTOR);
+    await service.update('p1', { ...FULL, title: 'TEST-Otro' }, ACTOR);
+    expect(calls.some((c) => /meot/i.test(c.sql))).toBe(false);
+  });
+
+  it('la auditoría de un cambio del puesto no incluye el campo', async () => {
+    const { service, audit } = build();
+    await service.update('p1', { ...FULL, plazas: 7 }, ACTOR);
+    expect(JSON.stringify(audit.logActivity.mock.calls[0]![0].changes)).not.toMatch(/meot/i);
   });
 });
 

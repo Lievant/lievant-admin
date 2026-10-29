@@ -135,7 +135,7 @@ describe('Matriz de Puestos · filtros del listado', () => {
 });
 
 const EXTRA = {
-  level_original: null, seniority: null, division: null, meot_hierarchy: null, reports_to_text: null, reports_to_employee_id: null, plazas: null, role_summary: 'TEST-Rol',
+  level_original: null, seniority: null, division: null, reports_to_text: null, reports_to_employee_id: null, plazas: null, role_summary: 'TEST-Rol',
   position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente' as const,
   validated_by: null, validator_name: null, validated_at: null,
 };

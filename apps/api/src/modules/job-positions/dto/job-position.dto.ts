@@ -71,12 +71,6 @@ export class CreatePositionDto {
   @IsOptional()
   @emptyToNull
   @IsString()
-  @MaxLength(100)
-  meotHierarchy?: string | null;
-
-  @IsOptional()
-  @emptyToNull
-  @IsString()
   @MaxLength(500)
   reportsTo?: string | null;
 
@@ -156,12 +150,6 @@ export class UpdatePositionDto {
   @IsString()
   @MaxLength(100)
   division?: string | null;
-
-  @IsOptional()
-  @emptyToNull
-  @IsString()
-  @MaxLength(100)
-  meotHierarchy?: string | null;
 
   @IsOptional()
   @emptyToNull

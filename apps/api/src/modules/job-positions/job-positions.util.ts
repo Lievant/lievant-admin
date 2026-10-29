@@ -274,7 +274,6 @@ export interface PositionRow {
   division: string | null;
   level_original: string | null;
   seniority: string | null;
-  meot_hierarchy: string | null;
   reports_to_text: string | null;
   reports_to_employee_id: string | null;
   reports_to_name?: string | null;
@@ -459,7 +458,6 @@ export function applyValidationChange(current: ValidationState, next: Validation
 export interface PositionDetail extends PositionListItem {
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
-  meotHierarchy: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura en la pantalla). */
   reportsTo: string | null;
   /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo («Baja»). */
@@ -484,7 +482,6 @@ export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activ
   return {
     ...toListItem(r),
     levelOriginal: r.level_original,
-    meotHierarchy: r.meot_hierarchy,
     reportsTo: r.reports_to_text,
     reportsToEmployee: r.reports_to_employee_id
       ? { id: r.reports_to_employee_id, fullName: r.reports_to_name ?? 'Empleado', position: r.reports_to_position ?? null, active: r.reports_to_active !== false }

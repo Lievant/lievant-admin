@@ -113,7 +113,7 @@ describe('Matriz de Puestos (M6-B) · OKRs de plantilla', () => {
 describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nuevos)', () => {
   const base = {
     id: 'p1', code: 'JP-001', title: 'TEST-Analista', area: 'TI', business_unit: 'TEST-UN', level: 'II', description: 'TEST-Desc', description_approved: false,
-    description_approved_by: null, description_approved_at: null, status: 'activo', division: 'E-Commerce', meot_hierarchy: null, reports_to_text: null,
+    description_approved_by: null, description_approved_at: null, status: 'activo', division: 'E-Commerce', reports_to_text: null,
     reports_to_employee_id: null, plazas: 2, role_summary: 'Rol', position_objective: 'Obj', validation_points: 'Puntos', head_comments: null,
     validation_status: 'pendiente', validated_by: null, validator_name: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
   };
@@ -131,10 +131,10 @@ describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nue
     const { service, calls, audit } = build();
     await service.update('p1', { validationStatus: 'validado', headComments: 'Texto largo del Head' }, ACTOR);
     const update = calls.find((c) => /^UPDATE hr\.job_positions SET/.test(c.sql))!;
-    expect(update.params[18]).toBe('validado');
-    expect(update.params[19]).toBe('user-1');
-    expect(update.params[20]).toBeInstanceOf(Date);
-    expect(update.params[17]).toBe('Texto largo del Head');
+    expect(update.params[17]).toBe('validado');
+    expect(update.params[18]).toBe('user-1');
+    expect(update.params[19]).toBeInstanceOf(Date);
+    expect(update.params[16]).toBe('Texto largo del Head');
     const changes = audit.logActivity.mock.calls[0]![0].changes;
     expect(changes.validationStatus).toEqual({ from: 'pendiente', to: 'validado' });
     expect(changes.headComments).toEqual({ from: 'modificado', to: 'modificado' });
@@ -145,7 +145,7 @@ describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nue
     const { service, calls } = build({ ...base, validation_status: 'validado', validated_by: 'u0', validated_at: new Date() });
     await service.update('p1', { validationStatus: 'pendiente' }, ACTOR);
     const update = calls.find((c) => /^UPDATE hr\.job_positions SET/.test(c.sql))!;
-    expect(update.params.slice(18, 21)).toEqual(['pendiente', null, null]);
+    expect(update.params.slice(17, 20)).toEqual(['pendiente', null, null]);
   });
 
   it('un cambio que no toca la validación la conserva tal cual (incluido quién validó)', async () => {
@@ -153,8 +153,8 @@ describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nue
     const { service, calls } = build({ ...base, validation_status: 'validado', validated_by: 'u0', validated_at: at });
     await service.update('p1', { plazas: 0 }, ACTOR);
     const update = calls.find((c) => /^UPDATE hr\.job_positions SET/.test(c.sql))!;
-    expect(update.params[13]).toBe(0);
-    expect(update.params.slice(18, 21)).toEqual(['validado', 'u0', at]);
+    expect(update.params[12]).toBe(0);
+    expect(update.params.slice(17, 20)).toEqual(['validado', 'u0', at]);
   });
 
   it('la unidad de negocio sigue aceptándose en el API y se conserva si no se manda', async () => {

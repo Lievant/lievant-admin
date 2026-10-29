@@ -77,7 +77,6 @@ interface ExistingPosition {
   level_original: string | null;
   seniority: string | null;
   description: string | null;
-  meot_hierarchy: string | null;
   reports_to_text: string | null;
   plazas: number | null;
   role_summary: string | null;
@@ -114,7 +113,6 @@ interface Plan {
 const same = (a: unknown, b: unknown): boolean => (a ?? null) === (b ?? null);
 
 const SIMPLE_MAP: { column: ColumnKey; field: keyof ParsedPosition; col: keyof ExistingPosition }[] = [
-  { column: 'meot', field: 'meotHierarchy', col: 'meot_hierarchy' },
   { column: 'reportsTo', field: 'reportsTo', col: 'reports_to_text' },
   { column: 'plazas', field: 'plazas', col: 'plazas' },
   { column: 'role', field: 'roleSummary', col: 'role_summary' },
@@ -350,8 +348,8 @@ export class JobPositionsImportService {
         if (!same(e.level_original, p.levelOriginal)) simple.level_original = p.levelOriginal;
       }
     }
-    // Categoría: solo si la jerarquía (MEOT) del archivo trae una; si no, se conserva la del sistema.
-    if (columns.has('meot') && p.seniority !== null && p.seniority !== e.seniority) simple.seniority = p.seniority;
+    // Categoría: solo si la columna de jerarquía del archivo trae una; si no, se conserva la del sistema.
+    if (columns.has('hierarchy') && p.seniority !== null && p.seniority !== e.seniority) simple.seniority = p.seniority;
 
     let validation: Plan['validation'] = null;
     if (columns.has('status') && p.validationStatus !== 'pendiente' && p.validationStatus !== e.validation_status) {
@@ -450,13 +448,13 @@ export class JobPositionsImportService {
     if (plan.action === 'crear') {
       // `description` queda vacía y `status` activo: la descripción formal se redacta y aprueba aparte.
       const rows = (await m.query(
-        `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, meot_hierarchy, reports_to_text,
+        `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, reports_to_text,
            plazas, role_summary, position_objective, validation_points, head_comments,
            validation_status, validated_by, validated_at, level_original, seniority)
-         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
           // `reports_to_employee_id` NO se escribe: «Reporta a» como empleado se elige en la pantalla del puesto.
-          code, p.title, p.area, p.level, actor.id ?? null, division, p.meotHierarchy, p.reportsTo, p.plazas,
+          code, p.title, p.area, p.level, actor.id ?? null, division, p.reportsTo, p.plazas,
           p.roleSummary, p.positionObjective, p.validationPoints, plan.headComments?.value ?? null,
           plan.validation?.status ?? 'pendiente', plan.validation?.by ?? null, plan.validation?.at ?? null,
           p.levelOriginal, p.seniority,
