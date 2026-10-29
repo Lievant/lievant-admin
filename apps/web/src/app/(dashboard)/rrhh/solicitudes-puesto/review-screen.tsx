@@ -1,5 +1,6 @@
 'use client';
 
+import { ModalShell } from '../matriz-puestos/modal-shell';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
@@ -242,29 +243,33 @@ export function ReviewScreen() {
       )}
 
       {detail && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-          <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl sm:p-6">
-            <RequisitionDetailView d={detail} showRequester />
-
-            {canApprove && detail.status === 'enviada' && (
-              <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="rv-comments" className={LABEL}>{rejecting ? 'Comentarios del Rechazo (Obligatorios)' : 'Comentarios (Opcionales al Aprobar, Obligatorios al Rechazar)'}</label>
-                  <textarea id="rv-comments" rows={3} value={comments} onChange={(e) => setComments(e.target.value)} maxLength={5000} className={SELECT} />
-                </div>
-                <div className="flex flex-wrap justify-end gap-2">
+        <ModalShell
+          maxWidth="max-w-2xl"
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
+              {canApprove && detail.status === 'enviada' && (
+                <>
                   <button type="button" disabled={busy} onClick={() => { setRejecting(true); void resolve('reject'); }} className="rounded-md border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 disabled:opacity-60">Rechazar</button>
                   <button type="button" disabled={busy} onClick={() => resolve('approve')} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">Aprobar</button>
-                </div>
-              </div>
-            )}
-
-            {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
-            <div className="mt-4 flex justify-end">
+                </>
+              )}
               <button type="button" onClick={() => setDetail(null)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cerrar</button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <RequisitionDetailView d={detail} showRequester />
+
+          {canApprove && detail.status === 'enviada' && (
+            <div className="mt-5 space-y-3 border-t border-slate-100 pt-4">
+              <div className="flex flex-col gap-1">
+                <label htmlFor="rv-comments" className={LABEL}>{rejecting ? 'Comentarios del Rechazo (Obligatorios)' : 'Comentarios (Opcionales al Aprobar, Obligatorios al Rechazar)'}</label>
+                <textarea id="rv-comments" rows={3} value={comments} onChange={(e) => setComments(e.target.value)} maxLength={5000} className={SELECT} />
+              </div>
+            </div>
+          )}
+
+          {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
+        </ModalShell>
       )}
     </div>
   );

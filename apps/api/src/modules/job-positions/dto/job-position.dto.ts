@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -20,7 +21,9 @@ import {
   ACTIVITY_FREQUENCIES,
   MAX_TITLE,
   MEASUREMENT_FREQUENCIES,
+  POSITION_SORT_COLUMNS,
   POSITION_STATUSES,
+  SORT_DIRECTIONS,
   VALIDATION_STATUSES,
 } from '../job-positions.util';
 import { SENIORITIES } from '../job-positions-catalog.util';
@@ -68,20 +71,14 @@ export class CreatePositionDto {
   @IsOptional()
   @emptyToNull
   @IsString()
-  @MaxLength(100)
-  meotHierarchy?: string | null;
-
-  @IsOptional()
-  @emptyToNull
-  @IsString()
   @MaxLength(500)
   reportsTo?: string | null;
 
+  /** «Reporta a» como empleado (null lo quita). El texto del Excel (`reportsTo`) no se edita desde el formulario. */
   @IsOptional()
   @emptyToNull
-  @IsString()
-  @MaxLength(500)
-  supervises?: string | null;
+  @IsUUID()
+  reportsToEmployeeId?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -157,20 +154,14 @@ export class UpdatePositionDto {
   @IsOptional()
   @emptyToNull
   @IsString()
-  @MaxLength(100)
-  meotHierarchy?: string | null;
-
-  @IsOptional()
-  @emptyToNull
-  @IsString()
   @MaxLength(500)
   reportsTo?: string | null;
 
+  /** «Reporta a» como empleado (null lo quita). El texto del Excel (`reportsTo`) no se edita desde el formulario. */
   @IsOptional()
   @emptyToNull
-  @IsString()
-  @MaxLength(500)
-  supervises?: string | null;
+  @IsUUID()
+  reportsToEmployeeId?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -217,6 +208,15 @@ export class UpdatePositionDto {
 }
 
 export class PositionQueryDto {
+  /** Columna de orden (lista cerrada); sin ella se conserva el orden de siempre. */
+  @IsOptional()
+  @IsIn(POSITION_SORT_COLUMNS, { message: 'La columna de orden no es válida' })
+  sortBy?: (typeof POSITION_SORT_COLUMNS)[number];
+
+  @IsOptional()
+  @IsIn(SORT_DIRECTIONS, { message: 'El sentido del orden debe ser asc o desc' })
+  sortDir?: (typeof SORT_DIRECTIONS)[number];
+
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -515,4 +515,18 @@ export class CreateAreaDto {
   @IsOptional()
   @IsBoolean()
   confirmSimilar?: boolean;
+}
+
+export class EmployeeSearchQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  limit?: number;
 }

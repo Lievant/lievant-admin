@@ -14,8 +14,10 @@ import {
   type ParseResult,
   type RawSheet,
 } from './job-positions-import.parser';
+import { canonicalDivision, divisionNotInCatalog, loadCatalogDivisions } from './job-positions-divisions';
+import { deduceDivision } from './job-positions-import.parser';
 import { findAreaExact, type CatalogArea } from './job-positions-catalog.util';
-import { applyValidationChange, nextPositionCode, type ValidationStatus } from './job-positions.util';
+import { applyValidationChange, missingRequiredFields, nextPositionCode, type ValidationStatus } from './job-positions.util';
 
 type Q = { query: DataSource['query'] };
 
@@ -74,9 +76,8 @@ interface ExistingPosition {
   level: string | null;
   level_original: string | null;
   seniority: string | null;
-  meot_hierarchy: string | null;
+  description: string | null;
   reports_to_text: string | null;
-  supervises_text: string | null;
   plazas: number | null;
   role_summary: string | null;
   position_objective: string | null;
@@ -94,6 +95,8 @@ interface ExistingKpi { id: string; name: string; description: string | null; ta
 /** Qué hay que hacer con un puesto del archivo. */
 interface Plan {
   action: ImportAction;
+  /** Campos obligatorios del formulario que el puesto no tendría tras la importación (aviso, no error). */
+  missing: string[];
   existing: ExistingPosition | null;
   simple: Partial<Record<string, unknown>>;
   validation: { status: ValidationStatus; by: string | null; at: Date | null } | null;
@@ -110,9 +113,7 @@ interface Plan {
 const same = (a: unknown, b: unknown): boolean => (a ?? null) === (b ?? null);
 
 const SIMPLE_MAP: { column: ColumnKey; field: keyof ParsedPosition; col: keyof ExistingPosition }[] = [
-  { column: 'meot', field: 'meotHierarchy', col: 'meot_hierarchy' },
   { column: 'reportsTo', field: 'reportsTo', col: 'reports_to_text' },
-  { column: 'supervises', field: 'supervises', col: 'supervises_text' },
   { column: 'plazas', field: 'plazas', col: 'plazas' },
   { column: 'role', field: 'roleSummary', col: 'role_summary' },
   { column: 'objective', field: 'positionObjective', col: 'position_objective' },
@@ -168,18 +169,23 @@ export class JobPositionsImportService {
     actor: Actor,
   ): Promise<ImportResult> {
     const sheets = await this.readWorkbook(file);
+    // La división es una lista cerrada (`catalogs.divisions`): se guarda el nombre canónico y no se crea ninguna.
+    const catalog = await loadCatalogDivisions(this.dataSource);
+    const canonical = canonicalDivision(catalog, division);
+    if (!canonical) throw divisionNotInCatalog(division.trim(), catalog);
     const levelCodes = await this.levelCodes(this.dataSource);
     const parsed = parseMatrixSheets(sheets, { levelCodes });
     if (parsed.dataRows > MAX_IMPORT_ROWS) throw new BadRequestException(`El archivo pasa del límite de ${MAX_IMPORT_ROWS} filas.`);
     const fileName = file?.originalname ?? '';
-    const div = division.trim();
+    const div = canonical;
 
     if (parsed.errors.length > 0) return this.result(mode, false, fileName, div, parsed, [], new Map(), []);
 
     if (mode === 'preview') {
       const areas = await this.resolveAreas(this.dataSource, parsed, div, false);
       const plans = await this.plan(this.dataSource, areas.parsed, div, actor);
-      return this.result(mode, false, fileName, div, areas.parsed, areas.parsed.positions, plans, areas.created);
+      const withWarnings = this.withMissingWarnings(areas.parsed, plans);
+      return this.result(mode, false, fileName, div, withWarnings, withWarnings.positions, plans, areas.created);
     }
 
     const { plans, areas } = await this.dataSource.transaction(async (m) => {
@@ -198,7 +204,8 @@ export class JobPositionsImportService {
       }
       return { plans, areas };
     });
-    const result = this.result(mode, true, fileName, div, areas.parsed, areas.parsed.positions, plans, areas.created);
+    const applied = this.withMissingWarnings(areas.parsed, plans);
+    const result = this.result(mode, true, fileName, div, applied, applied.positions, plans, areas.created);
     for (const name of areas.created) {
       await this.audit.logActivity({
         userId: actor.id ?? null,
@@ -231,8 +238,35 @@ export class JobPositionsImportService {
     return result;
   }
 
+  /**
+   * Lo que la pantalla necesita antes de analizar: la división deducida del título de la hoja, su coincidencia con
+   * el catálogo (nombre canónico, sin distinguir mayúsculas, acentos ni espacios) y las divisiones válidas.
+   */
+  async inspect(file: { buffer: Buffer; originalname: string; size: number } | undefined): Promise<{
+    sheet: string | null;
+    divisionHint: string | null;
+    division: string | null;
+    divisions: string[];
+  }> {
+    const sheets = await this.readWorkbook(file);
+    const parsed = parseMatrixSheets(sheets);
+    const divisions = await loadCatalogDivisions(this.dataSource);
+    const hint = parsed.divisionHint ?? deduceDivision(null);
+    return { sheet: parsed.sheetName, divisionHint: hint, division: canonicalDivision(divisions, hint), divisions };
+  }
+
+  /** Un aviso por fila con los campos obligatorios del formulario que quedarían vacíos (nunca bloquea). */
+  private withMissingWarnings(parsed: ParseResult, plans: Map<number, Plan>): ParseResult {
+    const warnings = [...parsed.warnings];
+    for (const p of parsed.positions) {
+      const missing = plans.get(p.row)?.missing ?? [];
+      if (missing.length > 0) warnings.push({ row: p.row, message: `Faltan campos obligatorios: ${missing.join(', ')}; complétalos en la pantalla del puesto` });
+    }
+    return { ...parsed, warnings };
+  }
+
   private async levelCodes(m: Q): Promise<string[]> {
-    const rows = (await m.query(`SELECT code FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[];
+    const rows = (await m.query(`SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[];
     return rows.map((r) => r.code);
   }
 
@@ -281,6 +315,7 @@ export class JobPositionsImportService {
     const validation = applyValidationChange({ status: 'pendiente', by: null, at: null }, p.validationStatus, actor.id ?? null, new Date());
     return {
       action: 'crear',
+      missing: missingRequiredFields({ roleSummary: p.roleSummary, positionObjective: p.positionObjective, validationPoints: p.validationPoints, description: null }).map((f) => f.label),
       existing: null,
       simple: {},
       validation,
@@ -313,8 +348,8 @@ export class JobPositionsImportService {
         if (!same(e.level_original, p.levelOriginal)) simple.level_original = p.levelOriginal;
       }
     }
-    // Categoría: solo si la jerarquía (MEOT) del archivo trae una; si no, se conserva la del sistema.
-    if (columns.has('meot') && p.seniority !== null && p.seniority !== e.seniority) simple.seniority = p.seniority;
+    // Categoría: solo si la columna de jerarquía del archivo trae una; si no, se conserva la del sistema.
+    if (columns.has('hierarchy') && p.seniority !== null && p.seniority !== e.seniority) simple.seniority = p.seniority;
 
     let validation: Plan['validation'] = null;
     if (columns.has('status') && p.validationStatus !== 'pendiente' && p.validationStatus !== e.validation_status) {
@@ -382,8 +417,16 @@ export class JobPositionsImportService {
     const changed =
       Object.keys(simple).length > 0 || validation !== null || headComments !== null || replaceActivities ||
       okrUpdates.length + okrInserts.length + okrDeletes.length + kpiUpdates.length + kpiInserts.length + kpiDeletes.length > 0;
+    // Tras importar, cada campo vale lo del archivo si la columna viene y, si no, lo que ya tenía el puesto.
+    const after = (column: ColumnKey, fileValue: string | null, current: string | null): string | null => (columns.has(column) ? fileValue : current);
     return {
       action: changed ? 'actualizar' : 'sin cambios',
+      missing: missingRequiredFields({
+        roleSummary: after('role', p.roleSummary, e.role_summary),
+        positionObjective: after('objective', p.positionObjective, e.position_objective),
+        validationPoints: after('validationPoints', p.validationPoints, e.validation_points),
+        description: e.description,
+      }).map((f) => f.label),
       existing: e,
       simple,
       validation,
@@ -405,12 +448,13 @@ export class JobPositionsImportService {
     if (plan.action === 'crear') {
       // `description` queda vacía y `status` activo: la descripción formal se redacta y aprueba aparte.
       const rows = (await m.query(
-        `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, meot_hierarchy, reports_to_text,
-           supervises_text, plazas, role_summary, position_objective, validation_points, head_comments,
+        `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, reports_to_text,
+           plazas, role_summary, position_objective, validation_points, head_comments,
            validation_status, validated_by, validated_at, level_original, seniority)
-         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING id`,
+         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
-          code, p.title, p.area, p.level, actor.id ?? null, division, p.meotHierarchy, p.reportsTo, p.supervises, p.plazas,
+          // `reports_to_employee_id` NO se escribe: «Reporta a» como empleado se elige en la pantalla del puesto.
+          code, p.title, p.area, p.level, actor.id ?? null, division, p.reportsTo, p.plazas,
           p.roleSummary, p.positionObjective, p.validationPoints, plan.headComments?.value ?? null,
           plan.validation?.status ?? 'pendiente', plan.validation?.by ?? null, plan.validation?.at ?? null,
           p.levelOriginal, p.seniority,

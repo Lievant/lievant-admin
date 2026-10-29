@@ -5,6 +5,10 @@ import {
   formatDateTimeMx,
   formatPct,
   EMPTY_OPTIONS,
+  REQUIRED_FIELDS,
+  reportsToLabel,
+  requiredErrors,
+  levelOptionLabel,
   areasForDivision,
   frequencyLabel,
   groupActivities,
@@ -156,11 +160,31 @@ describe('Matriz de Puestos (web) · listas cerradas', () => {
   });
 });
 
-describe('Matriz de Puestos (web) · niveles I a XV', () => {
-  it('el desplegable muestra los niveles del catálogo en su orden (sin lista fija)', () => {
-    const codes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV'];
-    const options = { ...EMPTY_OPTIONS, levels: codes.map((code) => ({ code, name: `Nivel ${code}` })) };
+describe('Matriz de Puestos (web) · niveles de org_levels', () => {
+  it('el desplegable muestra los 9 niveles del catálogo en su orden, como «I - Dirección General»', () => {
+    const names = ['Dirección General', 'Dirección', 'Head / Gerencia', 'Líder / Coordinación', 'Especialista Senior / Key Account', 'Senior', 'Semi Senior', 'Junior / Auxiliar', 'Practicante / Trainee'];
+    const codes = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+    const options = { ...EMPTY_OPTIONS, levels: codes.map((code, i) => ({ code, name: names[i]! })) };
     expect(options.levels.map((l) => l.code)).toEqual(codes);
-    expect(options.levels).toHaveLength(15);
+    expect(options.levels).toHaveLength(9);
+    expect(options.levels.map(levelOptionLabel)[0]).toBe('I - Dirección General');
+    expect(options.levels.map(levelOptionLabel)[8]).toBe('IX - Practicante / Trainee');
+  });
+});
+
+describe('Matriz de Puestos (web) · obligatorios y «Reporta a»', () => {
+  it('un mensaje por cada campo obligatorio vacío (solo espacios cuenta como vacío)', () => {
+    expect(requiredErrors({ roleSummary: 'x', positionObjective: 'x', validationPoints: 'x', description: 'x' })).toEqual({});
+    expect(requiredErrors({ roleSummary: '', positionObjective: '  ', validationPoints: 'x', description: '' })).toEqual({
+      roleSummary: 'El rol es obligatorio',
+      positionObjective: 'El objetivo del puesto es obligatorio',
+      description: 'La descripción del puesto es obligatoria',
+    });
+    expect(REQUIRED_FIELDS.map((f) => f.label)).toEqual(['Rol', 'Objetivo del puesto', 'Puntos a validar', 'Descripción del puesto']);
+  });
+  it('«Reporta a»: nombre (cargo) y «(Baja)» si ya no está activo', () => {
+    expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: 'Directora', active: true })).toBe('Ana Pérez (Directora)');
+    expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: 'Directora', active: false })).toBe('Ana Pérez (Directora) (Baja)');
+    expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: null })).toBe('Ana Pérez');
   });
 });

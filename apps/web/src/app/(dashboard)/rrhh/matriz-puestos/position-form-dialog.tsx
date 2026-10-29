@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { CloseIcon } from '@/components/icons';
+import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
-import { areasForDivision, inList, type PositionDetail, type PositionOptions } from './positions-constants';
+import { ReportsToPicker } from './reports-to-picker';
+import { areasForDivision, inList, levelOptionLabel, requiredErrors, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -14,15 +15,17 @@ export async function readError(res: Response, fallback: string): Promise<string
   return Array.isArray(body.message) ? body.message.join(' ') : body.message;
 }
 
-function TextField({ id, label, value, onChange, max, list, rows }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number }) {
+function TextField({ id, label, value, onChange, max, list, rows, required, error }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number; required?: boolean; error?: string | undefined }) {
+  const cls = `${INPUT}${error ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className={LABEL}>{label}</label>
+      <label htmlFor={id} className={LABEL}>{label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
       {rows ? (
-        <textarea id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} className={INPUT} />
+        <textarea id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
       ) : (
-        <input id={id} list={list} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} className={INPUT} />
+        <input id={id} list={list} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
       )}
+      {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );
 }
@@ -45,7 +48,10 @@ export function PositionFormDialog({
   onSaved: () => void;
 }) {
   const [title, setTitle] = useState(position?.title ?? '');
-  const [division, setDivision] = useState(position?.division ?? '');
+  const [division, setDivision] = useState(() => {
+    const current = position?.division ?? '';
+    return options.divisions.find((d) => inList([d], current)) ?? current;
+  });
   const [area, setArea] = useState(position?.area ?? '');
   const [level, setLevel] = useState(position?.level ?? '');
   const [seniority, setSeniority] = useState(position?.seniority ?? '');
@@ -55,9 +61,8 @@ export function PositionFormDialog({
   const [areaMsg, setAreaMsg] = useState<{ text: string; suggestion?: string } | null>(null);
   const [areaBusy, setAreaBusy] = useState(false);
   const canAddArea = usePermission('rrhh', 'matriz-puestos', 'update');
-  const [meot, setMeot] = useState(position?.meotHierarchy ?? '');
-  const [reportsTo, setReportsTo] = useState(position?.reportsTo ?? '');
-  const [supervises, setSupervises] = useState(position?.supervises ?? '');
+  const [reportsToEmployee, setReportsToEmployee] = useState<ReportsToValue | null>(position?.reportsToEmployee ?? null);
+  const [submitted, setSubmitted] = useState(false);
   const [plazas, setPlazas] = useState(position?.plazas != null ? String(position.plazas) : '');
   const [roleSummary, setRoleSummary] = useState(position?.roleSummary ?? '');
   const [objective, setObjective] = useState(position?.positionObjective ?? '');
@@ -76,6 +81,9 @@ export function PositionFormDialog({
     if (description.length > 10000) return setError('La descripción no puede pasar de 10,000 caracteres.');
     const n = plazas.trim() === '' ? null : Number(plazas);
     if (n !== null && (!Number.isInteger(n) || n < 0)) return setError('Las plazas deben ser un número entero de 0 o más.');
+    setSubmitted(true);
+    const missing = requiredErrors({ roleSummary, positionObjective: objective, validationPoints: points, description });
+    if (Object.keys(missing).length > 0) return setError('Completa los campos obligatorios (marcados con *).');
 
     setSaving(true);
     try {
@@ -85,9 +93,7 @@ export function PositionFormDialog({
         division: division.trim() || null,
         level: level.trim() || null,
         seniority: seniority || null,
-        meotHierarchy: meot.trim() || null,
-        reportsTo: reportsTo.trim() || null,
-        supervises: supervises.trim() || null,
+        reportsToEmployeeId: reportsToEmployee?.id ?? null,
         plazas: n,
         roleSummary: roleSummary.trim() || null,
         positionObjective: objective.trim() || null,
@@ -112,6 +118,8 @@ export function PositionFormDialog({
   const areaOptions = areasForDivision([...options.catalogAreas, ...addedAreas], division);
   // Un valor antiguo fuera de catálogo se ofrece para no perderlo al editar otros campos.
   const legacyLevel = level !== '' && !inList(levelCodes, level) ? level : null;
+  // Una división antigua fuera del catálogo se ofrece para no perderla al editar otros campos.
+  const legacyDivision = division !== '' && !inList(options.divisions, division) ? division : null;
   const legacyArea = area !== '' && !inList(areaOptions, area) ? area : null;
 
   const changeDivision = (value: string) => {
@@ -149,18 +157,27 @@ export function PositionFormDialog({
     }
   };
 
+  // Los mensajes aparecen al intentar guardar y se quitan al llenar el campo.
+  const errors = submitted ? requiredErrors({ roleSummary, positionObjective: objective, validationPoints: points, description }) : {};
+
   const approvedWarning = Boolean(position?.descriptionApproved) && description.trim() !== (position?.description ?? '');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-      <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-bold text-navy">{position ? 'Editar Puesto' : 'Nuevo Puesto'}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <CloseIcon className="h-5 w-5" />
+    <ModalShell
+      title={position ? 'Editar Puesto' : 'Nuevo Puesto'}
+      onClose={onClose}
+      onSubmit={submit}
+      maxWidth="max-w-2xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
+          <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
-        </div>
-        <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+        </>
+      }
+    >
+        <div className="space-y-4">
           {position && (
             <p className="text-sm text-slate-500">
               Código: <span className="font-mono font-semibold text-navy">{position.code}</span> (lo asigna el sistema)
@@ -170,8 +187,12 @@ export function PositionFormDialog({
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-division" className={LABEL}>División (Opcional)</label>
-              <input id="jp-division" list="jp-divisions" value={division} onChange={(e) => changeDivision(e.target.value)} maxLength={100} className={INPUT} />
-              <datalist id="jp-divisions">{options.divisions.map((a) => <option key={a} value={a} />)}</datalist>
+              <select id="jp-division" value={division} onChange={(e) => changeDivision(e.target.value)} className={INPUT}>
+                <option value="">Sin división</option>
+                {legacyDivision && <option value={legacyDivision}>{legacyDivision} (Fuera de Catálogo)</option>}
+                {options.divisions.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <p className="text-xs text-slate-400">Las divisiones se administran en Configuración › Catálogos.</p>
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-area" className={LABEL}>Área</label>
@@ -214,7 +235,7 @@ export function PositionFormDialog({
               <select id="jp-level" value={level} onChange={(e) => setLevel(e.target.value)} className={INPUT}>
                 <option value="">Sin nivel</option>
                 {legacyLevel && <option value={legacyLevel}>{legacyLevel} (Fuera de Catálogo)</option>}
-                {options.levels.map((l) => <option key={l.code} value={l.code}>{l.name}</option>)}
+                {options.levels.map((l) => <option key={l.code} value={l.code}>{levelOptionLabel(l)}</option>)}
               </select>
               {position?.levelOriginal && (
                 <p className="text-xs text-slate-400">Nivel original (Excel): {position.levelOriginal}</p>
@@ -227,9 +248,11 @@ export function PositionFormDialog({
                 {options.seniorities.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
-            <TextField id="jp-meot" label="Jerarquía (MEOT) (Opcional)" value={meot} onChange={setMeot} max={100} />
-            <TextField id="jp-reports" label="Reporta a (Opcional)" value={reportsTo} onChange={setReportsTo} max={500} />
-            <TextField id="jp-supervises" label="Supervisa a (Opcional)" value={supervises} onChange={setSupervises} max={500} />
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label htmlFor="jp-reports" className={LABEL}>Reporta a (Opcional)</label>
+              <ReportsToPicker id="jp-reports" value={reportsToEmployee} onChange={setReportsToEmployee} />
+              {position?.reportsTo && !reportsToEmployee && <p className="text-xs text-slate-400">En el Excel venía: {position.reportsTo}</p>}
+            </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-plazas" className={LABEL}>Plazas (Opcional; 0 = Vacante)</label>
               <input id="jp-plazas" type="number" min={0} step={1} inputMode="numeric" value={plazas} onChange={(e) => setPlazas(e.target.value)} className={INPUT} />
@@ -242,12 +265,13 @@ export function PositionFormDialog({
               </select>
             </div>
           </div>
-          <TextField id="jp-role" label="Rol (Opcional)" value={roleSummary} onChange={setRoleSummary} max={10000} rows={3} />
-          <TextField id="jp-objective" label="Objetivo del Puesto (Opcional)" value={objective} onChange={setObjective} max={10000} rows={3} />
-          <TextField id="jp-points" label="Puntos a Validar (Opcional)" value={points} onChange={setPoints} max={10000} rows={3} />
+          <TextField id="jp-role" label="Rol" required error={errors.roleSummary} value={roleSummary} onChange={setRoleSummary} max={10000} rows={3} />
+          <TextField id="jp-objective" label="Objetivo del Puesto" required error={errors.positionObjective} value={objective} onChange={setObjective} max={10000} rows={3} />
+          <TextField id="jp-points" label="Puntos a Validar" required error={errors.validationPoints} value={points} onChange={setPoints} max={10000} rows={3} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="jp-desc" className={LABEL}>Descripción del Puesto (Opcional)</label>
-            <textarea id="jp-desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={10000} className={INPUT} />
+            <label htmlFor="jp-desc" className={LABEL}>Descripción del Puesto<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
+            <textarea id="jp-desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={10000} aria-required aria-invalid={Boolean(errors.description)} className={`${INPUT}${errors.description ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`} />
+            {errors.description && <p className="text-xs text-red-600">{errors.description}</p>}
             <p className="text-xs text-slate-400">Una descripción nueva o modificada queda Pendiente de Aprobación.</p>
             {approvedWarning && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -258,14 +282,7 @@ export function PositionFormDialog({
 
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
-            <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </ModalShell>
   );
 }

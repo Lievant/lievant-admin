@@ -23,6 +23,20 @@ export const MAX_WEIGHT_SUM = 100;
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
 
+/** Campos obligatorios al guardar el formulario del puesto (crear y editar) y su mensaje en español. */
+export const REQUIRED_POSITION_FIELDS = [
+  { key: 'roleSummary', label: 'Rol', message: 'El rol es obligatorio' },
+  { key: 'positionObjective', label: 'Objetivo del puesto', message: 'El objetivo del puesto es obligatorio' },
+  { key: 'validationPoints', label: 'Puntos a validar', message: 'Los puntos a validar son obligatorios' },
+  { key: 'description', label: 'Descripción del puesto', message: 'La descripción del puesto es obligatoria' },
+] as const;
+export type RequiredPositionKey = (typeof REQUIRED_POSITION_FIELDS)[number]['key'];
+
+/** Campos obligatorios que están vacíos (solo espacios cuenta como vacío). */
+export function missingRequiredFields(values: Partial<Record<RequiredPositionKey, string | null | undefined>>): (typeof REQUIRED_POSITION_FIELDS)[number][] {
+  return REQUIRED_POSITION_FIELDS.filter((f) => (values[f.key] ?? '').toString().trim() === '');
+}
+
 export const POSITION_NOT_FOUND = 'Puesto no encontrado';
 export const OKR_NOT_FOUND = 'OKR no encontrado';
 export const KPI_NOT_FOUND = 'KPI no encontrado';
@@ -162,6 +176,46 @@ export function escapeLike(text: string): string {
   return text.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+// ── Orden de la lista (en el servidor, sobre todos los registros) ────────────
+
+/** Columnas por las que se puede ordenar la lista: lista cerrada (nunca se interpola texto del usuario en el SQL). */
+export const POSITION_SORT_COLUMNS = ['code', 'title', 'division', 'area', 'level', 'seniority', 'plazas', 'validationStatus', 'status'] as const;
+export type PositionSortColumn = (typeof POSITION_SORT_COLUMNS)[number];
+export const SORT_DIRECTIONS = ['asc', 'desc'] as const;
+
+/** Texto sin mayúsculas, acentos ni espacios sobrantes; vacío = NULL (así va siempre al final). */
+const fold = (col: string): string => `NULLIF(translate(lower(btrim(${col})), 'áéíóúüñ', 'aeiouun'), '')`;
+
+/** Desempate estable (y orden por defecto): código numérico, para que la paginación no repita ni salte filas. */
+const CODE_ORDER = 'length(p.code) ASC, p.code ASC';
+
+const SORT_EXPRESSIONS: Record<PositionSortColumn, string> = {
+  // «JP-2» antes que «JP-10»: por el número del código, no alfabético.
+  code: `NULLIF(regexp_replace(p.code, '\\D', '', 'g'), '')::bigint`,
+  title: fold('p.title'),
+  division: fold('p.division'),
+  area: fold('p.area'),
+  // Por el orden del catálogo (sort_order de I a IX); un nivel fuera del catálogo cuenta como vacío.
+  level: `(SELECT l.sort_order FROM catalogs.org_levels l WHERE upper(btrim(l.code)) = upper(btrim(p.level)) LIMIT 1)`,
+  seniority: `CASE p.seniority WHEN 'junior' THEN 1 WHEN 'semi_senior' THEN 2 WHEN 'senior' THEN 3 END`,
+  plazas: 'p.plazas',
+  // Mismo orden lógico que ya usan los filtros de la pantalla.
+  validationStatus: `CASE p.validation_status WHEN 'pendiente' THEN 1 WHEN 'validado' THEN 2 WHEN 'validado_con_ajustes' THEN 3 WHEN 'rechazado' THEN 4 END`,
+  status: `CASE p.status WHEN 'activo' THEN 1 WHEN 'pendiente_aprobacion' THEN 2 WHEN 'inactivo' THEN 3 END`,
+};
+
+/**
+ * `ORDER BY` de la lista. Sin `sortBy` es el de siempre (código numérico). Los vacíos van siempre al final, en
+ * ascendente y en descendente, y el código desempata. Una columna fuera de la lista da 400.
+ */
+export function buildPositionOrder(sortBy?: string, sortDir?: string): string {
+  if (sortBy === undefined || sortBy === '') return CODE_ORDER;
+  const expression = (SORT_EXPRESSIONS as Record<string, string | undefined>)[sortBy];
+  if (!expression) throw new BadRequestException('La columna de orden no es válida');
+  const direction = sortDir === 'desc' ? 'DESC' : 'ASC';
+  return `${expression} ${direction} NULLS LAST, ${CODE_ORDER}`;
+}
+
 export function buildPositionWhere(f: PositionFilters): { where: string; params: unknown[] } {
   const params: unknown[] = [];
   const clauses = ['p.deleted_at IS NULL'];
@@ -175,7 +229,8 @@ export function buildPositionWhere(f: PositionFilters): { where: string; params:
   }
   if (f.division) {
     params.push(f.division);
-    clauses.push(`p.division = $${params.length}`);
+    // Sin distinguir mayúsculas, acentos ni espacios: «TI» y «ti » son la misma división (también las antiguas fuera de catálogo).
+    clauses.push(`translate(lower(btrim(p.division)), 'áéíóúüñ', 'aeiouun') = translate(lower(btrim($${params.length})), 'áéíóúüñ', 'aeiouun')`);
   }
   if (f.level) {
     params.push(f.level);
@@ -219,9 +274,11 @@ export interface PositionRow {
   division: string | null;
   level_original: string | null;
   seniority: string | null;
-  meot_hierarchy: string | null;
   reports_to_text: string | null;
-  supervises_text: string | null;
+  reports_to_employee_id: string | null;
+  reports_to_name?: string | null;
+  reports_to_position?: string | null;
+  reports_to_active?: boolean | null;
   plazas: number | null;
   role_summary: string | null;
   position_objective: string | null;
@@ -401,9 +458,10 @@ export function applyValidationChange(current: ValidationState, next: Validation
 export interface PositionDetail extends PositionListItem {
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
-  meotHierarchy: string | null;
+  /** Texto de «Reporta a» que venía del Excel (solo lectura en la pantalla). */
   reportsTo: string | null;
-  supervises: string | null;
+  /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo («Baja»). */
+  reportsToEmployee: { id: string; fullName: string; position: string | null; active: boolean } | null;
   roleSummary: string | null;
   positionObjective: string | null;
   validationPoints: string | null;
@@ -424,9 +482,10 @@ export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activ
   return {
     ...toListItem(r),
     levelOriginal: r.level_original,
-    meotHierarchy: r.meot_hierarchy,
     reportsTo: r.reports_to_text,
-    supervises: r.supervises_text,
+    reportsToEmployee: r.reports_to_employee_id
+      ? { id: r.reports_to_employee_id, fullName: r.reports_to_name ?? 'Empleado', position: r.reports_to_position ?? null, active: r.reports_to_active !== false }
+      : null,
     roleSummary: r.role_summary,
     positionObjective: r.position_objective,
     validationPoints: r.validation_points,

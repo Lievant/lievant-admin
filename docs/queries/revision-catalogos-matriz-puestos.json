@@ -5,17 +5,17 @@
   "notes": [
     "Formato supuesto: el repo no define un formato de «overrides» para staging; este archivo lista consultas SELECT con nombre y descripción para ejecutarlas una por una.",
     "La comparación de áreas ignora mayúsculas, acentos, espacios sobrantes y puntuación (igual que la Matriz).",
-    "El nivel válido sale de catalogs.job_position_levels (I–VIII). La categoría es una lista cerrada: junior, semi_senior, senior."
+    "El nivel válido sale de catalogs.org_levels (I–IX). La categoría es una lista cerrada: junior, semi_senior, senior."
   ],
   "queries": [
     {
       "name": "puestos-nivel-fuera-de-catalogo",
-      "description": "Puestos vivos con nivel que no está en catalogs.job_position_levels (por ejemplo «Senior», «Gerencia», «V / VI»).",
-      "sql": "SELECT p.code, p.title, p.division, p.area, p.level, p.level_original FROM hr.job_positions p WHERE p.deleted_at IS NULL AND p.level IS NOT NULL AND btrim(p.level) <> '' AND NOT EXISTS (SELECT 1 FROM catalogs.job_position_levels l WHERE upper(regexp_replace(l.code, '\\s', '', 'g')) = upper(regexp_replace(p.level, '\\s', '', 'g'))) ORDER BY p.code"
+      "description": "Puestos vivos con nivel que no está en catalogs.org_levels (por ejemplo «Senior», «Gerencia», «V / VI»).",
+      "sql": "SELECT p.code, p.title, p.division, p.area, p.level, p.level_original FROM hr.job_positions p WHERE p.deleted_at IS NULL AND p.level IS NOT NULL AND btrim(p.level) <> '' AND NOT EXISTS (SELECT 1 FROM catalogs.org_levels l WHERE upper(regexp_replace(l.code, '\\s', '', 'g')) = upper(regexp_replace(p.level, '\\s', '', 'g'))) ORDER BY p.code"
     },
     {
-      "name": "puestos-sin-categoria-con-pista-en-meot",
-      "description": "Puestos sin categoría (seniority) cuya «Jerarquía (MEOT)» menciona Junior, Semi Senior o Senior: candidatos a llenarla.",
+      "name": "puestos-sin-categoria-con-pista-en-jerarquia",
+      "description": "Puestos sin categoría (seniority) cuya jerarquía guardada (columna meot_hierarchy, que ya no se muestra ni se escribe) menciona Junior, Semi Senior o Senior: candidatos a llenarla.",
       "sql": "SELECT p.code, p.title, p.division, p.meot_hierarchy, CASE WHEN p.meot_hierarchy ~* 'semi[ -]?senior' THEN 'semi_senior' WHEN p.meot_hierarchy ~* 'senior' THEN 'senior' WHEN p.meot_hierarchy ~* 'junior' THEN 'junior' END AS categoria_sugerida FROM hr.job_positions p WHERE p.deleted_at IS NULL AND p.seniority IS NULL AND p.meot_hierarchy ~* '(junior|senior)' ORDER BY p.code"
     },
     {

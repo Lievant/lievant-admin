@@ -135,8 +135,8 @@ describe('Matriz de Puestos · filtros del listado', () => {
 });
 
 const EXTRA = {
-  level_original: null, seniority: null, division: null, meot_hierarchy: null, reports_to_text: null, supervises_text: null, plazas: null, role_summary: null,
-  position_objective: null, validation_points: null, head_comments: null, validation_status: 'pendiente' as const,
+  level_original: null, seniority: null, division: null, reports_to_text: null, reports_to_employee_id: null, plazas: null, role_summary: 'TEST-Rol',
+  position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente' as const,
   validated_by: null, validator_name: null, validated_at: null,
 };
 
@@ -209,6 +209,8 @@ function fakeDb(handler: (sql: string, params: unknown[]) => unknown) {
   return { dataSource, calls, get transactions() { return transactions; } };
 }
 
+const REQ = { roleSummary: 'TEST-Rol', positionObjective: 'TEST-Objetivo', validationPoints: 'TEST-Puntos', description: 'TEST-Descripción' };
+
 const posRow = (over: Partial<PositionRow> = {}): PositionRow => ({
   id: P1, code: 'JP-004', title: 'Analista', area: 'TI', business_unit: null, level: null,
   description: null, description_approved: false, description_approved_by: null, approver_name: null,
@@ -219,7 +221,7 @@ describe('Matriz de Puestos · servicio de puestos', () => {
   const build = (current: PositionRow, codes: string[] = []) => {
     const db = fakeDb((sql) => {
       if (/SELECT code FROM hr\.job_positions/.test(sql)) return codes.map((code) => ({ code }));
-      if (/FROM catalogs\.job_position_levels/.test(sql)) return ['I', 'II', 'III', 'IV'].map((code) => ({ code }));
+      if (/FROM catalogs\.org_levels/.test(sql)) return ['I', 'II', 'III', 'IV'].map((code) => ({ code }));
       if (/FROM catalogs\.areas/.test(sql)) return ['TI', 'B', 'Ventas'].map((name) => ({ name, division_name: null }));
       if (/INSERT INTO hr\.job_positions/.test(sql)) return [{ id: P1 }];
       if (/FROM hr\.job_positions p\s+LEFT JOIN/.test(sql)) return [current];
@@ -234,7 +236,7 @@ describe('Matriz de Puestos · servicio de puestos', () => {
 
   it('alta: código consecutivo calculado bajo candado y sobre todos los códigos (incluidos eliminados)', async () => {
     const { service, db, audit } = build(posRow({ code: 'JP-004' }), ['JP-001', 'JP-002', 'JP-003']);
-    const res = await service.create(plainToInstance(CreatePositionDto, { title: ' Analista ', area: 'TI' }), ACTOR);
+    const res = await service.create(plainToInstance(CreatePositionDto, { ...REQ, title: ' Analista ', area: 'TI' }), ACTOR);
     expect(db.calls[0]!.sql).toContain('pg_advisory_xact_lock');
     const select = db.calls.find((c) => /SELECT code FROM hr\.job_positions/.test(c.sql))!;
     expect(select.sql).not.toContain('deleted_at');
@@ -245,15 +247,12 @@ describe('Matriz de Puestos · servicio de puestos', () => {
     expect(audit.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'create', entityType: 'job_position', module: 'matriz-puestos', userId: 'user-1' }));
   });
 
-  it('alta con descripción nace pendiente_aprobacion; sin ella, activo; inactivo se respeta', async () => {
+  it('alta con descripción nace pendiente_aprobacion; inactivo se respeta', async () => {
     const withDesc = build(posRow());
-    await withDesc.service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'B', description: 'Texto' }), ACTOR);
+    await withDesc.service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'B', description: 'Texto' }), ACTOR);
     expect(withDesc.db.calls.find((c) => /INSERT/.test(c.sql))!.params[6]).toBe('pendiente_aprobacion');
-    const without = build(posRow());
-    await without.service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'B' }), ACTOR);
-    expect(without.db.calls.find((c) => /INSERT/.test(c.sql))!.params[6]).toBe('activo');
     const inactive = build(posRow());
-    await inactive.service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'B', description: 'T', status: 'inactivo' }), ACTOR);
+    await inactive.service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'B', description: 'T', status: 'inactivo' }), ACTOR);
     expect(inactive.db.calls.find((c) => /INSERT/.test(c.sql))!.params[6]).toBe('inactivo');
   });
 

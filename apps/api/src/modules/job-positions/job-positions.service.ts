@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
+import { canonicalDivision, divisionNotInCatalog, loadCatalogDivisions, uniqueDivisionNames } from './job-positions-divisions';
 import { CreateAreaDto, CreatePositionDto, PositionQueryDto, UpdatePositionDto } from './dto/job-position.dto';
 import {
   SENIORITIES,
@@ -14,11 +15,14 @@ import {
 } from './job-positions-catalog.util';
 import {
   DEFAULT_LIMIT,
+  escapeLike,
   POSITION_NOT_FOUND,
   VALIDATION_STATUSES,
   applyDescriptionChange,
   applyValidationChange,
   assertCanApprove,
+  missingRequiredFields,
+  buildPositionOrder,
   buildPositionWhere,
   nextPositionCode,
   normalizeDescription,
@@ -54,10 +58,13 @@ export interface PositionPage {
 }
 
 const DETAIL_SQL = `
-  SELECT p.*, u.name AS approver_name, v.name AS validator_name
+  SELECT p.*, u.name AS approver_name, v.name AS validator_name,
+         r.full_name AS reports_to_name, r.position AS reports_to_position,
+         (r.status = 'active' AND r.deleted_at IS NULL) AS reports_to_active
   FROM hr.job_positions p
   LEFT JOIN auth.users u ON u.id = p.description_approved_by
   LEFT JOIN auth.users v ON v.id = p.validated_by
+  LEFT JOIN employees.employee_records r ON r.id = p.reports_to_employee_id
   WHERE p.id = $1 AND p.deleted_at IS NULL`;
 
 type Q = { query: DataSource['query'] };
@@ -65,9 +72,7 @@ type Q = { query: DataSource['query'] };
 /** Campos de texto/número simples del puesto: clave del DTO → columna. */
 const SIMPLE_FIELDS = {
   division: 'division',
-  meotHierarchy: 'meot_hierarchy',
   reportsTo: 'reports_to_text',
-  supervises: 'supervises_text',
   plazas: 'plazas',
   roleSummary: 'role_summary',
   positionObjective: 'position_objective',
@@ -103,7 +108,10 @@ export class JobPositionsService {
     /** Catálogo de áreas con su división (alimenta el desplegable del formulario). */
     catalogAreas: { name: string; division: string | null }[];
     businessUnits: string[];
+    /** Divisiones activas del catálogo (desplegable del formulario), sin repetir. */
     divisions: string[];
+    /** Para el filtro: las del catálogo más las que ya usan puestos (aunque estén fuera del catálogo). */
+    filterDivisions: string[];
     levels: { code: string; name: string }[];
     seniorities: { value: string; label: string }[];
     validationStatuses: readonly ValidationStatus[];
@@ -115,11 +123,12 @@ export class JobPositionsService {
       )) as { v: string }[];
       return rows.map((r) => r.v);
     };
-    const [usedAreas, businessUnits, divisions, levelRows, areaRows] = await Promise.all([
+    const [usedAreas, businessUnits, usedDivisions, catalogDivisions, levelRows, areaRows] = await Promise.all([
       distinct('area'),
       distinct('business_unit'),
       distinct('division'),
-      this.dataSource.query(`SELECT code, name FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`) as Promise<{ code: string; name: string }[]>,
+      loadCatalogDivisions(this.dataSource),
+      this.dataSource.query(`SELECT code, name FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`) as Promise<{ code: string; name: string }[]>,
       this.dataSource.query(`SELECT name, division_name FROM catalogs.areas WHERE is_active IS NOT FALSE ORDER BY name`) as Promise<{ name: string; division_name: string | null }[]>,
     ]);
     const catalogAreas = areaRows.map((r) => ({ name: r.name, division: r.division_name }));
@@ -131,7 +140,8 @@ export class JobPositionsService {
       areas,
       catalogAreas,
       businessUnits,
-      divisions,
+      divisions: catalogDivisions,
+      filterDivisions: uniqueDivisionNames([...catalogDivisions, ...usedDivisions]),
       levels: levelRows,
       seniorities: SENIORITIES.map((s) => ({ value: s, label: SENIORITY_LABELS[s] })),
       validationStatuses: VALIDATION_STATUSES,
@@ -151,11 +161,12 @@ export class JobPositionsService {
       validationStatus: q.validationStatus,
       search: q.search,
     });
-    // Total en la misma consulta; el orden numérico del código evita que JP-1000 quede antes que JP-200.
+    // Total en la misma consulta. El orden se aplica a todos los registros (no a la página); por omisión es el código
+    // numérico, que evita que JP-1000 quede antes que JP-200.
     const rows = (await this.dataSource.query(
       `SELECT p.*, COUNT(*) OVER() AS total_count FROM hr.job_positions p
        WHERE ${where}
-       ORDER BY length(p.code) ASC, p.code ASC
+       ORDER BY ${buildPositionOrder(q.sortBy, q.sortDir)}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, (page - 1) * limit],
     )) as PositionRow[];
@@ -208,17 +219,21 @@ export class JobPositionsService {
       const code = nextPositionCode(codes.map((c) => c.code));
 
       const description = normalizeDescription(dto.description);
+      this.assertRequired({ roleSummary: dto.roleSummary, positionObjective: dto.positionObjective, validationPoints: dto.validationPoints, description });
+      if (dto.reportsToEmployeeId) await this.assertActiveEmployee(m, dto.reportsToEmployeeId);
       const status = resolveStatus((dto.status as PositionStatus | undefined) ?? 'activo', { description, approved: false });
       // Nivel y Área son listas cerradas: se validan contra el catálogo y se guarda el nombre canónico.
       const lists = await this.resolveCatalogs(m, { level: dto.level ?? null, area: dto.area.trim(), division: dto.division ?? null }, null);
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
-           division, meot_hierarchy, reports_to_text, supervises_text, plazas, role_summary, position_objective, validation_points, seniority)
+           division, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
+           reports_to_employee_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
           code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
-          dto.division ?? null, dto.meotHierarchy ?? null, dto.reportsTo ?? null, dto.supervises ?? null, dto.plazas ?? null,
+          lists.division, dto.reportsTo ?? null, dto.plazas ?? null,
           dto.roleSummary ?? null, dto.positionObjective ?? null, dto.validationPoints ?? null, dto.seniority ?? null,
+          dto.reportsToEmployeeId ?? null,
         ],
       )) as { id: string }[];
       return rows[0]!.id;
@@ -268,7 +283,21 @@ export class JobPositionsService {
       );
       next.level = lists.level;
       next.area = lists.area;
+      simple.division = lists.division;
       const seniority = dto.seniority !== undefined ? dto.seniority : cur.seniority;
+      // Los campos obligatorios se exigen al guardar el formulario; cambiar solo la validación del Head no se bloquea.
+      // (el DTO ya validado trae todas las propiedades; solo cuentan las que llegaron con valor)
+      const touchesForm = Object.entries(dto).some(([k, v]) => v !== undefined && k !== 'validationStatus' && k !== 'headComments');
+      if (touchesForm) {
+        this.assertRequired({
+          roleSummary: simple.roleSummary as string | null,
+          positionObjective: simple.positionObjective as string | null,
+          validationPoints: simple.validationPoints as string | null,
+          description: desc.description,
+        });
+      }
+      const reportsToEmployeeId = dto.reportsToEmployeeId !== undefined ? dto.reportsToEmployeeId : cur.reports_to_employee_id;
+      if (reportsToEmployeeId && reportsToEmployeeId !== cur.reports_to_employee_id) await this.assertActiveEmployee(m, reportsToEmployeeId);
       const validation = applyValidationChange(
         { status: cur.validation_status, by: cur.validated_by, at: cur.validated_at },
         dto.validationStatus,
@@ -278,15 +307,15 @@ export class JobPositionsService {
       await m.query(
         `UPDATE hr.job_positions SET title=$2, area=$3, business_unit=$4, level=$5, description=$6,
            description_approved=$7, description_approved_by=$8, description_approved_at=$9,
-           status=$10, division=$11, meot_hierarchy=$12, reports_to_text=$13, supervises_text=$14, plazas=$15,
-           role_summary=$16, position_objective=$17, validation_points=$18, head_comments=$19,
-           validation_status=$20, validated_by=$21, validated_at=$22, seniority=$23, updated_at=NOW()
+           status=$10, division=$11, reports_to_text=$12, plazas=$13,
+           role_summary=$14, position_objective=$15, validation_points=$16, head_comments=$17,
+           validation_status=$18, validated_by=$19, validated_at=$20, seniority=$21, reports_to_employee_id=$22, updated_at=NOW()
          WHERE id=$1`,
         [
           id, next.title, next.area, next.business_unit, next.level, desc.description, desc.approved, desc.approvedBy, desc.approvedAt, status,
-          simple.division, simple.meotHierarchy, simple.reportsTo, simple.supervises, simple.plazas,
+          simple.division, simple.reportsTo, simple.plazas,
           simple.roleSummary, simple.positionObjective, simple.validationPoints, simple.headComments,
-          validation.status, validation.by, validation.at, seniority,
+          validation.status, validation.by, validation.at, seniority, reportsToEmployeeId ?? null,
         ],
       );
 
@@ -303,6 +332,9 @@ export class JobPositionsService {
         if (before !== after) diff[key] = LONG_TEXT.has(key) ? { from: 'modificado', to: 'modificado' } : { from: before, to: after };
       }
       if (cur.validation_status !== validation.status) diff.validationStatus = { from: cur.validation_status, to: validation.status };
+      if ((cur.reports_to_employee_id ?? null) !== (reportsToEmployeeId ?? null)) {
+        diff.reportsToEmployee = { from: await this.employeeName(m, cur.reports_to_employee_id), to: await this.employeeName(m, reportsToEmployeeId ?? null) };
+      }
       // El texto de la descripción no se guarda en la bitácora: solo que cambió y si se invalidó la aprobación.
       if (cur.description !== desc.description) diff.description = { from: 'modificada', to: 'modificada' };
       if (cur.description_approved && !desc.approved) diff.descriptionApproved = { from: true, to: false };
@@ -313,8 +345,46 @@ export class JobPositionsService {
     return detail;
   }
 
+  /** 400 con un mensaje por cada campo obligatorio vacío. */
+  private assertRequired(values: Parameters<typeof missingRequiredFields>[0]): void {
+    const missing = missingRequiredFields(values);
+    if (missing.length > 0) throw new BadRequestException(missing.map((f) => f.message));
+  }
+
+  /** «Reporta a» solo puede ser un empleado activo y no eliminado. */
+  private async assertActiveEmployee(m: Q, employeeId: string): Promise<void> {
+    const rows = (await m.query(
+      `SELECT 1 FROM employees.employee_records WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
+      [employeeId],
+    )) as unknown[];
+    if (!rows[0]) throw new BadRequestException('El empleado de «Reporta a» no existe o no está activo');
+  }
+
+  private async employeeName(m: Q, employeeId: string | null): Promise<string | null> {
+    if (!employeeId) return null;
+    const rows = (await m.query(`SELECT full_name FROM employees.employee_records WHERE id = $1`, [employeeId])) as { full_name: string }[];
+    return rows[0]?.full_name ?? employeeId;
+  }
+
   /**
-   * Nivel y Área son listas cerradas. El nivel debe estar en `catalogs.job_position_levels` y el área en
+   * Buscador ligero para «Reporta a»: empleados activos por nombre, sin distinguir mayúsculas ni acentos (mínimo 2 letras, máximo 10 resultados) con
+   * solo id, nombre, cargo y área (nada de correo, nómina ni datos personales).
+   */
+  async searchEmployees(q: string, limit = 10): Promise<{ id: string; fullName: string; position: string; area: string | null }[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const rows = (await this.dataSource.query(
+      `SELECT id, full_name, position, area FROM employees.employee_records
+       WHERE status = 'active' AND deleted_at IS NULL
+         AND translate(lower(full_name), 'áéíóúüñ', 'aeiouun') LIKE translate(lower($1), 'áéíóúüñ', 'aeiouun')
+       ORDER BY full_name ASC LIMIT $2`,
+      [`%${escapeLike(term)}%`, Math.min(Math.max(limit, 1), 10)],
+    )) as { id: string; full_name: string; position: string; area: string | null }[];
+    return rows.map((r) => ({ id: r.id, fullName: r.full_name, position: r.position, area: r.area }));
+  }
+
+  /**
+   * Nivel y Área son listas cerradas. El nivel debe estar en `catalogs.org_levels` y el área en
    * `catalogs.areas` de la división (comparación sin mayúsculas, acentos ni espacios extra); se devuelve el
    * valor canónico del catálogo. Solo se valida lo que cambió respecto del puesto actual (`cur`).
    */
@@ -322,10 +392,19 @@ export class JobPositionsService {
     m: Q,
     input: { level: string | null; area: string; division: string | null },
     cur: { level: string | null; area: string; division: string | null } | null,
-  ): Promise<{ level: string | null; area: string }> {
+  ): Promise<{ level: string | null; area: string; division: string | null }> {
+    // División: lista cerrada (`catalogs.divisions`); solo se valida si cambió (un puesto antiguo con una fuera de catálogo sigue editable).
+    let division = input.division && input.division.trim() !== '' ? input.division.trim() : null;
+    if (division !== null) {
+      const catalog = await loadCatalogDivisions(m);
+      const canonical = canonicalDivision(catalog, division);
+      if (canonical) division = canonical;
+      else if (!cur || normText(cur.division) !== normText(division)) throw divisionNotInCatalog(division, catalog);
+    }
+
     let level = input.level && input.level.trim() !== '' ? input.level.trim() : null;
     if (level !== null) {
-      const codes = ((await m.query(`SELECT code FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[]).map((r) => r.code);
+      const codes = ((await m.query(`SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[]).map((r) => r.code);
       const canonical = canonicalLevel(level, codes);
       if (canonical) level = canonical;
       else if (!cur || normText(cur.level) !== normText(level)) {
@@ -334,22 +413,22 @@ export class JobPositionsService {
     }
 
     let area = input.area;
-    const areaChanged = !cur || areaKey(cur.area) !== areaKey(area) || normText(cur.division) !== normText(input.division);
+    const areaChanged = !cur || areaKey(cur.area) !== areaKey(area) || normText(cur.division) !== normText(division);
     if (areaChanged) {
       const areas = await this.catalogAreas(m);
-      const hit = input.division
-        ? findAreaExact(areas, input.division, area)
+      const hit = division
+        ? findAreaExact(areas, division, area)
         : (areas.find((a) => areaKey(a.name) === areaKey(area)) ?? null);
       if (!hit) {
         throw new BadRequestException(
-          input.division
-            ? `El área «${area}» no está en el catálogo de la división «${input.division}». Elige una de la lista o agrega el área nueva.`
+          division
+            ? `El área «${area}» no está en el catálogo de la división «${division}». Elige una de la lista o agrega el área nueva.`
             : `El área «${area}» no está en el catálogo de áreas. Elige una de la lista o agrega el área nueva.`,
         );
       }
       area = hit.name;
     }
-    return { level, area };
+    return { level, area, division };
   }
 
   private async catalogAreas(m: Q): Promise<CatalogArea[]> {

@@ -7,6 +7,7 @@ import { ChevronLeftIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
 import { ActivityDialog, ConfirmDelete, KpiDialog, OkrDialog } from '../item-dialogs';
+import { ModalShell } from '../modal-shell';
 import { PositionFormDialog, readError } from '../position-form-dialog';
 import {
   BASE_PERIOD,
@@ -29,6 +30,7 @@ import {
   okrsOfPeriod,
   periodLabel,
   plazasLabel,
+  reportsToLabel,
   seniorityLabel,
   parsePeriod,
   sumPeriodWeights,
@@ -225,9 +227,8 @@ export function PositionDetailScreen({ id }: { id: string }) {
                 <Field label="Nivel Original (Excel)" value={position.levelOriginal} />
               )}
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
-              <Field label="Jerarquía (MEOT)" value={position.meotHierarchy ?? '—'} />
-              <Field label="Reporta a" value={position.reportsTo ?? '—'} />
-              <Field label="Supervisa a" value={position.supervises ?? '—'} />
+              <Field label="Reporta a" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
+              {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
               <Field label="Plazas" value={plazasLabel(position.plazas)} />
               <Field label="Estado" value={STATUS_LABELS[position.status]} />
             </div>
@@ -550,30 +551,12 @@ export function PositionDetailScreen({ id }: { id: string }) {
       )}
 
       {bulkConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 px-4">
-          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-navy">Asignar a Colaboradores del Puesto</h2>
-            {bulkResult ? (
-              <div className="mt-3 space-y-1 text-sm text-slate-700">
-                <p><strong>{bulkResult.employees}</strong> {bulkResult.employees === 1 ? 'colaborador alcanzado' : 'colaboradores alcanzados'}.</p>
-                <p>OKRs: {bulkResult.okrsCopied} copiados, {bulkResult.okrsSkipped} omitidos (ya asignados).</p>
-                <p>KPIs: {bulkResult.kpisCopied} copiados, {bulkResult.kpisSkipped} omitidos (ya asignados).</p>
-              </div>
-            ) : (
-              <>
-                <div className="mt-3 flex flex-col gap-1">
-                  <label htmlFor="bulk-period" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semestre a Asignar</label>
-                  <select id="bulk-period" value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)} className={SELECT}>
-                    {periodOptions(position.okrs).filter((p) => p !== BASE_PERIOD).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
-                  </select>
-                </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> (más los de la plantilla, sin periodo) y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
-                </p>
-              </>
-            )}
-            {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
-            <div className="mt-6 flex justify-end gap-2">
+        <ModalShell
+          title="Asignar a Colaboradores del Puesto"
+          role="alertdialog"
+          maxWidth="max-w-md"
+          footer={
+            <>
               <button type="button" onClick={() => setBulkConfirm(false)} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">{bulkResult ? 'Cerrar' : 'Cancelar'}</button>
               {!bulkResult && (
                 <button
@@ -597,9 +580,30 @@ export function PositionDetailScreen({ id }: { id: string }) {
                   {busy ? 'Asignando…' : 'Asignar'}
                 </button>
               )}
+            </>
+          }
+        >
+          {bulkResult ? (
+            <div className="space-y-1 text-sm text-slate-700">
+              <p><strong>{bulkResult.employees}</strong> {bulkResult.employees === 1 ? 'colaborador alcanzado' : 'colaboradores alcanzados'}.</p>
+              <p>OKRs: {bulkResult.okrsCopied} copiados, {bulkResult.okrsSkipped} omitidos (ya asignados).</p>
+              <p>KPIs: {bulkResult.kpisCopied} copiados, {bulkResult.kpisSkipped} omitidos (ya asignados).</p>
             </div>
-          </div>
-        </div>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <label htmlFor="bulk-period" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semestre a Asignar</label>
+                <select id="bulk-period" value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)} className={SELECT}>
+                  {periodOptions(position.okrs).filter((p) => p !== BASE_PERIOD).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
+                </select>
+              </div>
+              <p className="mt-3 text-sm text-slate-600">
+                Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> (más los de la plantilla, sin periodo) y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
+              </p>
+            </>
+          )}
+          {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
+        </ModalShell>
       )}
 
       {deletingPosition && (
