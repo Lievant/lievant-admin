@@ -107,6 +107,14 @@ describe('Matriz de Puestos · campos obligatorios del formulario', () => {
     await expect(service.update('p1', { validationStatus: 'rechazado' }, ACTOR)).resolves.toBeDefined();
   });
 
+  it('el DTO ya validado trae propiedades en undefined: cambiar solo la validación sigue sin exigir los obligatorios', async () => {
+    const old = baseRow({ role_summary: null, position_objective: null, validation_points: null, description: null });
+    const { service } = build({ current: old });
+    const dto = Object.assign(new UpdatePositionDto(), { title: undefined, area: undefined, plazas: undefined, validationStatus: 'validado' as const });
+    expect(Object.keys(dto)).toContain('title');
+    await expect(service.update('p1', dto, ACTOR)).resolves.toBeDefined();
+  });
+
   it('el aprobar la descripción no pasa por la validación de obligatorios', async () => {
     const old = baseRow({ role_summary: null, description: 'Texto' });
     const { service } = build({ current: old });
@@ -179,7 +187,8 @@ describe('Matriz de Puestos · buscador de empleados para «Reporta a»', () => 
     expect(Object.keys(rows[0]!).sort()).toEqual(['area', 'fullName', 'id', 'position']);
     const q = calls.find((c) => /FROM employees\.employee_records WHERE status = 'active'/.test(c.sql))!;
     expect(q.sql).toContain('deleted_at IS NULL');
-    expect(q.sql).toContain('ILIKE');
+    expect(q.sql).toContain('LIKE');
+    expect(q.sql).toContain("translate(lower(full_name), 'áéíóúüñ', 'aeiouun')");
     expect(q.sql).not.toMatch(/salary|corporate_email|phone|curp|rfc/i);
     expect(q.params).toEqual(['%an%', 10]);
   });

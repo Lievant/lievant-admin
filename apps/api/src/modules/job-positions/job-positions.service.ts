@@ -278,7 +278,8 @@ export class JobPositionsService {
       next.area = lists.area;
       const seniority = dto.seniority !== undefined ? dto.seniority : cur.seniority;
       // Los campos obligatorios se exigen al guardar el formulario; cambiar solo la validación del Head no se bloquea.
-      const touchesForm = Object.keys(dto).some((k) => k !== 'validationStatus' && k !== 'headComments');
+      // (el DTO ya validado trae todas las propiedades; solo cuentan las que llegaron con valor)
+      const touchesForm = Object.entries(dto).some(([k, v]) => v !== undefined && k !== 'validationStatus' && k !== 'headComments');
       if (touchesForm) {
         this.assertRequired({
           roleSummary: simple.roleSummary as string | null,
@@ -358,7 +359,7 @@ export class JobPositionsService {
   }
 
   /**
-   * Buscador ligero para «Reporta a»: empleados activos por nombre (mínimo 2 letras, máximo 10 resultados) con
+   * Buscador ligero para «Reporta a»: empleados activos por nombre, sin distinguir mayúsculas ni acentos (mínimo 2 letras, máximo 10 resultados) con
    * solo id, nombre, cargo y área (nada de correo, nómina ni datos personales).
    */
   async searchEmployees(q: string, limit = 10): Promise<{ id: string; fullName: string; position: string; area: string | null }[]> {
@@ -366,7 +367,8 @@ export class JobPositionsService {
     if (term.length < 2) return [];
     const rows = (await this.dataSource.query(
       `SELECT id, full_name, position, area FROM employees.employee_records
-       WHERE status = 'active' AND deleted_at IS NULL AND full_name ILIKE $1
+       WHERE status = 'active' AND deleted_at IS NULL
+         AND translate(lower(full_name), 'áéíóúüñ', 'aeiouun') LIKE translate(lower($1), 'áéíóúüñ', 'aeiouun')
        ORDER BY full_name ASC LIMIT $2`,
       [`%${escapeLike(term)}%`, Math.min(Math.max(limit, 1), 10)],
     )) as { id: string; full_name: string; position: string; area: string | null }[];
