@@ -482,6 +482,12 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
         {showHerramientas && (
           <>
             <SectionLabel>Herramientas</SectionLabel>
+            {showMiInformacion && (
+              <NavLink href="/herramientas/mi-informacion" active={pathname.startsWith('/herramientas/mi-informacion')}>
+                <IdCardIcon className="h-5 w-5" />
+                Mi Información
+              </NavLink>
+            )}
             {showNotificaciones && (
               <NavLink
                 href="/herramientas/mis-notificaciones"
@@ -547,12 +553,6 @@ export function Sidebar({ user, id, open = false, onClose }: SidebarProps) {
               >
                 <UsersGroupIcon className="h-5 w-5" />
                 Gestión de Vacaciones
-              </NavLink>
-            )}
-            {showMiInformacion && (
-              <NavLink href="/herramientas/mi-informacion" active={pathname.startsWith('/herramientas/mi-informacion')}>
-                <IdCardIcon className="h-5 w-5" />
-                Mi Información
               </NavLink>
             )}
             {showSolicitudPuesto && (
