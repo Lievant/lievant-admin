@@ -119,7 +119,7 @@ export class JobPositionsService {
       distinct('area'),
       distinct('business_unit'),
       distinct('division'),
-      this.dataSource.query(`SELECT code, name FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`) as Promise<{ code: string; name: string }[]>,
+      this.dataSource.query(`SELECT code, name FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`) as Promise<{ code: string; name: string }[]>,
       this.dataSource.query(`SELECT name, division_name FROM catalogs.areas WHERE is_active IS NOT FALSE ORDER BY name`) as Promise<{ name: string; division_name: string | null }[]>,
     ]);
     const catalogAreas = areaRows.map((r) => ({ name: r.name, division: r.division_name }));
@@ -314,7 +314,7 @@ export class JobPositionsService {
   }
 
   /**
-   * Nivel y Área son listas cerradas. El nivel debe estar en `catalogs.job_position_levels` y el área en
+   * Nivel y Área son listas cerradas. El nivel debe estar en `catalogs.org_levels` y el área en
    * `catalogs.areas` de la división (comparación sin mayúsculas, acentos ni espacios extra); se devuelve el
    * valor canónico del catálogo. Solo se valida lo que cambió respecto del puesto actual (`cur`).
    */
@@ -325,7 +325,7 @@ export class JobPositionsService {
   ): Promise<{ level: string | null; area: string }> {
     let level = input.level && input.level.trim() !== '' ? input.level.trim() : null;
     if (level !== null) {
-      const codes = ((await m.query(`SELECT code FROM catalogs.job_position_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[]).map((r) => r.code);
+      const codes = ((await m.query(`SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[]).map((r) => r.code);
       const canonical = canonicalLevel(level, codes);
       if (canonical) level = canonical;
       else if (!cur || normText(cur.level) !== normText(level)) {

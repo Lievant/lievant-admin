@@ -219,7 +219,7 @@ describe('Matriz de Puestos · servicio de puestos', () => {
   const build = (current: PositionRow, codes: string[] = []) => {
     const db = fakeDb((sql) => {
       if (/SELECT code FROM hr\.job_positions/.test(sql)) return codes.map((code) => ({ code }));
-      if (/FROM catalogs\.job_position_levels/.test(sql)) return ['I', 'II', 'III', 'IV'].map((code) => ({ code }));
+      if (/FROM catalogs\.org_levels/.test(sql)) return ['I', 'II', 'III', 'IV'].map((code) => ({ code }));
       if (/FROM catalogs\.areas/.test(sql)) return ['TI', 'B', 'Ventas'].map((name) => ({ name, division_name: null }));
       if (/INSERT INTO hr\.job_positions/.test(sql)) return [{ id: P1 }];
       if (/FROM hr\.job_positions p\s+LEFT JOIN/.test(sql)) return [current];
