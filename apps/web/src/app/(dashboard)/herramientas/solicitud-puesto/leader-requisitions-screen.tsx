@@ -1,5 +1,6 @@
 'use client';
 
+import { ModalShell } from '@/app/(dashboard)/rrhh/matriz-puestos/modal-shell';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { RequisitionDetailView } from '@/app/(dashboard)/rrhh/solicitudes-puesto/requisition-detail-view';
@@ -203,11 +204,10 @@ export function LeaderRequisitionsScreen() {
       )}
 
       {viewing && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-          <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-xl sm:p-6">
-            <RequisitionDetailView d={viewing} />
-            {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
+        <ModalShell
+          maxWidth="max-w-2xl"
+          footer={
+            <div className="flex flex-wrap justify-end gap-2">
               {viewing.status === 'borrador' && (
                 <>
                   <button type="button" onClick={() => { setToDelete(viewing); setViewing(null); }} className="rounded-md border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50">Eliminar</button>
@@ -217,8 +217,11 @@ export function LeaderRequisitionsScreen() {
               )}
               <button type="button" onClick={() => setViewing(null)} className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cerrar</button>
             </div>
-          </div>
-        </div>
+          }
+        >
+          <RequisitionDetailView d={viewing} />
+          {actionError && <p role="alert" className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>}
+        </ModalShell>
       )}
 
       {toDelete && (

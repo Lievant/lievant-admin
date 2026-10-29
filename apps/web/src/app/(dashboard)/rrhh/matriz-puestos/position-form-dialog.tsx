@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { CloseIcon } from '@/components/icons';
+import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
 import { areasForDivision, inList, levelOptionLabel, type PositionDetail, type PositionOptions } from './positions-constants';
 
@@ -152,15 +152,21 @@ export function PositionFormDialog({
   const approvedWarning = Boolean(position?.descriptionApproved) && description.trim() !== (position?.description ?? '');
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-      <div role="dialog" aria-modal="true" className="w-full max-w-2xl rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-bold text-navy">{position ? 'Editar Puesto' : 'Nuevo Puesto'}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <CloseIcon className="h-5 w-5" />
+    <ModalShell
+      title={position ? 'Editar Puesto' : 'Nuevo Puesto'}
+      onClose={onClose}
+      onSubmit={submit}
+      maxWidth="max-w-2xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
+          <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
+            {saving ? 'Guardando…' : 'Guardar'}
           </button>
-        </div>
-        <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
+        </>
+      }
+    >
+        <div className="space-y-4">
           {position && (
             <p className="text-sm text-slate-500">
               Código: <span className="font-mono font-semibold text-navy">{position.code}</span> (lo asigna el sistema)
@@ -258,14 +264,7 @@ export function PositionFormDialog({
 
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
-            <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </div>
+    </ModalShell>
   );
 }
