@@ -22,6 +22,7 @@ import {
   applyValidationChange,
   assertCanApprove,
   missingRequiredFields,
+  buildPositionOrder,
   buildPositionWhere,
   nextPositionCode,
   normalizeDescription,
@@ -161,11 +162,12 @@ export class JobPositionsService {
       validationStatus: q.validationStatus,
       search: q.search,
     });
-    // Total en la misma consulta; el orden numérico del código evita que JP-1000 quede antes que JP-200.
+    // Total en la misma consulta. El orden se aplica a todos los registros (no a la página); por omisión es el código
+    // numérico, que evita que JP-1000 quede antes que JP-200.
     const rows = (await this.dataSource.query(
       `SELECT p.*, COUNT(*) OVER() AS total_count FROM hr.job_positions p
        WHERE ${where}
-       ORDER BY length(p.code) ASC, p.code ASC
+       ORDER BY ${buildPositionOrder(q.sortBy, q.sortDir)}
        LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
       [...params, limit, (page - 1) * limit],
     )) as PositionRow[];

@@ -21,7 +21,9 @@ import {
   ACTIVITY_FREQUENCIES,
   MAX_TITLE,
   MEASUREMENT_FREQUENCIES,
+  POSITION_SORT_COLUMNS,
   POSITION_STATUSES,
+  SORT_DIRECTIONS,
   VALIDATION_STATUSES,
 } from '../job-positions.util';
 import { SENIORITIES } from '../job-positions-catalog.util';
@@ -218,6 +220,15 @@ export class UpdatePositionDto {
 }
 
 export class PositionQueryDto {
+  /** Columna de orden (lista cerrada); sin ella se conserva el orden de siempre. */
+  @IsOptional()
+  @IsIn(POSITION_SORT_COLUMNS, { message: 'La columna de orden no es válida' })
+  sortBy?: (typeof POSITION_SORT_COLUMNS)[number];
+
+  @IsOptional()
+  @IsIn(SORT_DIRECTIONS, { message: 'El sentido del orden debe ser asc o desc' })
+  sortDir?: (typeof SORT_DIRECTIONS)[number];
+
   @IsOptional()
   @IsString()
   @MaxLength(100)
