@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   Max,
   MaxLength,
@@ -77,11 +78,11 @@ export class CreatePositionDto {
   @MaxLength(500)
   reportsTo?: string | null;
 
+  /** «Reporta a» como empleado (null lo quita). El texto del Excel (`reportsTo`) no se edita desde el formulario. */
   @IsOptional()
   @emptyToNull
-  @IsString()
-  @MaxLength(500)
-  supervises?: string | null;
+  @IsUUID()
+  reportsToEmployeeId?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -166,11 +167,11 @@ export class UpdatePositionDto {
   @MaxLength(500)
   reportsTo?: string | null;
 
+  /** «Reporta a» como empleado (null lo quita). El texto del Excel (`reportsTo`) no se edita desde el formulario. */
   @IsOptional()
   @emptyToNull
-  @IsString()
-  @MaxLength(500)
-  supervises?: string | null;
+  @IsUUID()
+  reportsToEmployeeId?: string | null;
 
   @IsOptional()
   @IsInt()
@@ -515,4 +516,18 @@ export class CreateAreaDto {
   @IsOptional()
   @IsBoolean()
   confirmSimilar?: boolean;
+}
+
+export class EmployeeSearchQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  limit?: number;
 }

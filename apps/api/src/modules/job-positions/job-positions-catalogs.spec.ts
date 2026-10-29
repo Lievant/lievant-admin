@@ -19,6 +19,7 @@ import {
 } from './job-positions-catalog.util';
 
 const LEVELS = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
+const REQ = { roleSummary: 'TEST-Rol', positionObjective: 'TEST-Objetivo', validationPoints: 'TEST-Puntos', description: 'TEST-Descripción' };
 const ACTOR = { id: 'user-1', email: 'rrhh@lievant.com', name: 'RRHH' };
 
 describe('Listas cerradas · nivel', () => {
@@ -49,7 +50,7 @@ describe('Listas cerradas · la escala es org_levels (I a IX)', () => {
   });
   it('lee los niveles de catalogs.org_levels (activos, por sort_order) y no de otro catálogo', async () => {
     const { service, calls } = build();
-    await service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'III' }), ACTOR);
+    await service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'III' }), ACTOR);
     const q = calls.find((c) => /FROM catalogs\.org_levels/.test(c.sql))!;
     expect(q.sql).toContain('is_active IS NOT FALSE');
     expect(q.sql).toContain('ORDER BY sort_order');
@@ -59,8 +60,8 @@ describe('Listas cerradas · la escala es org_levels (I a IX)', () => {
   });
   it('el API rechaza X con 400 y acepta IX («9»)', async () => {
     const { service } = build();
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'X' }), ACTOR)).rejects.toThrow(/I, II, III, IV, V, VI, VII, VIII, IX/);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: '9' }), ACTOR)).resolves.toBeDefined();
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'X' }), ACTOR)).rejects.toThrow(/I, II, III, IV, V, VI, VII, VIII, IX/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'E-Commerce', level: '9' }), ACTOR)).resolves.toBeDefined();
   });
 });
 
@@ -119,9 +120,9 @@ function build(opts: { areas?: { name: string; division_name: string | null }[];
   const calls: { sql: string; params: unknown[] }[] = [];
   const areas = opts.areas ?? [{ name: 'Marketplace', division_name: 'E-Commerce' }];
   const current = opts.current ?? {
-    id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'Marketplace', business_unit: null, level: 'II', description: null, description_approved: false,
+    id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'Marketplace', business_unit: null, level: 'II', description: 'TEST-Descripción', description_approved: false,
     description_approved_by: null, description_approved_at: null, status: 'activo', division: 'E-Commerce', level_original: null, seniority: null,
-    meot_hierarchy: null, reports_to_text: null, supervises_text: null, plazas: 1, role_summary: null, position_objective: null, validation_points: null,
+    meot_hierarchy: null, reports_to_text: null, reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
     head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
   };
   const query = jest.fn(async (rawSql: string, params: unknown[] = []) => {
@@ -146,28 +147,28 @@ function build(opts: { areas?: { name: string; division_name: string | null }[];
 describe('Matriz de Puestos · el API rechaza texto libre en nivel y área (400)', () => {
   it('nivel fuera del catálogo al crear: 400', async () => {
     const { service } = build();
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'Gerencia' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'XVI' }), ACTOR)).rejects.toThrow(/debe ser uno de la lista/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'Gerencia' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'E-Commerce', level: 'XVI' }), ACTOR)).rejects.toThrow(/debe ser uno de la lista/);
   });
   it('área fuera del catálogo de la división al crear: 400; con la división correcta, se guarda el nombre canónico', async () => {
     const { service, calls } = build();
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketing', division: 'E-Commerce' }), ACTOR)).rejects.toThrow(/no está en el catálogo de la división/);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Marketplace', division: 'Otra' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
-    await service.create(plainToInstance(CreatePositionDto, { title: 'A', area: ' marketplace ', division: 'E-Commerce', level: 'iv' }), ACTOR);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketing', division: 'E-Commerce' }), ACTOR)).rejects.toThrow(/no está en el catálogo de la división/);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Marketplace', division: 'Otra' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
+    await service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: ' marketplace ', division: 'E-Commerce', level: 'iv' }), ACTOR);
     const insert = calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
     expect(insert.params[2]).toBe('Marketplace');
     expect(insert.params[4]).toBe('IV');
   });
   it('sin división, el área debe existir en el catálogo con ese nombre', async () => {
     const { service } = build();
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'Inventada' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.create(plainToInstance(CreatePositionDto, { title: 'A', area: 'MARKETPLACE' }), ACTOR)).resolves.toBeDefined();
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'Inventada' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.create(plainToInstance(CreatePositionDto, { ...REQ, title: 'A', area: 'MARKETPLACE' }), ACTOR)).resolves.toBeDefined();
   });
   it('al editar solo se revalida lo que cambió: un puesto antiguo con nivel fuera de catálogo sigue editable', async () => {
     const legacy = {
-      id: 'p1', code: 'JP-001', title: 'TEST-Viejo', area: 'Área Vieja', business_unit: null, level: 'Gerencia', description: null, description_approved: false,
+      id: 'p1', code: 'JP-001', title: 'TEST-Viejo', area: 'Área Vieja', business_unit: null, level: 'Gerencia', description: 'TEST-Descripción', description_approved: false,
       description_approved_by: null, description_approved_at: null, status: 'activo', division: null, level_original: null, seniority: null,
-      meot_hierarchy: null, reports_to_text: null, supervises_text: null, plazas: 1, role_summary: null, position_objective: null, validation_points: null,
+      meot_hierarchy: null, reports_to_text: null, reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
       head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
     };
     const { service, calls } = build({ current: legacy });
@@ -193,7 +194,7 @@ describe('Matriz de Puestos · el API rechaza texto libre en nivel y área (400)
     const { service, calls, audit } = build();
     await service.update('p1', { seniority: 'senior' }, ACTOR);
     const up = calls.find((c) => /^UPDATE hr\.job_positions SET title/.test(c.sql))!;
-    expect(up.params[22]).toBe('senior');
+    expect(up.params[21]).toBe('senior');
     expect(audit.logActivity.mock.calls[0]![0].changes.seniority).toEqual({ from: null, to: 'senior' });
   });
 });

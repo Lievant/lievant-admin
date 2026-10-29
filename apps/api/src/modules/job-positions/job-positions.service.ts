@@ -14,11 +14,13 @@ import {
 } from './job-positions-catalog.util';
 import {
   DEFAULT_LIMIT,
+  escapeLike,
   POSITION_NOT_FOUND,
   VALIDATION_STATUSES,
   applyDescriptionChange,
   applyValidationChange,
   assertCanApprove,
+  missingRequiredFields,
   buildPositionWhere,
   nextPositionCode,
   normalizeDescription,
@@ -54,10 +56,13 @@ export interface PositionPage {
 }
 
 const DETAIL_SQL = `
-  SELECT p.*, u.name AS approver_name, v.name AS validator_name
+  SELECT p.*, u.name AS approver_name, v.name AS validator_name,
+         r.full_name AS reports_to_name, r.position AS reports_to_position,
+         (r.status = 'active' AND r.deleted_at IS NULL) AS reports_to_active
   FROM hr.job_positions p
   LEFT JOIN auth.users u ON u.id = p.description_approved_by
   LEFT JOIN auth.users v ON v.id = p.validated_by
+  LEFT JOIN employees.employee_records r ON r.id = p.reports_to_employee_id
   WHERE p.id = $1 AND p.deleted_at IS NULL`;
 
 type Q = { query: DataSource['query'] };
@@ -67,7 +72,6 @@ const SIMPLE_FIELDS = {
   division: 'division',
   meotHierarchy: 'meot_hierarchy',
   reportsTo: 'reports_to_text',
-  supervises: 'supervises_text',
   plazas: 'plazas',
   roleSummary: 'role_summary',
   positionObjective: 'position_objective',
@@ -208,17 +212,21 @@ export class JobPositionsService {
       const code = nextPositionCode(codes.map((c) => c.code));
 
       const description = normalizeDescription(dto.description);
+      this.assertRequired({ roleSummary: dto.roleSummary, positionObjective: dto.positionObjective, validationPoints: dto.validationPoints, description });
+      if (dto.reportsToEmployeeId) await this.assertActiveEmployee(m, dto.reportsToEmployeeId);
       const status = resolveStatus((dto.status as PositionStatus | undefined) ?? 'activo', { description, approved: false });
       // Nivel y Área son listas cerradas: se validan contra el catálogo y se guarda el nombre canónico.
       const lists = await this.resolveCatalogs(m, { level: dto.level ?? null, area: dto.area.trim(), division: dto.division ?? null }, null);
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
-           division, meot_hierarchy, reports_to_text, supervises_text, plazas, role_summary, position_objective, validation_points, seniority)
+           division, meot_hierarchy, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
+           reports_to_employee_id)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
         [
           code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
-          dto.division ?? null, dto.meotHierarchy ?? null, dto.reportsTo ?? null, dto.supervises ?? null, dto.plazas ?? null,
+          dto.division ?? null, dto.meotHierarchy ?? null, dto.reportsTo ?? null, dto.plazas ?? null,
           dto.roleSummary ?? null, dto.positionObjective ?? null, dto.validationPoints ?? null, dto.seniority ?? null,
+          dto.reportsToEmployeeId ?? null,
         ],
       )) as { id: string }[];
       return rows[0]!.id;
@@ -269,6 +277,18 @@ export class JobPositionsService {
       next.level = lists.level;
       next.area = lists.area;
       const seniority = dto.seniority !== undefined ? dto.seniority : cur.seniority;
+      // Los campos obligatorios se exigen al guardar el formulario; cambiar solo la validación del Head no se bloquea.
+      const touchesForm = Object.keys(dto).some((k) => k !== 'validationStatus' && k !== 'headComments');
+      if (touchesForm) {
+        this.assertRequired({
+          roleSummary: simple.roleSummary as string | null,
+          positionObjective: simple.positionObjective as string | null,
+          validationPoints: simple.validationPoints as string | null,
+          description: desc.description,
+        });
+      }
+      const reportsToEmployeeId = dto.reportsToEmployeeId !== undefined ? dto.reportsToEmployeeId : cur.reports_to_employee_id;
+      if (reportsToEmployeeId && reportsToEmployeeId !== cur.reports_to_employee_id) await this.assertActiveEmployee(m, reportsToEmployeeId);
       const validation = applyValidationChange(
         { status: cur.validation_status, by: cur.validated_by, at: cur.validated_at },
         dto.validationStatus,
@@ -278,15 +298,15 @@ export class JobPositionsService {
       await m.query(
         `UPDATE hr.job_positions SET title=$2, area=$3, business_unit=$4, level=$5, description=$6,
            description_approved=$7, description_approved_by=$8, description_approved_at=$9,
-           status=$10, division=$11, meot_hierarchy=$12, reports_to_text=$13, supervises_text=$14, plazas=$15,
-           role_summary=$16, position_objective=$17, validation_points=$18, head_comments=$19,
-           validation_status=$20, validated_by=$21, validated_at=$22, seniority=$23, updated_at=NOW()
+           status=$10, division=$11, meot_hierarchy=$12, reports_to_text=$13, plazas=$14,
+           role_summary=$15, position_objective=$16, validation_points=$17, head_comments=$18,
+           validation_status=$19, validated_by=$20, validated_at=$21, seniority=$22, reports_to_employee_id=$23, updated_at=NOW()
          WHERE id=$1`,
         [
           id, next.title, next.area, next.business_unit, next.level, desc.description, desc.approved, desc.approvedBy, desc.approvedAt, status,
-          simple.division, simple.meotHierarchy, simple.reportsTo, simple.supervises, simple.plazas,
+          simple.division, simple.meotHierarchy, simple.reportsTo, simple.plazas,
           simple.roleSummary, simple.positionObjective, simple.validationPoints, simple.headComments,
-          validation.status, validation.by, validation.at, seniority,
+          validation.status, validation.by, validation.at, seniority, reportsToEmployeeId ?? null,
         ],
       );
 
@@ -303,6 +323,9 @@ export class JobPositionsService {
         if (before !== after) diff[key] = LONG_TEXT.has(key) ? { from: 'modificado', to: 'modificado' } : { from: before, to: after };
       }
       if (cur.validation_status !== validation.status) diff.validationStatus = { from: cur.validation_status, to: validation.status };
+      if ((cur.reports_to_employee_id ?? null) !== (reportsToEmployeeId ?? null)) {
+        diff.reportsToEmployee = { from: await this.employeeName(m, cur.reports_to_employee_id), to: await this.employeeName(m, reportsToEmployeeId ?? null) };
+      }
       // El texto de la descripción no se guarda en la bitácora: solo que cambió y si se invalidó la aprobación.
       if (cur.description !== desc.description) diff.description = { from: 'modificada', to: 'modificada' };
       if (cur.description_approved && !desc.approved) diff.descriptionApproved = { from: true, to: false };
@@ -311,6 +334,43 @@ export class JobPositionsService {
     const detail = await this.getDetail(id);
     await this.log('update', actor, detail, changes);
     return detail;
+  }
+
+  /** 400 con un mensaje por cada campo obligatorio vacío. */
+  private assertRequired(values: Parameters<typeof missingRequiredFields>[0]): void {
+    const missing = missingRequiredFields(values);
+    if (missing.length > 0) throw new BadRequestException(missing.map((f) => f.message));
+  }
+
+  /** «Reporta a» solo puede ser un empleado activo y no eliminado. */
+  private async assertActiveEmployee(m: Q, employeeId: string): Promise<void> {
+    const rows = (await m.query(
+      `SELECT 1 FROM employees.employee_records WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
+      [employeeId],
+    )) as unknown[];
+    if (!rows[0]) throw new BadRequestException('El empleado de «Reporta a» no existe o no está activo');
+  }
+
+  private async employeeName(m: Q, employeeId: string | null): Promise<string | null> {
+    if (!employeeId) return null;
+    const rows = (await m.query(`SELECT full_name FROM employees.employee_records WHERE id = $1`, [employeeId])) as { full_name: string }[];
+    return rows[0]?.full_name ?? employeeId;
+  }
+
+  /**
+   * Buscador ligero para «Reporta a»: empleados activos por nombre (mínimo 2 letras, máximo 10 resultados) con
+   * solo id, nombre, cargo y área (nada de correo, nómina ni datos personales).
+   */
+  async searchEmployees(q: string, limit = 10): Promise<{ id: string; fullName: string; position: string; area: string | null }[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const rows = (await this.dataSource.query(
+      `SELECT id, full_name, position, area FROM employees.employee_records
+       WHERE status = 'active' AND deleted_at IS NULL AND full_name ILIKE $1
+       ORDER BY full_name ASC LIMIT $2`,
+      [`%${escapeLike(term)}%`, Math.min(Math.max(limit, 1), 10)],
+    )) as { id: string; full_name: string; position: string; area: string | null }[];
+    return rows.map((r) => ({ id: r.id, fullName: r.full_name, position: r.position, area: r.area }));
   }
 
   /**

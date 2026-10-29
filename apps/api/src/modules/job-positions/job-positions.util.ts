@@ -23,6 +23,20 @@ export const MAX_WEIGHT_SUM = 100;
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
 
+/** Campos obligatorios al guardar el formulario del puesto (crear y editar) y su mensaje en español. */
+export const REQUIRED_POSITION_FIELDS = [
+  { key: 'roleSummary', label: 'Rol', message: 'El rol es obligatorio' },
+  { key: 'positionObjective', label: 'Objetivo del puesto', message: 'El objetivo del puesto es obligatorio' },
+  { key: 'validationPoints', label: 'Puntos a validar', message: 'Los puntos a validar son obligatorios' },
+  { key: 'description', label: 'Descripción del puesto', message: 'La descripción del puesto es obligatoria' },
+] as const;
+export type RequiredPositionKey = (typeof REQUIRED_POSITION_FIELDS)[number]['key'];
+
+/** Campos obligatorios que están vacíos (solo espacios cuenta como vacío). */
+export function missingRequiredFields(values: Partial<Record<RequiredPositionKey, string | null | undefined>>): (typeof REQUIRED_POSITION_FIELDS)[number][] {
+  return REQUIRED_POSITION_FIELDS.filter((f) => (values[f.key] ?? '').toString().trim() === '');
+}
+
 export const POSITION_NOT_FOUND = 'Puesto no encontrado';
 export const OKR_NOT_FOUND = 'OKR no encontrado';
 export const KPI_NOT_FOUND = 'KPI no encontrado';
@@ -221,7 +235,10 @@ export interface PositionRow {
   seniority: string | null;
   meot_hierarchy: string | null;
   reports_to_text: string | null;
-  supervises_text: string | null;
+  reports_to_employee_id: string | null;
+  reports_to_name?: string | null;
+  reports_to_position?: string | null;
+  reports_to_active?: boolean | null;
   plazas: number | null;
   role_summary: string | null;
   position_objective: string | null;
@@ -402,8 +419,10 @@ export interface PositionDetail extends PositionListItem {
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   meotHierarchy: string | null;
+  /** Texto de «Reporta a» que venía del Excel (solo lectura en la pantalla). */
   reportsTo: string | null;
-  supervises: string | null;
+  /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo («Baja»). */
+  reportsToEmployee: { id: string; fullName: string; position: string | null; active: boolean } | null;
   roleSummary: string | null;
   positionObjective: string | null;
   validationPoints: string | null;
@@ -426,7 +445,9 @@ export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activ
     levelOriginal: r.level_original,
     meotHierarchy: r.meot_hierarchy,
     reportsTo: r.reports_to_text,
-    supervises: r.supervises_text,
+    reportsToEmployee: r.reports_to_employee_id
+      ? { id: r.reports_to_employee_id, fullName: r.reports_to_name ?? 'Empleado', position: r.reports_to_position ?? null, active: r.reports_to_active !== false }
+      : null,
     roleSummary: r.role_summary,
     positionObjective: r.position_objective,
     validationPoints: r.validation_points,
