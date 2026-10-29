@@ -189,7 +189,8 @@ export function buildPositionWhere(f: PositionFilters): { where: string; params:
   }
   if (f.division) {
     params.push(f.division);
-    clauses.push(`p.division = $${params.length}`);
+    // Sin distinguir mayúsculas, acentos ni espacios: «TI» y «ti » son la misma división (también las antiguas fuera de catálogo).
+    clauses.push(`translate(lower(btrim(p.division)), 'áéíóúüñ', 'aeiouun') = translate(lower(btrim($${params.length})), 'áéíóúüñ', 'aeiouun')`);
   }
   if (f.level) {
     params.push(f.level);

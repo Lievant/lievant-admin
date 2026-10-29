@@ -113,7 +113,7 @@ describe('Matriz de Puestos · la división es una lista cerrada (400 y nombre c
 
   it('el filtro de la lista por una división antigua usa el valor tal cual (parámetro)', () => {
     const { where, params } = buildPositionWhere({ division: 'División Antigua' });
-    expect(where).toContain('p.division = $1');
+    expect(where).toContain("translate(lower(btrim(p.division)), 'áéíóúüñ', 'aeiouun') = translate(lower(btrim($1)), 'áéíóúüñ', 'aeiouun')");
     expect(params).toEqual(['División Antigua']);
   });
 });
