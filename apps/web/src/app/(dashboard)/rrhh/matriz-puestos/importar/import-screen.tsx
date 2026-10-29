@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ChevronLeftIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -44,6 +44,9 @@ const issueText = (i: Issue): string => (i.row ? `Fila ${i.row}: ${i.message}` :
 export function ImportScreen() {
   const [file, setFile] = useState<File | null>(null);
   const [division, setDivision] = useState('');
+  // Divisiones activas del catálogo y lo que se dedujo del título de la hoja (null = aún sin archivo).
+  const [divisions, setDivisions] = useState<string[]>([]);
+  const [inspected, setInspected] = useState<{ hint: string | null; matched: string | null } | null>(null);
   const [busy, setBusy] = useState<'analyzing' | 'applying' | null>(null);
   const [preview, setPreview] = useState<ImportResult | null>(null);
   const [done, setDone] = useState<ImportResult | null>(null);
@@ -51,12 +54,43 @@ export function ImportScreen() {
   // Solo cuenta la respuesta de la solicitud más reciente.
   const latest = useRef(0);
 
+  // Las divisiones del desplegable salen del catálogo (Configuración › Catálogos).
+  useEffect(() => {
+    fetch('/api/hr/job-positions/options')
+      .then((r) => (r.ok ? (r.json() as Promise<{ divisions?: string[] }>) : null))
+      .then((o) => o?.divisions && setDivisions(o.divisions))
+      .catch(() => undefined);
+  }, []);
+
   const reset = () => {
     latest.current += 1;
     setPreview(null);
     setDone(null);
     setError(null);
     setBusy(null);
+  };
+
+  /** Al elegir el archivo se deduce la división del título de la hoja y se empareja con el catálogo (nunca se crea una). */
+  const pickFile = async (next: File | null) => {
+    setFile(next);
+    reset();
+    setInspected(null);
+    if (!next) return;
+    const ticket = latest.current;
+    try {
+      const body = new FormData();
+      body.set('file', next);
+      const res = await fetch('/api/hr/job-positions/import/inspect', { method: 'POST', body });
+      if (!res.ok) throw new Error(await readError(res, 'No se pudo leer el archivo.'));
+      const info = (await res.json()) as { divisionHint: string | null; division: string | null; divisions: string[] };
+      if (ticket !== latest.current) return;
+      setDivisions(info.divisions);
+      setInspected({ hint: info.divisionHint, matched: info.division });
+      // Con coincidencia se preselecciona el nombre del catálogo; sin ella el desplegable queda vacío.
+      setDivision(info.division ?? '');
+    } catch (err) {
+      if (ticket === latest.current) setError(err instanceof Error ? err.message : 'No se pudo leer el archivo.');
+    }
   };
 
   const send = async (mode: 'preview' | 'apply', div: string): Promise<ImportResult> => {
@@ -79,18 +113,8 @@ export function ImportScreen() {
     setPreview(null);
     setBusy('analyzing');
     try {
-      let div = division.trim();
-      if (div === '') {
-        // Sin división escrita: se analiza una vez para deducirla del título de la hoja y se repite con ella.
-        const probe = await send('preview', '-');
-        if (ticket !== latest.current) return;
-        if (!probe.divisionHint) {
-          setError('No se pudo deducir la división del archivo. Escríbela en el campo División.');
-          return;
-        }
-        div = probe.divisionHint;
-        setDivision(div);
-      }
+      const div = division.trim();
+      if (div === '') return setError('Elige la división del catálogo antes de analizar.');
       const result = await send('preview', div);
       if (ticket !== latest.current) return;
       setPreview(result);
@@ -154,14 +178,16 @@ export function ImportScreen() {
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="imp-division" className={LABEL}>División</label>
-          <input
+          <select
             id="imp-division"
             value={division}
             onChange={(e) => { setDivision(e.target.value); reset(); }}
-            maxLength={100}
-            placeholder="Se deduce del archivo"
             className={INPUT}
-          />
+          >
+            <option value="">Elige una división…</option>
+            {divisions.map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <p className="text-xs text-slate-400">Las divisiones se administran en Configuración › Catálogos.</p>
         </div>
         <div className="flex flex-col gap-1 sm:col-span-2">
           <label htmlFor="imp-file" className={LABEL}>Archivo (.xlsx, máximo 5 MB)</label>
@@ -169,7 +195,7 @@ export function ImportScreen() {
             id="imp-file"
             type="file"
             accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => { setFile(e.target.files?.[0] ?? null); reset(); }}
+            onChange={(e) => void pickFile(e.target.files?.[0] ?? null)}
             className={cn(INPUT, 'file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1 file:text-sm file:font-medium')}
           />
         </div>
@@ -177,7 +203,7 @@ export function ImportScreen() {
           <button
             type="button"
             onClick={analyze}
-            disabled={busy !== null || !file}
+            disabled={busy !== null || !file || division === ''}
             className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-50"
           >
             {busy === 'analyzing' ? 'Analizando…' : 'Analizar'}
@@ -186,6 +212,14 @@ export function ImportScreen() {
       </div>
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {file && inspected && !inspected.matched && (
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {inspected.hint
+            ? `El archivo dice «${inspected.hint}», pero esa división no está en el catálogo. Elige una de la lista antes de analizar (no se crea ninguna automáticamente).`
+            : 'No se pudo deducir la división del título del archivo. Elige una de la lista antes de analizar.'}
+        </p>
+      )}
 
       {done && (
         <div role="status" className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">

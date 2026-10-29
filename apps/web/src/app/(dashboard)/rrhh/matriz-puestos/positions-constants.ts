@@ -102,13 +102,16 @@ export interface PositionOptions {
   areas: string[];
   catalogAreas: { name: string; division: string | null }[];
   businessUnits: string[];
+  /** Divisiones activas del catálogo (desplegable del formulario). */
   divisions: string[];
+  /** Para el filtro: catálogo más las divisiones antiguas que ya tiene algún puesto. */
+  filterDivisions: string[];
   levels: { code: string; name: string }[];
   seniorities: { value: string; label: string }[];
   validationStatuses: ValidationStatus[];
 }
 
-export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], businessUnits: [], divisions: [], levels: [], seniorities: [], validationStatuses: [] };
+export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], businessUnits: [], divisions: [], filterDivisions: [], levels: [], seniorities: [], validationStatuses: [] };
 
 /** Etiqueta del nivel en los desplegables: «I - Dirección General» (se guarda solo el número romano). */
 export const levelOptionLabel = (l: { code: string; name: string }): string => `${l.code} - ${l.name}`;
