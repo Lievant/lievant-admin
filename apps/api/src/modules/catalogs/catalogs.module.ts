@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogsController } from './catalogs.controller';
 import { CompetenciesController } from './competencies/competencies.controller';
+import { CompetenciesImportService } from './competencies/competencies-import.service';
 import { CompetenciesService } from './competencies/competencies.service';
 import { CatalogCompetency } from './entities/catalog-competency.entity';
 import { CatalogsService } from './catalogs.service';
@@ -52,7 +53,7 @@ import { PasswordApplication } from '../passwords/entities/password-application.
   ],
   // CompetenciesController va PRIMERO: sus rutas catalogs/competencies/… no deben caer en catalogs/:entity/….
   controllers: [CompetenciesController, CatalogsController],
-  providers: [CatalogsService, CompetenciesService],
+  providers: [CatalogsService, CompetenciesService, CompetenciesImportService],
   exports: [CatalogsService, CompetenciesService],
 })
 export class CatalogsModule {}

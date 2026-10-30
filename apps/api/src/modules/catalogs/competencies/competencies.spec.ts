@@ -160,13 +160,14 @@ describe('Competencias · rutas y protección', () => {
     expect(controllers.indexOf(CompetenciesController)).toBeLessThan(controllers.indexOf(CatalogsController));
   });
 
-  it('SUPER_ADMIN para administrar; /active solo con sesión; eliminar tiene ruta propia (:id/remove)', () => {
+  it('SUPER_ADMIN para administrar e import; /active solo con sesión; eliminar tiene ruta propia (:id/remove)', () => {
     const proto = CompetenciesController.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
     const roles = (name: string) => Reflect.getMetadata('roles', proto[name]!) as string[] | undefined;
-    for (const m of ['findAll', 'create', 'update', 'deactivate', 'remove']) expect(roles(m)).toEqual(['SUPER_ADMIN']);
+    for (const m of ['findAll', 'create', 'update', 'deactivate', 'remove', 'import']) expect(roles(m)).toEqual(['SUPER_ADMIN']);
     expect(roles('findActive')).toBeUndefined();
     expect(Reflect.getMetadata('path', proto.remove!)).toBe(':id/remove');
     expect(Reflect.getMetadata('path', proto.deactivate!)).toBe(':id');
+    expect(Reflect.getMetadata('path', proto.import!)).toBe('import');
   });
 });
 
