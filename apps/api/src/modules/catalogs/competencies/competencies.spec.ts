@@ -3,6 +3,9 @@ import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { PermissionsGuard } from '../../auth/guards/permissions.guard';
 import { CatalogsModule } from '../catalogs.module';
 import { CatalogsController } from '../catalogs.controller';
 import { CompetenciesController } from './competencies.controller';
@@ -168,6 +171,28 @@ describe('Competencias · rutas y protección', () => {
     expect(Reflect.getMetadata('path', proto.remove!)).toBe(':id/remove');
     expect(Reflect.getMetadata('path', proto.deactivate!)).toBe(':id');
     expect(Reflect.getMetadata('path', proto.import!)).toBe('import');
+  });
+});
+
+describe('Competencias · solo SUPER_ADMIN administra (el guard sí lo hace cumplir)', () => {
+  const proto = CompetenciesController.prototype as unknown as Record<string, (...a: unknown[]) => unknown>;
+  const ctx = (handler: string, roles: string[]) =>
+    ({
+      getHandler: () => proto[handler],
+      getClass: () => CompetenciesController,
+      switchToHttp: () => ({ getRequest: () => ({ user: { roles: roles.map((name) => ({ name, permissions: [] })), userPermissions: [] } }) }),
+    }) as unknown as ExecutionContext;
+  const guard = new PermissionsGuard(new Reflector());
+
+  it('un colaborador recibe 403 en listar, crear, editar, desactivar, eliminar e importar', () => {
+    for (const m of ['findAll', 'create', 'update', 'deactivate', 'remove', 'import']) {
+      expect(() => guard.canActivate(ctx(m, ['COLABORADOR']))).toThrow(ForbiddenException);
+    }
+  });
+
+  it('SUPER_ADMIN sí pasa, y /active queda abierto a cualquier sesión', () => {
+    for (const m of ['findAll', 'create', 'update', 'deactivate', 'remove', 'import']) expect(guard.canActivate(ctx(m, ['SUPER_ADMIN']))).toBe(true);
+    expect(guard.canActivate(ctx('findActive', ['COLABORADOR']))).toBe(true);
   });
 });
 
