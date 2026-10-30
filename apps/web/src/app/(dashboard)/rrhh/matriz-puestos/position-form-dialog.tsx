@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
 import { ReportsToPicker } from './reports-to-picker';
-import { areasForDivision, inList, levelOptionLabel, requiredErrors, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
+import { FIELD_GUIDES, areasForDivision, inList, levelOptionLabel, requiredErrors, type GuidedFieldKey, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -15,13 +15,25 @@ export async function readError(res: Response, fallback: string): Promise<string
   return Array.isArray(body.message) ? body.message.join(' ') : body.message;
 }
 
-function TextField({ id, label, value, onChange, max, list, rows, required, error }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number; required?: boolean; error?: string | undefined }) {
+function TextField({ id, label, value, onChange, max, list, rows, required, error, guide, autoGrow }: { id: string; label: string; value: string; onChange: (v: string) => void; max: number; list?: string; rows?: number; required?: boolean; error?: string | undefined; guide?: GuidedFieldKey; autoGrow?: boolean }) {
   const cls = `${INPUT}${error ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`;
+  const ref = useRef<HTMLTextAreaElement>(null);
+  // Los campos largos crecen al escribir (y se pueden redimensionar): sin barra de desplazamiento interna innecesaria.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!autoGrow || !el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [value, autoGrow]);
+  const g = guide ? FIELD_GUIDES[guide] : null;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className={LABEL}>{label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</label>
+      <label htmlFor={id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className={LABEL}>{label}{required && <span className="ml-0.5 text-red-600" aria-hidden="true">*</span>}</span>
+        {g && <span className="text-xs font-normal normal-case tracking-normal text-slate-400">· {g.guide}</span>}
+      </label>
       {rows ? (
-        <textarea id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
+        <textarea ref={ref} id={id} rows={rows} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} placeholder={g?.placeholder} aria-required={required} aria-invalid={Boolean(error)} className={`${cls} ${autoGrow ? 'resize-y overflow-hidden' : 'resize-y'}`} />
       ) : (
         <input id={id} list={list} value={value} onChange={(e) => onChange(e.target.value)} maxLength={max} aria-required={required} aria-invalid={Boolean(error)} className={cls} />
       )}
@@ -265,13 +277,10 @@ export function PositionFormDialog({
               </select>
             </div>
           </div>
-          <TextField id="jp-role" label="Rol" required error={errors.roleSummary} value={roleSummary} onChange={setRoleSummary} max={10000} rows={3} />
-          <TextField id="jp-objective" label="Objetivo del Puesto" required error={errors.positionObjective} value={objective} onChange={setObjective} max={10000} rows={3} />
-          <TextField id="jp-points" label="Puntos a Validar" required error={errors.validationPoints} value={points} onChange={setPoints} max={10000} rows={3} />
+          <TextField id="jp-role" label="Rol" guide="roleSummary" required error={errors.roleSummary} value={roleSummary} onChange={setRoleSummary} max={10000} rows={2} />
+          <TextField id="jp-objective" label="Objetivo del Puesto" guide="positionObjective" required error={errors.positionObjective} value={objective} onChange={setObjective} max={10000} rows={2} />
           <div className="flex flex-col gap-1">
-            <label htmlFor="jp-desc" className={LABEL}>Descripción del Puesto<span className="ml-0.5 text-red-600" aria-hidden="true">*</span></label>
-            <textarea id="jp-desc" rows={6} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={10000} aria-required aria-invalid={Boolean(errors.description)} className={`${INPUT}${errors.description ? ' border-red-400 focus:border-red-500 focus:ring-red-500' : ''}`} />
-            {errors.description && <p className="text-xs text-red-600">{errors.description}</p>}
+            <TextField id="jp-desc" label="Descripción del Puesto" guide="description" required error={errors.description} value={description} onChange={setDescription} max={10000} rows={5} autoGrow />
             <p className="text-xs text-slate-400">Una descripción nueva o modificada queda Pendiente de Aprobación.</p>
             {approvedWarning && (
               <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -279,6 +288,7 @@ export function PositionFormDialog({
               </p>
             )}
           </div>
+          <TextField id="jp-points" label="Puntos a Validar" guide="validationPoints" required error={errors.validationPoints} value={points} onChange={setPoints} max={10000} rows={5} autoGrow />
 
           {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
 
