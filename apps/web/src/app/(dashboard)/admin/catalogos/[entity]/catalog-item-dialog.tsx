@@ -61,7 +61,7 @@ export function CatalogItemDialog({ config, item, onClose }: CatalogItemDialogPr
       const value = extra[field.key];
       if (field.type === 'checkbox') {
         payload[field.key] = Boolean(value);
-      } else if (typeof value === 'string' && value.trim()) {
+      } else if (typeof value === 'string' && (value.trim() || (isEdit && field.clearable))) {
         payload[field.key] = value.trim();
       }
     }

@@ -1040,7 +1040,8 @@ export type CatalogEntity =
   | 'holidays'
   | 'equipment_brands'
   | 'tool_categories'
-  | 'password_applications';
+  | 'password_applications'
+  | 'competencies';
 
 // Virtual entities that map to document_types filtered by applies_to
 const DOCUMENT_TYPE_FILTERS: Partial<Record<CatalogEntity, string>> = {
@@ -1122,6 +1123,11 @@ export function updateCatalogItem(
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+/** Eliminación lógica de una competencia (el DELETE genérico solo desactiva). */
+export function removeCompetency(id: string): Promise<void> {
+  return apiFetchWithRetry<void>(`/catalogs/competencies/${id}/remove`, { method: 'DELETE' });
 }
 
 export function deactivateCatalogItem(entity: CatalogEntity, id: string): Promise<void> {

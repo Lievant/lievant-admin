@@ -14,6 +14,7 @@ import {
   MapPinIcon,
   PlaneIcon,
   SitemapIcon,
+  TargetIcon,
 } from '@/components/icons';
 
 export interface CatalogFieldDef {
@@ -36,6 +37,8 @@ export interface CatalogFieldDef {
   mono?: boolean;
   placeholder?: string;
   required?: boolean;
+  /** Al editar se envía aunque quede vacío (así se puede borrar el valor). */
+  clearable?: boolean;
 }
 
 export interface CatalogConfig {
@@ -45,6 +48,8 @@ export interface CatalogConfig {
   icon: ((props: SVGProps<SVGSVGElement>) => React.ReactElement) | string;
   filter?: Record<string, string>;
   fields: CatalogFieldDef[];
+  /** Solo Competencias: importar desde Excel, eliminar (lógico) y botón Activar. */
+  competencyTools?: boolean;
 }
 
 export const CATALOG_CONFIGS: CatalogConfig[] = [
@@ -201,6 +206,14 @@ export const CATALOG_CONFIGS: CatalogConfig[] = [
     itemLabel: 'aplicación',
     icon: KeyIcon,
     fields: [{ key: 'category', label: 'Categoría', type: 'text', placeholder: 'Marketing Digital' }],
+  },
+  {
+    entity: 'competencies',
+    label: 'Competencias',
+    itemLabel: 'competencia',
+    icon: TargetIcon,
+    competencyTools: true,
+    fields: [{ key: 'description', label: 'Descripción', type: 'text', clearable: true }],
   },
 ];
 
