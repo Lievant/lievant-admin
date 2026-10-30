@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CatalogsController } from './catalogs.controller';
+import { CompetenciesController } from './competencies/competencies.controller';
+import { CompetenciesService } from './competencies/competencies.service';
+import { CatalogCompetency } from './entities/catalog-competency.entity';
 import { CatalogsService } from './catalogs.service';
 import { CatalogArea } from './entities/catalog-area.entity';
 import { CatalogBloodType } from './entities/catalog-blood-type.entity';
@@ -44,10 +47,12 @@ import { PasswordApplication } from '../passwords/entities/password-application.
       EquipmentBrand,
       CatalogToolCategory,
       PasswordApplication,
+      CatalogCompetency,
     ]),
   ],
-  controllers: [CatalogsController],
-  providers: [CatalogsService],
-  exports: [CatalogsService],
+  // CompetenciesController va PRIMERO: sus rutas catalogs/competencies/… no deben caer en catalogs/:entity/….
+  controllers: [CompetenciesController, CatalogsController],
+  providers: [CatalogsService, CompetenciesService],
+  exports: [CatalogsService, CompetenciesService],
 })
 export class CatalogsModule {}
