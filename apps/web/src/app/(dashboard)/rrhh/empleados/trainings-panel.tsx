@@ -134,9 +134,6 @@ export function TrainingsPanel(props: Source) {
                   <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TYPE_BADGE[t.developmentType])}>
                     {developmentTypeLabel(t.developmentType)}
                   </span>
-                  {t.isCompanyRecognition && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Reconocimiento de la Empresa</span>
-                  )}
                   {t.inProgress && (
                     <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">En Curso</span>
                   )}
@@ -155,6 +152,20 @@ export function TrainingsPanel(props: Source) {
                 <div>
                   <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Nivel</dt>
                   <dd className="text-navy">{levelLabel(t.level)}</dd>
+                </div>
+                <div className="col-span-2 sm:col-span-4">
+                  <dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Competencias</dt>
+                  <dd className="text-navy">
+                    {t.competencies.length === 0 ? (
+                      '—'
+                    ) : (
+                      <ul className="mt-1 flex flex-wrap gap-1.5">
+                        {t.competencies.map((c) => (
+                          <li key={c.id} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-navy">{c.name}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </dd>
                 </div>
               </dl>
 

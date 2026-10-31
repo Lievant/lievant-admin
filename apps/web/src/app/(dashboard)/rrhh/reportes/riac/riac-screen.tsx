@@ -24,7 +24,8 @@ interface RiacItem {
   startDate: string;
   endDate: string | null;
   duration: string;
-  isCompanyRecognition: boolean;
+  /** Nombres separados por coma (vacío si no tiene). */
+  competencies: string;
 }
 
 interface RiacPage {
@@ -45,10 +46,10 @@ interface Applied {
 }
 
 const PAGE_SIZE = 25;
-const TYPE_OPTIONS = [...DEVELOPMENT_TYPE_OPTIONS, { value: 'reconocimientos', label: 'Reconocimientos' }];
+const TYPE_OPTIONS = DEVELOPMENT_TYPE_OPTIONS;
 const COLUMNS = [
   'ID Empleado', 'Nombre', 'Área', 'Cargo', 'Curso / Certificado', 'Institución', 'Tipo', 'Nivel',
-  'Fecha de Inicio', 'Fecha de Fin', 'Duración', 'Reconocimiento',
+  'Fecha de Inicio', 'Fecha de Fin', 'Duración', 'Competencias',
 ];
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -263,7 +264,7 @@ export function RiacScreen() {
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDay(r.startDate)}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{r.endDate ? formatDay(r.endDate) : 'En Curso'}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{r.duration || '—'}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-slate-600">{r.isCompanyRecognition ? 'Sí' : 'No'}</td>
+                        <td className="min-w-[14rem] px-3 py-3 text-slate-600">{r.competencies || '—'}</td>
                       </tr>
                     ))}
                   </tbody>

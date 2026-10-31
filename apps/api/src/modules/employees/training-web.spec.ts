@@ -7,11 +7,14 @@ import {
   trainingQuery,
   validateTrainingForm,
   yearsOf,
+  COMPETENCY_REQUIRED,
+  MAX_COMPETENCIES,
   type TrainingFormValues,
 } from '../../../../web/src/app/(dashboard)/rrhh/empleados/training-constants';
+import { filterOptions, searchKey, selectedInOrder } from '../../../../web/src/components/ui/multi-select-utils';
 
 const ok: TrainingFormValues = {
-  name: 'Curso', institution: 'Inst', developmentType: 'tecnico', level: '',
+  name: 'Curso', institution: 'Inst', developmentType: 'tecnico', level: '', competencyIds: ['c1'],
   startDate: '2026-03-01', endDate: '', durationValue: '', durationUnit: '',
 };
 
@@ -61,5 +64,57 @@ describe('Capacitaciones (web) · validación del formulario', () => {
     expect(validateTrainingForm({ ...ok, durationValue: '0', durationUnit: 'horas' })).toMatch(/entero positivo/);
     expect(validateTrainingForm({ ...ok, durationValue: '2.5', durationUnit: 'horas' })).toMatch(/entero positivo/);
     expect(validateTrainingForm({ ...ok, durationValue: '3', durationUnit: 'meses' })).toBeNull();
+  });
+});
+
+describe('Capacitaciones (web) · competencias en el formulario', () => {
+  it('sin competencias se avisa «Selecciona al menos una competencia» y con una ya es válido', () => {
+    expect(COMPETENCY_REQUIRED).toBe('Selecciona al menos una competencia');
+    expect(validateTrainingForm({ ...ok, competencyIds: [] })).toBe(COMPETENCY_REQUIRED);
+    expect(validateTrainingForm({ ...ok, competencyIds: ['c1'] })).toBeNull();
+  });
+
+  it('el tope es de 30', () => {
+    expect(MAX_COMPETENCIES).toBe(30);
+    expect(validateTrainingForm({ ...ok, competencyIds: Array.from({ length: 30 }, (_, i) => `c${i}`) })).toBeNull();
+    expect(validateTrainingForm({ ...ok, competencyIds: Array.from({ length: 31 }, (_, i) => `c${i}`) })).toMatch(/más de 30/);
+  });
+
+  it('valida en el orden de los campos del modal: nombre, tipo, competencias y luego institución y fechas', () => {
+    expect(validateTrainingForm({ ...ok, name: '', developmentType: '', competencyIds: [] })).toMatch(/nombre/);
+    expect(validateTrainingForm({ ...ok, developmentType: '', competencyIds: [] })).toMatch(/tipo/);
+    expect(validateTrainingForm({ ...ok, competencyIds: [], institution: '' })).toBe(COMPETENCY_REQUIRED);
+  });
+});
+
+describe('Selector múltiple (web) · utilidades', () => {
+  const options = [
+    { id: 'a', label: 'Comunicación Efectiva' },
+    { id: 'b', label: 'Liderazgo' },
+    { id: 'c', label: 'Análisis de datos' },
+    { id: 'x', label: 'Vieja', inactive: true },
+  ];
+
+  it('busca sin importar mayúsculas ni acentos', () => {
+    expect(searchKey('  COMUNICACIÓN   efectiva ')).toBe('comunicacion efectiva');
+    expect(filterOptions(options, [], 'comunicacion').map((o) => o.id)).toEqual(['a']);
+    expect(filterOptions(options, [], 'ANALISIS').map((o) => o.id)).toEqual(['c']);
+  });
+
+  it('no ofrece las ya elegidas ni las inactivas, y sin texto trae todas las demás en su orden', () => {
+    expect(filterOptions(options, ['b'], '').map((o) => o.id)).toEqual(['a', 'c']);
+    expect(filterOptions(options, [], 'vieja')).toEqual([]);
+  });
+
+  it('las elegidas salen en el orden de las opciones; una que ya no está entre ellas queda al final como inactiva', () => {
+    expect(selectedInOrder(options, ['c', 'a']).map((o) => o.id)).toEqual(['a', 'c']);
+    const withUnknown = selectedInOrder(options, ['zzz', 'b']);
+    expect(withUnknown.map((o) => o.id)).toEqual(['b', 'zzz']);
+    expect(withUnknown[1]).toMatchObject({ inactive: true });
+  });
+
+  it('una inactiva ya elegida se muestra como chip (inactiva) pero no se puede volver a elegir', () => {
+    expect(selectedInOrder(options, ['x']).map((o) => [o.id, o.inactive])).toEqual([['x', true]]);
+    expect(filterOptions(options, [], '').some((o) => o.id === 'x')).toBe(false);
   });
 });
