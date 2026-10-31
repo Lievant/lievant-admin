@@ -11,16 +11,23 @@ import {
   TRAINING_NOT_FOUND,
   buildTrainingFilter,
   firstReturnedRow,
+  normalizeCompetencyIds,
   toMyTrainingView,
   toTrainingView,
   trainingPrefix,
   validateTraining,
+  type CompetencyRef,
   type DurationUnit,
   type MyTrainingView,
   type TrainingFilters,
   type TrainingRow,
   type TrainingView,
 } from './trainings.util';
+
+/** Lo mínimo de `DataSource` y de un `EntityManager` que usa el servicio (así las pruebas lo simulan sin base). */
+interface Queryable {
+  query(sql: string, params?: unknown[]): Promise<unknown>;
+}
 
 export interface TrainingActor {
   id?: string;
@@ -73,15 +80,60 @@ export class TrainingsService {
     )) as TrainingRow[];
   }
 
+  /** Competencias de varias capacitaciones en una sola consulta, por el orden del catálogo y luego por nombre. */
+  private async competenciesOf(db: Queryable, trainingIds: string[]): Promise<Map<string, CompetencyRef[]>> {
+    const out = new Map<string, CompetencyRef[]>();
+    if (trainingIds.length === 0) return out;
+    const rows = (await db.query(
+      `SELECT tc.training_id, c.id, c.name
+       FROM employees.training_competencies tc
+       JOIN catalogs.competencies c ON c.id = tc.competency_id
+       WHERE tc.training_id = ANY($1::uuid[])
+       ORDER BY c.sort_order ASC, c.name ASC`,
+      [trainingIds],
+    )) as { training_id: string; id: string; name: string }[];
+    for (const r of rows) {
+      const list = out.get(r.training_id) ?? [];
+      list.push({ id: r.id, name: r.name });
+      out.set(r.training_id, list);
+    }
+    return out;
+  }
+
+  /**
+   * Cada competencia debe existir, no estar eliminada y estar activa AL ASIGNARLA. Una que ya estaba ligada y luego
+   * se desactivó (`keep`) se puede conservar al editar, pero no se puede elegir de nuevo en otra capacitación.
+   */
+  private async assertAssignable(db: Queryable, ids: string[], keep: Set<string> = new Set()): Promise<void> {
+    const rows = (await db.query(
+      `SELECT id, name, is_active, (deleted_at IS NOT NULL) AS is_deleted
+       FROM catalogs.competencies WHERE id = ANY($1::uuid[])`,
+      [ids],
+    )) as { id: string; name: string; is_active: boolean; is_deleted: boolean }[];
+    const byId = new Map(rows.map((r) => [r.id.toLowerCase(), r]));
+    for (const id of ids) {
+      const c = byId.get(id);
+      if (!c) throw new BadRequestException('Una de las competencias elegidas no existe');
+      if (c.is_deleted) throw new BadRequestException(`La competencia «${c.name}» fue eliminada y no se puede asignar`);
+      if (!c.is_active && !keep.has(id)) {
+        throw new BadRequestException(`La competencia «${c.name}» está inactiva y no se puede asignar`);
+      }
+    }
+  }
+
   /** Vista de RRHH. */
   async list(employeeId: string, filters: TrainingFilters): Promise<TrainingView[]> {
     await this.assertEmployee(employeeId);
-    return (await this.listRows(employeeId, filters)).map(toTrainingView);
+    const rows = await this.listRows(employeeId, filters);
+    const comps = await this.competenciesOf(this.dataSource, rows.map((r) => r.id));
+    return rows.map((r) => toTrainingView(r, comps.get(r.id) ?? []));
   }
 
   /** Vista del colaborador sobre SU expediente (el id ya viene resuelto desde la sesión). */
   async listMine(employeeId: string, filters: TrainingFilters): Promise<MyTrainingView[]> {
-    return (await this.listRows(employeeId, filters)).map(toMyTrainingView);
+    const rows = await this.listRows(employeeId, filters);
+    const comps = await this.competenciesOf(this.dataSource, rows.map((r) => r.id));
+    return rows.map((r) => toMyTrainingView(r, comps.get(r.id) ?? []));
   }
 
   /** Paso 1 del certificado: valida tipo y tamaño declarados y firma la URL de subida. */
@@ -119,35 +171,48 @@ export class TrainingsService {
       durationUnit: (dto.durationUnit ?? null) as DurationUnit | null,
     };
     validateTraining(state);
+    const competencyIds = normalizeCompetencyIds(dto.competencyIds);
     if (dto.certificate) await this.verifyCertificate(employeeId, dto.certificate);
 
-    const rows = (await this.dataSource.query(
-      `INSERT INTO employees.employee_trainings
-         (employee_id, name, institution, development_type, level, start_date, end_date,
-          duration_value, duration_unit, is_company_recognition,
-          certificate_s3_key, certificate_original_name, notes, created_by, updated_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14)
-       RETURNING ${TRAINING_COLUMNS}`,
-      [
-        employeeId,
-        dto.name.trim(),
-        dto.institution.trim(),
-        state.developmentType,
-        state.level,
-        state.startDate,
-        state.endDate,
-        state.durationValue,
-        state.durationUnit,
-        dto.isCompanyRecognition ?? false,
-        dto.certificate?.s3Key ?? null,
-        dto.certificate?.fileName ?? null,
-        dto.notes ?? null,
-        actor.id ?? null,
-      ],
-    )) as TrainingRow[];
-    const row = rows[0]!;
-    await this.logAudit('create', actor, row, employee.full_name, { name: { from: null, to: row.name } });
-    return toTrainingView(row);
+    // La capacitación y sus competencias se guardan juntas: si una competencia no sirve, no queda nada a medias.
+    const { row, competencies } = await this.dataSource.transaction(async (m) => {
+      await this.assertAssignable(m, competencyIds);
+      const rows = (await m.query(
+        `INSERT INTO employees.employee_trainings
+           (employee_id, name, institution, development_type, level, start_date, end_date,
+            duration_value, duration_unit,
+            certificate_s3_key, certificate_original_name, notes, created_by, updated_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13)
+         RETURNING ${TRAINING_COLUMNS}`,
+        [
+          employeeId,
+          dto.name.trim(),
+          dto.institution.trim(),
+          state.developmentType,
+          state.level,
+          state.startDate,
+          state.endDate,
+          state.durationValue,
+          state.durationUnit,
+          dto.certificate?.s3Key ?? null,
+          dto.certificate?.fileName ?? null,
+          dto.notes ?? null,
+          actor.id ?? null,
+        ],
+      )) as TrainingRow[];
+      const created = rows[0]!;
+      await m.query(
+        `INSERT INTO employees.training_competencies (training_id, competency_id)
+         SELECT $1, unnest($2::uuid[])`,
+        [created.id, competencyIds],
+      );
+      return { row: created, competencies: (await this.competenciesOf(m, [created.id])).get(created.id) ?? [] };
+    });
+    await this.logAudit('create', actor, row, employee.full_name, {
+      name: { from: null, to: row.name },
+      competencies: { from: null, to: competencies.map((c) => c.name) },
+    });
+    return toTrainingView(row, competencies);
   }
 
   async update(
@@ -168,10 +233,11 @@ export class TrainingsService {
       endDate: dto.endDate !== undefined ? dto.endDate : current.end_date,
       durationValue: dto.durationValue !== undefined ? dto.durationValue : current.duration_value,
       durationUnit: (dto.durationUnit !== undefined ? dto.durationUnit : current.duration_unit) as DurationUnit | null,
-      isCompanyRecognition: dto.isCompanyRecognition ?? current.is_company_recognition,
       notes: dto.notes !== undefined ? dto.notes : current.notes,
     };
     validateTraining(merged);
+    // Si se envían, reemplazan el conjunto completo (mínimo 1); si no, se conservan las actuales.
+    const newCompetencyIds = dto.competencyIds !== undefined ? normalizeCompetencyIds(dto.competencyIds) : null;
 
     let certKey = current.certificate_s3_key;
     let certName = current.certificate_original_name;
@@ -189,39 +255,62 @@ export class TrainingsService {
       }
     }
 
-    const rows: unknown = await this.dataSource.query(
-      `UPDATE employees.employee_trainings SET
-         name = $3, institution = $4, development_type = $5, level = $6, start_date = $7, end_date = $8,
-         duration_value = $9, duration_unit = $10, is_company_recognition = $11, notes = $12,
-         certificate_s3_key = $13, certificate_original_name = $14, updated_by = $15, updated_at = NOW()
-       WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL
-       RETURNING ${TRAINING_COLUMNS}`,
-      [
-        trainingId,
-        employeeId,
-        merged.name,
-        merged.institution,
-        merged.developmentType,
-        merged.level,
-        merged.startDate,
-        merged.endDate,
-        merged.durationValue,
-        merged.durationUnit,
-        merged.isCompanyRecognition,
-        merged.notes,
-        certKey,
-        certName,
-        actor.id ?? null,
-      ],
-    );
-    const row = firstReturnedRow<TrainingRow>(rows);
-    if (!row) throw new NotFoundException(TRAINING_NOT_FOUND);
+    const { row, before, after } = await this.dataSource.transaction(async (m) => {
+      const previous = (await this.competenciesOf(m, [trainingId])).get(trainingId) ?? [];
+      if (newCompetencyIds) {
+        // Una competencia ya ligada que se desactivó después se puede conservar; no se puede elegir de nuevo en otra.
+        await this.assertAssignable(m, newCompetencyIds, new Set(previous.map((c) => c.id.toLowerCase())));
+      }
+      const rows: unknown = await m.query(
+        `UPDATE employees.employee_trainings SET
+           name = $3, institution = $4, development_type = $5, level = $6, start_date = $7, end_date = $8,
+           duration_value = $9, duration_unit = $10, notes = $11,
+           certificate_s3_key = $12, certificate_original_name = $13, updated_by = $14, updated_at = NOW()
+         WHERE id = $1 AND employee_id = $2 AND deleted_at IS NULL
+         RETURNING ${TRAINING_COLUMNS}`,
+        [
+          trainingId,
+          employeeId,
+          merged.name,
+          merged.institution,
+          merged.developmentType,
+          merged.level,
+          merged.startDate,
+          merged.endDate,
+          merged.durationValue,
+          merged.durationUnit,
+          merged.notes,
+          certKey,
+          certName,
+          actor.id ?? null,
+        ],
+      );
+      const updated = firstReturnedRow<TrainingRow>(rows);
+      if (!updated) throw new NotFoundException(TRAINING_NOT_FOUND);
+      if (newCompetencyIds) {
+        await m.query(
+          `DELETE FROM employees.training_competencies WHERE training_id = $1 AND NOT (competency_id = ANY($2::uuid[]))`,
+          [trainingId, newCompetencyIds],
+        );
+        await m.query(
+          `INSERT INTO employees.training_competencies (training_id, competency_id)
+           SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`,
+          [trainingId, newCompetencyIds],
+        );
+      }
+      const now = (await this.competenciesOf(m, [trainingId])).get(trainingId) ?? [];
+      return { row: updated, before: previous, after: now };
+    });
 
     // El archivo reemplazado o retirado ya no lo referencia ninguna fila viva.
     if (oldKeyToDelete) await this.storage.deleteDocument(oldKeyToDelete);
 
-    await this.logAudit('update', actor, row, employee.full_name, this.diff(current, row));
-    return toTrainingView(row);
+    const changes = this.diff(current, row);
+    if (before.map((c) => c.id).join() !== after.map((c) => c.id).join()) {
+      changes.competencies = { from: before.map((c) => c.name), to: after.map((c) => c.name) };
+    }
+    await this.logAudit('update', actor, row, employee.full_name, changes);
+    return toTrainingView(row, after);
   }
 
   /** Baja lógica: la fila y su certificado quedan, pero ya no se listan ni se descargan. */
@@ -252,7 +341,7 @@ export class TrainingsService {
   private diff(before: TrainingRow, after: TrainingRow): Record<string, { from: unknown; to: unknown }> {
     const fields: (keyof TrainingRow)[] = [
       'name', 'institution', 'development_type', 'level', 'start_date', 'end_date', 'duration_value',
-      'duration_unit', 'is_company_recognition', 'notes', 'certificate_original_name',
+      'duration_unit', 'notes', 'certificate_original_name',
     ];
     const out: Record<string, { from: unknown; to: unknown }> = {};
     for (const f of fields) {

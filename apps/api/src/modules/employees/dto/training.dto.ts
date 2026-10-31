@@ -1,6 +1,9 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean,
+  ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
+  IsArray,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -9,10 +12,12 @@ import {
   Matches,
   Max,
   MaxLength,
+  IsUUID,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { DEVELOPMENT_TYPES, DURATION_UNITS, TRAINING_LEVELS } from '../trainings.util';
+import { DEVELOPMENT_TYPES, DURATION_UNITS, MAX_COMPETENCIES, TRAINING_LEVELS } from '../trainings.util';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -76,9 +81,13 @@ export class CreateTrainingDto {
   @IsIn(DURATION_UNITS)
   durationUnit?: string | null;
 
-  @IsOptional()
-  @IsBoolean()
-  isCompanyRecognition?: boolean;
+  /** Competencias del catálogo: al menos 1, hasta 30 y sin repetidas. */
+  @IsArray({ message: 'Selecciona al menos una competencia' })
+  @ArrayMinSize(1, { message: 'Selecciona al menos una competencia' })
+  @ArrayMaxSize(MAX_COMPETENCIES, { message: `Una capacitación no puede tener más de ${MAX_COMPETENCIES} competencias` })
+  @ArrayUnique({ message: 'Hay competencias repetidas' })
+  @IsUUID('all', { each: true, message: 'Alguna competencia elegida no es válida' })
+  competencyIds!: string[];
 
   @IsOptional()
   @IsString()
@@ -133,9 +142,14 @@ export class UpdateTrainingDto {
   @IsIn(DURATION_UNITS)
   durationUnit?: string | null;
 
-  @IsOptional()
-  @IsBoolean()
-  isCompanyRecognition?: boolean;
+  /** Si se envía reemplaza el conjunto completo (mínimo 1); si no se envía se conservan las actuales. */
+  @ValidateIf((o: UpdateTrainingDto) => o.competencyIds !== undefined)
+  @IsArray({ message: 'Selecciona al menos una competencia' })
+  @ArrayMinSize(1, { message: 'Selecciona al menos una competencia' })
+  @ArrayMaxSize(MAX_COMPETENCIES, { message: `Una capacitación no puede tener más de ${MAX_COMPETENCIES} competencias` })
+  @ArrayUnique({ message: 'Hay competencias repetidas' })
+  @IsUUID('all', { each: true, message: 'Alguna competencia elegida no es válida' })
+  competencyIds?: string[];
 
   @IsOptional()
   @IsString()

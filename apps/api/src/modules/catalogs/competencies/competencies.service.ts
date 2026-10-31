@@ -80,10 +80,28 @@ export class CompetenciesService {
   /** Eliminación lógica. Deja de salir en la lista y en `/active`; su nombre queda libre. */
   async remove(id: string): Promise<void> {
     const record = await this.getOrFail(id);
-    // PUNTO DE EXTENSIÓN: cuando otros módulos liguen competencias por id (puestos, OKRs, capacitaciones…), aquí se
-    // debe bloquear la eliminación si la competencia está en uso (409 con el módulo que la usa). Hoy nada la usa.
+    // Una competencia ligada a capacitaciones vivas no se puede eliminar (desactivarla sí). Las capacitaciones
+    // eliminadas lógicamente no cuentan.
+    const inUse = await this.countTrainingsUsing(id);
+    if (inUse > 0) {
+      throw new ConflictException(
+        `No se puede eliminar la competencia «${record.name}»: la usa${inUse === 1 ? '' : 'n'} ${inUse} ${inUse === 1 ? 'capacitación' : 'capacitaciones'}. Puedes desactivarla para que ya no se elija.`,
+      );
+    }
     record.deletedAt = new Date();
     await this.repo.save(record);
+  }
+
+  /** Capacitaciones NO eliminadas que tienen ligada la competencia. */
+  async countTrainingsUsing(competencyId: string): Promise<number> {
+    const rows = (await this.repo.query(
+      `SELECT COUNT(*)::int AS n
+       FROM employees.training_competencies tc
+       JOIN employees.employee_trainings t ON t.id = tc.training_id AND t.deleted_at IS NULL
+       WHERE tc.competency_id = $1`,
+      [competencyId],
+    )) as { n: number }[];
+    return Number(rows[0]?.n ?? 0);
   }
 
   private async getOrFail(id: string): Promise<CatalogCompetency> {

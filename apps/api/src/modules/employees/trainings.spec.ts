@@ -35,7 +35,6 @@ function row(over: Partial<TrainingRow> = {}): TrainingRow {
     end_date: null,
     duration_value: 20,
     duration_unit: 'horas',
-    is_company_recognition: false,
     certificate_s3_key: `employees/${EMP_A}/trainings/abc/1-cert.pdf`,
     certificate_original_name: 'cert.pdf',
     notes: 'nota interna de RRHH',
@@ -80,7 +79,7 @@ describe('Capacitaciones · validaciones de negocio', () => {
 });
 
 describe('Capacitaciones · DTO', () => {
-  const ok = { name: 'Curso', institution: 'Inst', developmentType: 'academico', startDate: '2026-01-10' };
+  const ok = { name: 'Curso', institution: 'Inst', developmentType: 'academico', startDate: '2026-01-10', competencyIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1'] };
   const errorsOf = async (cls: new () => object, plain: object) =>
     (await validate(plainToInstance(cls, plain) as object)).map((e) => e.property);
 
@@ -145,7 +144,7 @@ describe('Capacitaciones · vistas (lista blanca)', () => {
   it('el colaborador no recibe notas, llave de S3 ni campos de auditoría; las llaves son exactas', () => {
     const v = toMyTrainingView(row());
     expect(Object.keys(v).sort()).toEqual(
-      ['durationUnit', 'durationValue', 'endDate', 'hasCertificate', 'id', 'inProgress', 'institution', 'isCompanyRecognition', 'level', 'name', 'startDate', 'developmentType'].sort(),
+      ['competencies', 'durationUnit', 'durationValue', 'endDate', 'hasCertificate', 'id', 'inProgress', 'institution', 'level', 'name', 'startDate', 'developmentType'].sort(),
     );
     expect(JSON.stringify(v)).not.toMatch(/nota interna|s3|employees\//i);
   });
@@ -159,12 +158,48 @@ describe('Capacitaciones · vistas (lista blanca)', () => {
 
 interface Q { sql: string; params: unknown[] }
 
-function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; objectSize?: number | null } = {}) {
+interface CompRow { id: string; name: string; is_active: boolean; is_deleted: boolean; sort_order: number }
+interface Link { training_id: string; competency_id: string }
+
+const C1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+const C2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+const C3 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
+const C_OFF = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4';
+const C_DEL = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa5';
+const C_NONE = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6';
+const CATALOG: CompRow[] = [
+  { id: C1, name: 'TEST-Liderazgo', is_active: true, is_deleted: false, sort_order: 2 },
+  { id: C2, name: 'TEST-Comunicación', is_active: true, is_deleted: false, sort_order: 1 },
+  { id: C3, name: 'TEST-Análisis', is_active: true, is_deleted: false, sort_order: 1 },
+  { id: C_OFF, name: 'TEST-Inactiva', is_active: false, is_deleted: false, sort_order: 9 },
+  { id: C_DEL, name: 'TEST-Eliminada', is_active: false, is_deleted: true, sort_order: 9 },
+];
+
+function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; objectSize?: number | null; links?: Link[] } = {}) {
   const queries: Q[] = [];
   const store = opts.trainings ?? [row()];
+  const links: Link[] = [...(opts.links ?? [])];
   const dataSource = {
     query: jest.fn(async (sql: string, params: unknown[] = []) => {
       queries.push({ sql, params });
+      // Competencias: lectura de las ligadas, validación contra el catálogo y escritura de las ligas.
+      if (/FROM employees\.training_competencies tc/.test(sql)) {
+        const ids = params[0] as string[];
+        return links
+          .filter((l) => ids.includes(l.training_id))
+          .map((l) => ({ training_id: l.training_id, ...CATALOG.find((c) => c.id === l.competency_id)! }))
+          .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name))
+          .map((c) => ({ training_id: c.training_id, id: c.id, name: c.name }));
+      }
+      if (/FROM catalogs\.competencies WHERE id = ANY/.test(sql)) return CATALOG.filter((c) => (params[0] as string[]).includes(c.id));
+      if (/^\s*INSERT INTO employees\.training_competencies/.test(sql)) {
+        for (const id of params[1] as string[]) if (!links.some((l) => l.training_id === params[0] && l.competency_id === id)) links.push({ training_id: params[0] as string, competency_id: id });
+        return [];
+      }
+      if (/^\s*DELETE FROM employees\.training_competencies/.test(sql)) {
+        for (let i = links.length - 1; i >= 0; i--) if (links[i]!.training_id === params[0] && !(params[1] as string[]).includes(links[i]!.competency_id)) links.splice(i, 1);
+        return [];
+      }
       if (/FROM employees\.employee_records/.test(sql)) {
         return opts.employeeExists === false ? [] : [{ id: params[0], full_name: 'Ana Pérez' }];
       }
@@ -175,7 +210,7 @@ function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; obje
         }
         return store.filter((t) => t.employee_id === params[0]);
       }
-      if (/^\s*INSERT/.test(sql)) return [row({ id: 'new', name: params[1] as string, certificate_s3_key: (params[10] as string) ?? null })];
+      if (/^\s*INSERT/.test(sql)) return [row({ id: 'new', name: params[1] as string, certificate_s3_key: (params[9] as string) ?? null })];
       // Con el driver de Postgres, TypeORM devuelve [filas, afectadas] en UPDATE ... RETURNING.
       if (/^\s*UPDATE/.test(sql) && /deleted_at = NOW/.test(sql)) {
         const hit = store.filter((t) => t.id === params[0] && t.employee_id === params[1]);
@@ -188,6 +223,15 @@ function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; obje
       return [];
     }),
   };
+  (dataSource as unknown as { transaction: unknown }).transaction = async (cb: (m: unknown) => Promise<unknown>) => {
+    const snapshot = [...links];
+    try {
+      return await cb(dataSource);
+    } catch (e) {
+      links.splice(0, links.length, ...snapshot);
+      throw e;
+    }
+  };
   const storage = {
     getPresignedUploadUrlForPrefix: jest.fn(async (_n: string, _t: string, prefix: string) => ({ uploadUrl: 'https://s3/put', s3Key: `${prefix}/x/1-f.pdf` })),
     getObjectSize: jest.fn(async () => (opts.objectSize === undefined ? 1000 : opts.objectSize)),
@@ -196,11 +240,11 @@ function setup(opts: { trainings?: TrainingRow[]; employeeExists?: boolean; obje
   };
   const audit = { logActivity: jest.fn(async () => undefined) };
   const service = new TrainingsService(dataSource as any, storage as any, audit as any);
-  return { service, queries, storage, audit, dataSource };
+  return { service, queries, storage, audit, dataSource, links };
 }
 
 const createDto = (over: object = {}) =>
-  plainToInstance(CreateTrainingDto, { name: ' Curso nuevo ', institution: 'Inst', developmentType: 'tecnico', startDate: '2026-05-01', ...over });
+  plainToInstance(CreateTrainingDto, { name: ' Curso nuevo ', institution: 'Inst', developmentType: 'tecnico', startDate: '2026-05-01', competencyIds: [C1], ...over });
 
 describe('Capacitaciones · servicio', () => {
   it('crea con datos válidos, recorta el nombre y deja auditoría sin llaves de S3', async () => {
@@ -363,5 +407,176 @@ describe('Capacitaciones · permisos y rutas', () => {
     const order = Object.getOwnPropertyNames(proto);
     expect(order.indexOf('getMyTrainings')).toBeLessThan(order.indexOf('listTrainings'));
     expect(order.indexOf('getMyTrainingCertificateUrl')).toBeLessThan(order.indexOf('getTrainingCertificateUrl'));
+  });
+});
+
+// ── Competencias de la capacitación ──────────────────────────────────────────
+
+describe('Capacitaciones · competencias (DTO)', () => {
+  const ok = { name: 'Curso', institution: 'Inst', developmentType: 'academico', startDate: '2026-01-10' };
+  const errorsOf = async (cls: new () => object, plain: object) =>
+    (await validate(plainToInstance(cls, plain) as object)).map((e) => e.property);
+  const many = (n: number) => Array.from({ length: n }, (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, '0')}`);
+
+  it('el alta exige competencyIds con al menos 1', async () => {
+    expect(await errorsOf(CreateTrainingDto, ok)).toContain('competencyIds');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: [] })).toContain('competencyIds');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: [C1] })).toEqual([]);
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: [C1, C2, C3] })).toEqual([]);
+  });
+
+  it('rechaza repetidas, ids que no son UUID y más de 30 (30 sí)', async () => {
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: [C1, C1] })).toContain('competencyIds');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: ['no-uuid'] })).toContain('competencyIds');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: many(30) })).toEqual([]);
+    expect(await errorsOf(CreateTrainingDto, { ...ok, competencyIds: many(31) })).toContain('competencyIds');
+  });
+
+  it('en la edición es opcional, pero si se envía debe traer al menos 1 (vacío y null se rechazan)', async () => {
+    expect(await errorsOf(UpdateTrainingDto, {})).toEqual([]);
+    expect(await errorsOf(UpdateTrainingDto, { competencyIds: [C2] })).toEqual([]);
+    expect(await errorsOf(UpdateTrainingDto, { competencyIds: [] })).toContain('competencyIds');
+    expect(await errorsOf(UpdateTrainingDto, { competencyIds: null })).toContain('competencyIds');
+    expect(await errorsOf(UpdateTrainingDto, { competencyIds: [C1, C1] })).toContain('competencyIds');
+  });
+
+  it('el mensaje de error está en español', async () => {
+    const e = await validate(plainToInstance(CreateTrainingDto, { ...ok, competencyIds: [] }) as object);
+    expect(JSON.stringify(e)).toContain('Selecciona al menos una competencia');
+  });
+
+  it('el DTO ya no conoce isCompanyRecognition', async () => {
+    const strict = { whitelist: true, forbidNonWhitelisted: true };
+    const e = await validate(plainToInstance(CreateTrainingDto, { ...ok, competencyIds: [C1], isCompanyRecognition: true }) as object, strict);
+    expect(e.map((x) => x.property)).toEqual(['isCompanyRecognition']);
+  });
+});
+
+describe('Capacitaciones · competencias (alta)', () => {
+  it('sin competencias se rechaza y no se escribe nada', async () => {
+    const { service, queries } = setup();
+    await expect(service.create(EMP_A, createDto({ competencyIds: undefined }), ACTOR)).rejects.toThrow(/al menos una competencia/);
+    await expect(service.create(EMP_A, createDto({ competencyIds: [] }), ACTOR)).rejects.toThrow(/al menos una competencia/);
+    expect(queries.some((q) => /INSERT/.test(q.sql))).toBe(false);
+  });
+
+  it('con repetidas, con más de 30 o con ids inválidos se rechaza', async () => {
+    const { service, queries } = setup();
+    await expect(service.create(EMP_A, createDto({ competencyIds: [C1, C1] }), ACTOR)).rejects.toThrow(/repetidas/);
+    const many = Array.from({ length: 31 }, (_, i) => `aaaaaaaa-aaaa-4aaa-8aaa-${String(i).padStart(12, '0')}`);
+    await expect(service.create(EMP_A, createDto({ competencyIds: many }), ACTOR)).rejects.toThrow(/más de 30/);
+    await expect(service.create(EMP_A, createDto({ competencyIds: ['xx'] }), ACTOR)).rejects.toThrow(/no es válida/);
+    expect(queries.some((q) => /INSERT/.test(q.sql))).toBe(false);
+  });
+
+  it('una competencia inexistente, eliminada o inactiva se rechaza y no queda la capacitación a medias', async () => {
+    const { service, links } = setup();
+    await expect(service.create(EMP_A, createDto({ competencyIds: [C1, C_NONE] }), ACTOR)).rejects.toThrow(/no existe/);
+    await expect(service.create(EMP_A, createDto({ competencyIds: [C_DEL] }), ACTOR)).rejects.toThrow(/TEST-Eliminada.*eliminada/);
+    await expect(service.create(EMP_A, createDto({ competencyIds: [C1, C_OFF] }), ACTOR)).rejects.toThrow(/TEST-Inactiva.*inactiva/);
+    expect(links).toHaveLength(0);
+  });
+
+  it('con una válida y con varias: guarda las ligas y responde ordenadas por el orden del catálogo y luego por nombre', async () => {
+    const one = setup();
+    const a = await one.service.create(EMP_A, createDto({ competencyIds: [C1] }), ACTOR);
+    expect(a.competencies).toEqual([{ id: C1, name: 'TEST-Liderazgo' }]);
+
+    const many = setup();
+    const b = await many.service.create(EMP_A, createDto({ competencyIds: [C1, C2, C3] }), ACTOR);
+    // C2 y C3 comparten orden 1 (por nombre: Análisis antes que Comunicación); C1 tiene orden 2
+    expect(b.competencies.map((c) => c.name)).toEqual(['TEST-Análisis', 'TEST-Comunicación', 'TEST-Liderazgo']);
+    expect(many.links).toHaveLength(3);
+    expect(b).not.toHaveProperty('isCompanyRecognition');
+  });
+
+  it('la capacitación y sus ligas van en una transacción y la auditoría anota los nombres de las competencias', async () => {
+    const { service, audit, queries } = setup();
+    await service.create(EMP_A, createDto({ competencyIds: [C1, C2] }), ACTOR);
+    expect(queries.some((q) => /INSERT INTO employees\.training_competencies/.test(q.sql))).toBe(true);
+    expect(queries.some((q) => /is_company_recognition/.test(q.sql))).toBe(false);
+    const call = (audit.logActivity.mock.calls[0] as unknown[])[0] as { changes: { competencies: { to: string[] } } };
+    expect(call.changes.competencies.to).toEqual(['TEST-Comunicación', 'TEST-Liderazgo']);
+  });
+});
+
+describe('Capacitaciones · competencias (edición)', () => {
+  const linked = (...ids: string[]): Link[] => ids.map((competency_id) => ({ training_id: T1, competency_id }));
+
+  it('enviar competencyIds reemplaza el conjunto completo', async () => {
+    const { service, links } = setup({ links: linked(C1, C2) });
+    const res = await service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C2, C3] }), ACTOR);
+    expect(res.competencies.map((c) => c.id).sort()).toEqual([C2, C3].sort());
+    expect(links.map((l) => l.competency_id).sort()).toEqual([C2, C3].sort());
+  });
+
+  it('no enviar competencyIds conserva las actuales (y no toca las ligas)', async () => {
+    const { service, links, queries } = setup({ links: linked(C1, C2) });
+    const res = await service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { name: 'Otro nombre' }), ACTOR);
+    expect(res.competencies.map((c) => c.id).sort()).toEqual([C1, C2].sort());
+    expect(links).toHaveLength(2);
+    expect(queries.some((q) => /training_competencies/.test(q.sql) && /^\s*(INSERT|DELETE)/.test(q.sql))).toBe(false);
+  });
+
+  it('una capacitación vieja sin competencias se puede editar sin enviarlas', async () => {
+    const { service } = setup();
+    const res = await service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { institution: 'Nueva' }), ACTOR);
+    expect(res.competencies).toEqual([]);
+  });
+
+  it('enviarlo vacío se rechaza y no cambia nada', async () => {
+    const { service, links, audit } = setup({ links: linked(C1) });
+    await expect(service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [] }), ACTOR)).rejects.toThrow(/al menos una competencia/);
+    expect(links).toHaveLength(1);
+    expect(audit.logActivity).not.toHaveBeenCalled();
+  });
+
+  it('conserva una competencia inactiva que ya estaba ligada, pero no deja elegirla en otra capacitación', async () => {
+    const kept = setup({ links: linked(C_OFF) });
+    const ok = await kept.service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C_OFF, C1] }), ACTOR);
+    expect(ok.competencies.map((c) => c.id).sort()).toEqual([C1, C_OFF].sort());
+
+    const other = setup(); // la capacitación no la tenía ligada
+    await expect(other.service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C_OFF] }), ACTOR)).rejects.toThrow(/TEST-Inactiva.*inactiva/);
+  });
+
+  it('rechaza inexistentes y eliminadas al editar, y deshace todo si falla (las ligas quedan como estaban)', async () => {
+    const { service, links } = setup({ links: linked(C1) });
+    await expect(service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C_NONE] }), ACTOR)).rejects.toThrow(/no existe/);
+    await expect(service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C_DEL] }), ACTOR)).rejects.toThrow(/eliminada/);
+    expect(links.map((l) => l.competency_id)).toEqual([C1]);
+  });
+
+  it('la auditoría registra el cambio de competencias por nombre', async () => {
+    const { service, audit } = setup({ links: linked(C1) });
+    await service.update(EMP_A, T1, plainToInstance(UpdateTrainingDto, { competencyIds: [C2] }), ACTOR);
+    const call = (audit.logActivity.mock.calls[0] as unknown[])[0] as { changes: { competencies: { from: string[]; to: string[] } } };
+    expect(call.changes.competencies).toEqual({ from: ['TEST-Liderazgo'], to: ['TEST-Comunicación'] });
+  });
+});
+
+describe('Capacitaciones · competencias en las listas', () => {
+  const linked = (...ids: string[]): Link[] => ids.map((competency_id) => ({ training_id: T1, competency_id }));
+
+  it('RRHH ve las competencias de cada capacitación en una sola consulta, en orden de catálogo y nombre', async () => {
+    const { service, queries } = setup({ links: linked(C1, C2, C3), trainings: [row(), row({ id: 'otra', name: 'Sin competencias' })] });
+    const res = await service.list(EMP_A, {});
+    expect(res.find((t) => t.id === T1)!.competencies.map((c) => c.name)).toEqual(['TEST-Análisis', 'TEST-Comunicación', 'TEST-Liderazgo']);
+    expect(res.find((t) => t.id === 'otra')!.competencies).toEqual([]);
+    expect(queries.filter((q) => /FROM employees\.training_competencies/.test(q.sql))).toHaveLength(1);
+  });
+
+  it('el colaborador ve las competencias de SUS capacitaciones, solo con id y nombre', async () => {
+    const { service } = setup({ links: linked(C2) });
+    const res = await service.listMine(EMP_A, {});
+    expect(res[0]!.competencies).toEqual([{ id: C2, name: 'TEST-Comunicación' }]);
+    expect(Object.keys(res[0]!.competencies[0]!).sort()).toEqual(['id', 'name']);
+    expect(res[0]).not.toHaveProperty('isCompanyRecognition');
+  });
+
+  it('las vistas ya no traen isCompanyRecognition', () => {
+    expect(toTrainingView(row())).not.toHaveProperty('isCompanyRecognition');
+    expect(toTrainingView(row()).competencies).toEqual([]);
+    expect(toMyTrainingView(row(), [{ id: C1, name: 'x' }]).competencies).toEqual([{ id: C1, name: 'x' }]);
   });
 });

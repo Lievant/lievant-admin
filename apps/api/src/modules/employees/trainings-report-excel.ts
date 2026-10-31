@@ -15,7 +15,7 @@ export const RIAC_COLUMNS = [
   'Fecha de Inicio',
   'Fecha de Fin',
   'Duración',
-  'Reconocimiento',
+  'Competencias',
 ] as const;
 
 const HEADER_ROW = 7;
@@ -59,7 +59,7 @@ export function riacExcelRow(i: RiacItem): (string | Date)[] {
     day(i.startDate),
     i.endDate ? day(i.endDate) : 'En Curso',
     i.duration,
-    i.isCompanyRecognition ? 'Sí' : 'No',
+    i.competencies,
   ];
 }
 
@@ -138,7 +138,7 @@ export function buildRiacWorkbook(input: RiacWorkbookInput): ExcelJS.Workbook {
       const cell = row.getCell(ci + 1);
       cell.value = v;
       cell.font = { name: 'Calibri', size: 10 };
-      cell.alignment = { vertical: 'top', horizontal: v instanceof Date || ci === 11 ? 'center' : 'left' };
+      cell.alignment = { vertical: 'top', horizontal: v instanceof Date ? 'center' : 'left', wrapText: ci === 11 };
       if (v instanceof Date) cell.numFmt = 'dd/mm/yyyy';
     });
   });

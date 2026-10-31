@@ -5,6 +5,8 @@ let seq = 0;
 
 export class FakeCompetencyRepo {
   rows: CatalogCompetency[] = [];
+  /** Capacitaciones vivas que usan cada competencia (id → cuántas); alimenta `query` del conteo de uso. */
+  trainingUse: Record<string, number> = {};
   /** Hace que el siguiente save falle con este error (para probar el todo-o-nada). */
   failOnSave: ((c: CatalogCompetency) => Error | null) | null = null;
 
@@ -33,6 +35,10 @@ export class FakeCompetencyRepo {
 
   async findOne(opts: { where: { id: string } }): Promise<CatalogCompetency | null> {
     return this.rows.find((r) => r.id === opts.where.id && !r.deletedAt) ?? null;
+  }
+
+  async query(_sql: string, params: unknown[] = []): Promise<{ n: number }[]> {
+    return [{ n: this.trainingUse[params[0] as string] ?? 0 }];
   }
 
   getRepository(): FakeCompetencyRepo {
