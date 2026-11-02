@@ -1,6 +1,6 @@
-export type DevelopmentType = 'tecnico' | 'habilidades_blandas' | 'academico';
-export type TrainingLevel = 'basico' | 'intermedio' | 'avanzado' | 'especializacion';
-export type DurationUnit = 'horas' | 'meses';
+export type DevelopmentType = 'tecnico' | 'habilidades_blandas' | 'academico' | 'sgsi' | 'bienestar_psicosocial';
+export type TrainingLevel = 'basico' | 'intermedio' | 'avanzado' | 'especializacion' | 'obligatoria';
+export type DurationUnit = 'horas' | 'dias' | 'meses';
 
 /** Capacitación tal como la entrega el API (a RRHH `notes` viene; al colaborador no). */
 export interface TrainingItem {
@@ -25,6 +25,8 @@ export const DEVELOPMENT_TYPE_OPTIONS: { value: DevelopmentType; label: string }
   { value: 'tecnico', label: 'Técnico' },
   { value: 'habilidades_blandas', label: 'Habilidades Blandas' },
   { value: 'academico', label: 'Académico' },
+  { value: 'sgsi', label: 'Sistema de Gestión de Seguridad de la Información' },
+  { value: 'bienestar_psicosocial', label: 'Bienestar y Factores Psicosociales' },
 ];
 
 export const LEVEL_OPTIONS: { value: TrainingLevel; label: string }[] = [
@@ -32,10 +34,12 @@ export const LEVEL_OPTIONS: { value: TrainingLevel; label: string }[] = [
   { value: 'intermedio', label: 'Intermedio' },
   { value: 'avanzado', label: 'Avanzado' },
   { value: 'especializacion', label: 'Especialización' },
+  { value: 'obligatoria', label: 'Obligatoria' },
 ];
 
 export const DURATION_UNIT_OPTIONS: { value: DurationUnit; label: string }[] = [
   { value: 'horas', label: 'Horas' },
+  { value: 'dias', label: 'Días' },
   { value: 'meses', label: 'Meses' },
 ];
 
@@ -52,12 +56,12 @@ const labelOf = <T extends string>(options: { value: T; label: string }[], value
 export const developmentTypeLabel = (v: DevelopmentType) => labelOf(DEVELOPMENT_TYPE_OPTIONS, v);
 export const levelLabel = (v: TrainingLevel | null) => labelOf(LEVEL_OPTIONS, v);
 
-/** '20 Horas', '1 Mes'; '—' si no hay duración. */
+const DURATION_WORDS: Record<DurationUnit, [string, string]> = { horas: ['Hora', 'Horas'], dias: ['Día', 'Días'], meses: ['Mes', 'Meses'] };
+
+/** '20 Horas', '1 Día', '5 Días', '1 Mes'; '—' si no hay duración. */
 export function formatDuration(value: number | null, unit: DurationUnit | null): string {
   if (value === null || unit === null) return '—';
-  const singular = unit === 'horas' ? 'Hora' : 'Mes';
-  const plural = unit === 'horas' ? 'Horas' : 'Meses';
-  return `${value} ${value === 1 ? singular : plural}`;
+  return `${value} ${DURATION_WORDS[unit][value === 1 ? 0 : 1]}`;
 }
 
 /** 'AAAA-MM-DD' → 'DD/MM/AAAA' sin pasar por Date (evita el corrimiento de zona horaria). */

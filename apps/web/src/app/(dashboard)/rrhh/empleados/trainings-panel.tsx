@@ -20,6 +20,8 @@ const TYPE_BADGE: Record<string, string> = {
   tecnico: 'bg-blue-50 text-blue-700',
   habilidades_blandas: 'bg-violet-50 text-violet-700',
   academico: 'bg-emerald-50 text-emerald-700',
+  sgsi: 'bg-amber-50 text-amber-800',
+  bienestar_psicosocial: 'bg-rose-50 text-rose-700',
 };
 
 /**
@@ -93,7 +95,7 @@ export function TrainingsPanel(props: Source) {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <label htmlFor="tr-f-type" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Tipo de Desarrollo</label>
-          <select id="tr-f-type" value={type} onChange={(e) => setType(e.target.value)} className="rounded-md border border-slate-200 px-3 py-2 text-sm text-navy">
+          <select id="tr-f-type" value={type} onChange={(e) => setType(e.target.value)} className="w-full max-w-[18rem] rounded-md border border-slate-200 px-3 py-2 text-sm text-navy sm:w-72">
             <option value="">Todos</option>
             {DEVELOPMENT_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -131,7 +133,7 @@ export function TrainingsPanel(props: Source) {
                   <p className="text-sm text-slate-500">{t.institution}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TYPE_BADGE[t.developmentType])}>
+                  <span title={developmentTypeLabel(t.developmentType)} className={cn('max-w-full break-words rounded-2xl px-2.5 py-0.5 text-xs font-semibold', TYPE_BADGE[t.developmentType])}>
                     {developmentTypeLabel(t.developmentType)}
                   </span>
                   {t.inProgress && (

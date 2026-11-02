@@ -1,4 +1,7 @@
 import {
+  DEVELOPMENT_TYPE_OPTIONS,
+  DURATION_UNIT_OPTIONS,
+  LEVEL_OPTIONS,
   formatDay,
   formatDuration,
   formatRange,
@@ -116,5 +119,42 @@ describe('Selector múltiple (web) · utilidades', () => {
   it('una inactiva ya elegida se muestra como chip (inactiva) pero no se puede volver a elegir', () => {
     expect(selectedInOrder(options, ['x']).map((o) => [o.id, o.inactive])).toEqual([['x', true]]);
     expect(filterOptions(options, [], '').some((o) => o.id === 'x')).toBe(false);
+  });
+});
+
+describe('Capacitaciones (web) · listas ampliadas', () => {
+  it('tipos de desarrollo en el orden pedido y con sus etiquetas completas', () => {
+    expect(DEVELOPMENT_TYPE_OPTIONS.map((o) => o.value)).toEqual(['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial']);
+    expect(DEVELOPMENT_TYPE_OPTIONS.map((o) => o.label)).toEqual([
+      'Técnico', 'Habilidades Blandas', 'Académico',
+      'Sistema de Gestión de Seguridad de la Información', 'Bienestar y Factores Psicosociales',
+    ]);
+    expect(developmentTypeLabel('sgsi')).toBe('Sistema de Gestión de Seguridad de la Información');
+    expect(developmentTypeLabel('bienestar_psicosocial')).toBe('Bienestar y Factores Psicosociales');
+  });
+
+  it('niveles: Obligatoria al final y sigue siendo opcional', () => {
+    expect(LEVEL_OPTIONS.map((o) => o.value)).toEqual(['basico', 'intermedio', 'avanzado', 'especializacion', 'obligatoria']);
+    expect(levelLabel('obligatoria')).toBe('Obligatoria');
+    expect(validateTrainingForm({ ...ok, level: '' })).toBeNull();
+    expect(validateTrainingForm({ ...ok, level: 'obligatoria' })).toBeNull();
+  });
+
+  it('unidades de duración: Horas, Días y Meses', () => {
+    expect(DURATION_UNIT_OPTIONS.map((o) => [o.value, o.label])).toEqual([['horas', 'Horas'], ['dias', 'Días'], ['meses', 'Meses']]);
+  });
+
+  it('formatDuration: singular y plural de cada unidad', () => {
+    expect(formatDuration(1, 'dias')).toBe('1 Día');
+    expect(formatDuration(5, 'dias')).toBe('5 Días');
+    expect(formatDuration(1, 'horas')).toBe('1 Hora');
+    expect(formatDuration(2, 'meses')).toBe('2 Meses');
+    expect(formatDuration(1, 'meses')).toBe('1 Mes');
+    expect(formatDuration(null, null)).toBe('—');
+  });
+
+  it('el formulario acepta días como unidad y sigue exigiendo valor y unidad juntos', () => {
+    expect(validateTrainingForm({ ...ok, durationValue: '5', durationUnit: 'dias' })).toBeNull();
+    expect(validateTrainingForm({ ...ok, durationValue: '', durationUnit: 'dias' })).toMatch(/duración/);
   });
 });

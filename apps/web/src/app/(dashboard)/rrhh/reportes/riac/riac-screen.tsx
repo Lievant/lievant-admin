@@ -259,7 +259,7 @@ export function RiacScreen() {
                         <td className="px-3 py-3 text-slate-600">{r.position}</td>
                         <td className="px-3 py-3 text-navy">{r.name}</td>
                         <td className="px-3 py-3 text-slate-600">{r.institution}</td>
-                        <td className="whitespace-nowrap px-3 py-3 text-slate-600">{developmentTypeLabel(r.developmentType)}</td>
+                        <td className="min-w-[9rem] max-w-[14rem] px-3 py-3 text-slate-600" title={developmentTypeLabel(r.developmentType)}>{developmentTypeLabel(r.developmentType)}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{levelLabel(r.level) || '—'}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{formatDay(r.startDate)}</td>
                         <td className="whitespace-nowrap px-3 py-3 text-slate-600">{r.endDate ? formatDay(r.endDate) : 'En Curso'}</td>
