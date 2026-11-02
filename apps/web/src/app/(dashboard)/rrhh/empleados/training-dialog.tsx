@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { CloseIcon } from '@/components/icons';
+import { useEffect, useRef, useState } from 'react';
 import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select';
 import { UploadProgress } from '@/components/upload-progress';
+import { ModalShell } from '@/app/(dashboard)/rrhh/matriz-puestos/modal-shell';
 import { MAX_UPLOAD_LABEL, uploadToPresignedUrl, validateUploadSize, type UploadedFileRef } from '@/lib/presigned-upload';
 import {
   CERTIFICATE_ACCEPT,
@@ -48,6 +48,9 @@ export function TrainingDialog({
   // Competencias activas del catálogo (por orden y nombre); null = cargando, [] con fallo = no se pudo cargar.
   const [activeCompetencies, setActiveCompetencies] = useState<{ id: string; name: string }[] | null>(null);
   const [competenciesFailed, setCompetenciesFailed] = useState(false);
+  // Para llevar el cuerpo con scroll hasta el campo con error.
+  const competencyField = useRef<HTMLDivElement>(null);
+  const errorBox = useRef<HTMLDivElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [removeCertificate, setRemoveCertificate] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +79,14 @@ export function TrainingDialog({
     const kept = (training?.competencies ?? []).filter((c) => !ids.has(c.id)).map((c) => ({ id: c.id, label: c.name, inactive: true }));
     return [...active, ...kept];
   })();
+
+  // Un error de Competencias o el error general se acercan a la vista: el cuerpo tiene su propio scroll.
+  useEffect(() => {
+    if (competencyError) competencyField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [competencyError]);
+  useEffect(() => {
+    if (error) errorBox.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [error]);
 
   const pickFile = (selected: File | null) => {
     setFile(selected);
@@ -141,19 +152,29 @@ export function TrainingDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-navy/40 px-4 py-6 sm:items-center">
-      <div role="dialog" aria-modal="true" className="w-full max-w-xl rounded-xl bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
-          <h2 className="text-lg font-bold text-navy">{training ? 'Editar Capacitación' : 'Agregar Capacitación'}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <CloseIcon className="h-5 w-5" />
+    <ModalShell
+      title={training ? 'Editar Capacitación' : 'Agregar Capacitación'}
+      onClose={onClose}
+      onSubmit={submit}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">
+            Cancelar
           </button>
-        </div>
+          <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        {error && (
+          <div ref={errorBox} role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>
+        )}
 
-        <form onSubmit={submit} className="space-y-4 px-5 py-5 sm:px-6">
           <div className="flex flex-col gap-1">
             <label className={LABEL} htmlFor="tr-name">Nombre del Curso o Certificado</label>
-            <input id="tr-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={300} className={INPUT} />
+            <input id="tr-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} maxLength={300} className={INPUT} />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -173,10 +194,11 @@ export function TrainingDialog({
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
+          <div ref={competencyField} className="flex flex-col gap-1">
             <label className={LABEL} htmlFor="tr-comp">
               Competencias<span className="ml-0.5 text-red-600" aria-hidden="true">*</span>
               <span className="ml-2 font-normal normal-case tracking-normal text-slate-400">· Elige de 1 a {MAX_COMPETENCIES}.</span>
+              <span className="ml-2 font-semibold normal-case tracking-normal text-navy" aria-live="polite">· {competencyIds.length} {competencyIds.length === 1 ? 'seleccionada' : 'seleccionadas'}</span>
             </label>
             <MultiSelect
               id="tr-comp"
@@ -254,19 +276,8 @@ export function TrainingDialog({
             <textarea id="tr-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={INPUT} />
           </div>
 
-          {progress !== null && <UploadProgress percent={progress} />}
-          {error && <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">
-              Cancelar
-            </button>
-            <button type="submit" disabled={saving} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
-              {saving ? 'Guardando…' : 'Guardar'}
-            </button>
-          </div>
-        </form>
+        {progress !== null && <UploadProgress percent={progress} />}
       </div>
-    </div>
+    </ModalShell>
   );
 }

@@ -41,6 +41,7 @@ export function MultiSelect({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const root = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLUListElement>(null);
 
   const hits = filterOptions(options, value, query);
   const chips = selectedInOrder(options, value);
@@ -58,6 +59,11 @@ export function MultiSelect({
   }, [open]);
 
   useEffect(() => setActive(0), [query]);
+
+  // Al abrir (o al filtrar) la lista se acerca a la vista, aunque el campo esté dentro de un cuerpo con scroll.
+  useEffect(() => {
+    if (open) list.current?.scrollIntoView({ block: 'nearest' });
+  }, [open, query, value.length]);
 
   const add = (optionId: string) => {
     if (full || value.includes(optionId)) return;
@@ -111,7 +117,7 @@ export function MultiSelect({
         className={cn(INPUT, invalid && 'border-red-400 focus:border-red-500 focus:ring-red-500')}
       />
       {open && (
-        <ul id={listId} role="listbox" aria-multiselectable="true" className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+        <ul ref={list} id={listId} role="listbox" aria-multiselectable="true" className="absolute z-20 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
           {full ? (
             <li className="px-3 py-2 text-xs text-slate-500">Ya llegaste al máximo de {maxItems}. Quita alguna para elegir otra.</li>
           ) : loading ? (
@@ -137,7 +143,7 @@ export function MultiSelect({
         </ul>
       )}
       {chips.length > 0 && (
-        <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Elegidas">
+        <ul className="mt-2 flex max-h-36 flex-wrap content-start gap-1.5 overflow-y-auto overscroll-contain rounded-md border border-slate-100 p-1.5" aria-label="Elegidas">
           {chips.map((c) => (
             <li key={c.id} className={cn('flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium', c.inactive ? 'bg-amber-50 text-amber-800' : 'bg-slate-100 text-navy')}>
               <span className="break-words">{c.label}{c.inactive ? ' (Inactiva)' : ''}</span>
