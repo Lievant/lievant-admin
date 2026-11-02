@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
+import { readFileSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
@@ -232,5 +234,99 @@ describe('Matriz de Puestos · buscador de empleados para «Reporta a»', () => 
     const errs = async (plain: object) => (await validate(plainToInstance(EmployeeSearchQueryDto, plain))).map((e) => e.property);
     expect(await errs({ q: 'ana', limit: '10' })).toEqual([]);
     expect(await errs({ q: 'ana', limit: '11' })).toEqual(['limit']);
+  });
+});
+
+// ── Regresión: columnas, marcadores y parámetros de los INSERT/UPDATE con SQL crudo ──────────────────────────
+// (Al quitar «Jerarquía (MEOT)» el alta quedó con 16 columnas y 16 parámetros pero 17 marcadores: Postgres la
+// rechazaba con «INSERT has more expressions than target columns» y el API respondía 500.)
+
+/** Cuenta los elementos de primer nivel de una lista separada por comas (respeta paréntesis y comillas). */
+function topLevel(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quote: string | null = null;
+  let cur = '';
+  for (const ch of list) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"') quote = ch;
+    if (ch === '(' || ch === '[') depth++;
+    if (ch === ')' || ch === ']') depth--;
+    if (ch === ',' && depth === 0) {
+      out.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/** Forma de un INSERT ... VALUES: columnas, expresiones, marcador más alto y marcadores que faltan entre $1 y el más alto. */
+function insertShape(sql: string) {
+  const cols = /INSERT INTO [\w.]+ ?\(([^)]*)\) ?VALUES/i.exec(sql)?.[1];
+  const vals = /VALUES ?\((.*)\)( RETURNING.*)?$/i.exec(sql)?.[1];
+  const markers = [...sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1]));
+  const max = Math.max(0, ...markers);
+  const missing = Array.from({ length: max }, (_, i) => i + 1).filter((n) => !markers.includes(n));
+  return { columns: topLevel(cols ?? '').length, values: topLevel(vals ?? '').length, max, missing };
+}
+
+describe('Matriz de Puestos · forma de los INSERT/UPDATE (regresión del alta con 17 marcadores)', () => {
+  it('el INSERT de create() tiene tantas columnas como expresiones y tantos parámetros como el marcador más alto', async () => {
+    const complete = createDto({ businessUnit: 'TEST-UN', level: 'II', division: undefined, reportsTo: 'TEST-Jefe', plazas: 3, seniority: 'senior', reportsToEmployeeId: E1 });
+    const minimal = plainToInstance(CreatePositionDto, { title: 'TEST-Mínimo', area: 'TI', ...FULL });
+    for (const dto of [complete, minimal]) {
+      const { service, calls } = build();
+      await service.create(dto as never, ACTOR);
+      const insert = calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
+      const shape = insertShape(insert.sql);
+      expect(shape.columns).toBe(16);
+      expect(shape.values).toBe(shape.columns);
+      expect(shape.max).toBe(shape.columns);
+      expect(insert.params).toHaveLength(shape.max);
+      expect(shape.missing).toEqual([]);
+    }
+  });
+
+  it('el UPDATE de update() usa exactamente los parámetros que recibe (sin huecos)', async () => {
+    const { service, calls } = build();
+    await service.update('p1', { ...FULL, title: 'TEST-Otro' } as never, ACTOR);
+    const up = updateCalls(calls)[0]!;
+    const markers = [...up.sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1]));
+    const max = Math.max(...markers);
+    expect(up.params).toHaveLength(max);
+    expect(Array.from({ length: max }, (_, i) => i + 1).filter((n) => !markers.includes(n))).toEqual([]);
+  });
+
+  it('todos los INSERT con SQL fijo del módulo (código fuente) cuadran en columnas, expresiones y parámetros', () => {
+    const dir = __dirname;
+    const checked: string[] = [];
+    for (const file of readdirSync(dir).filter((f) => /^job-position.*\.service\.ts$/.test(f))) {
+      const src = readFileSync(join(dir, file), 'utf8');
+      for (const m of src.matchAll(/`(\s*INSERT INTO [\w.]+ ?\([^`$]*?\)\s*VALUES[^`]*?)`\s*,\s*\[/g)) {
+        const sql = m[1]!.replace(/\s+/g, ' ').trim();
+        if (/\$\{/.test(sql)) continue;
+        const start = (m.index ?? 0) + m[0].length - 1;
+        let depth = 0;
+        let end = start;
+        for (let i = start; i < src.length; i++) {
+          if (src[i] === '[') depth++;
+          if (src[i] === ']' && --depth === 0) {
+            end = i;
+            break;
+          }
+        }
+        const paramCount = topLevel(src.slice(start + 1, end)).length;
+        const shape = insertShape(sql);
+        const where = `${file}: ${sql.slice(0, 50)}…`;
+        expect({ where, ...shape, paramCount }).toEqual({ where, columns: shape.columns, values: shape.columns, max: paramCount, missing: [], paramCount });
+        checked.push(where);
+      }
+    }
+    expect(checked.length).toBeGreaterThanOrEqual(4); // si el patrón dejara de encontrar INSERT, la prueba no pasaría en silencio
   });
 });
