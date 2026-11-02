@@ -7,11 +7,13 @@ import { ChevronLeftIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
 import { ActivityDialog, ConfirmDelete, KpiDialog, OkrDialog } from '../item-dialogs';
+import { FormattedText } from '../formatted-text';
 import { ModalShell } from '../modal-shell';
 import { PositionFormDialog, readError } from '../position-form-dialog';
 import {
   BASE_PERIOD,
   EMPTY_OPTIONS,
+  FIELD_GUIDES,
   STATUS_BADGE,
   STATUS_LABELS,
   VALIDATION_BADGE,
@@ -37,6 +39,7 @@ import {
   weightState,
   yearOptions,
   type ActivityItem,
+  type GuidedFieldKey,
   type KpiItem,
   type OkrItem,
   type PositionDetail,
@@ -60,6 +63,21 @@ function Field({ label, value }: { label: string; value: string }) {
     <div className="min-w-0">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
       <p className="mt-1 whitespace-pre-line break-words text-sm text-navy">{value}</p>
+    </div>
+  );
+}
+
+/** Campo de texto del puesto con la guía de llenado junto a la etiqueta; el valor se muestra con viñetas y párrafos. */
+function GuidedField({ label, guide, text, bullets }: { label: string; guide: GuidedFieldKey; text: string | null; bullets?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+        <span className="text-xs text-slate-400">· {FIELD_GUIDES[guide].guide}</span>
+      </p>
+      <div className="mt-1 text-sm text-navy">
+        {!text || text.trim() === '' ? <p>—</p> : bullets ? <FormattedText text={text} /> : <p className="whitespace-pre-line break-words">{text}</p>}
+      </div>
     </div>
   );
 }
@@ -237,10 +255,10 @@ export function PositionDetailScreen({ id }: { id: string }) {
           <div className={CARD}>
             <h2 className="text-sm font-semibold text-navy">Rol y Objetivo</h2>
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <Field label="Rol" value={position.roleSummary ?? '—'} />
-              <Field label="Objetivo del Puesto" value={position.positionObjective ?? '—'} />
+              <GuidedField label="Rol" guide="roleSummary" text={position.roleSummary} />
+              <GuidedField label="Objetivo del Puesto" guide="positionObjective" text={position.positionObjective} />
               <div className="lg:col-span-2">
-                <Field label="Puntos a Validar" value={position.validationPoints ?? '—'} />
+                <GuidedField label="Puntos a Validar" guide="validationPoints" text={position.validationPoints} bullets />
               </div>
             </div>
           </div>
@@ -315,7 +333,8 @@ export function PositionDetailScreen({ id }: { id: string }) {
             </div>
             {position.hasDescription ? (
               <>
-                <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{position.description}</p>
+                <p className="mt-1 text-xs text-slate-400">{FIELD_GUIDES.description.guide}</p>
+                <div className="mt-3 text-sm text-slate-700"><FormattedText text={position.description} /></div>
                 <p className="mt-3 text-xs text-slate-500">
                   {position.descriptionApproved
                     ? `Aprobada por ${position.approvedBy?.name ?? 'un usuario'} el ${formatDateTimeMx(position.approvedAt)}`

@@ -5,6 +5,7 @@ import {
   ApiError,
   createCatalogItem,
   deactivateCatalogItem,
+  removeCompetency,
   updateCatalogItem,
   type CatalogEntity,
   type CreateCatalogItemPayload,
@@ -50,6 +51,23 @@ export async function updateCatalogItemAction(
   } catch (err) {
     return toResult(err);
   }
+}
+
+export async function removeCompetencyAction(id: string): Promise<ActionResult> {
+  try {
+    await removeCompetency(id);
+    revalidatePath('/admin/catalogos/competencies');
+    revalidatePath('/admin/catalogos');
+    return { success: true };
+  } catch (err) {
+    return toResult(err);
+  }
+}
+
+/** La importación terminó (el archivo se envió por la ruta proxy): refresca la tabla y la tarjeta del catálogo. */
+export async function refreshCompetenciesAction(): Promise<void> {
+  revalidatePath('/admin/catalogos/competencies');
+  revalidatePath('/admin/catalogos');
 }
 
 export async function deactivateCatalogItemAction(entity: CatalogEntity, id: string): Promise<ActionResult> {

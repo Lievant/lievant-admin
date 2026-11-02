@@ -322,3 +322,54 @@ export function formatDateTimeMx(iso: string | null): string {
   const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
   return `${g('day')}/${g('month')}/${g('year')} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}`;
 }
+
+/** Guía de llenado (de RRHH) de los cuatro campos de texto del puesto: texto corto junto a la etiqueta y ejemplo como placeholder. */
+export type GuidedFieldKey = 'roleSummary' | 'positionObjective' | 'description' | 'validationPoints';
+export const FIELD_GUIDES: Record<GuidedFieldKey, { guide: string; placeholder: string }> = {
+  roleSummary: {
+    guide: 'Qué hace, en una frase.',
+    placeholder: 'Ej.: Acompañar a sellers internacionales en su arranque dentro de Mercado Libre.',
+  },
+  positionObjective: {
+    guide: 'Para qué existe.',
+    placeholder: 'Ej.: Asegurar que cada seller asignado por Mercado Libre inicie su operación en tiempo y bien preparado para la siguiente etapa.',
+  },
+  description: {
+    guide: 'Actividades y su frecuencia (una por línea).',
+    placeholder: [
+      '- Contactar a los sellers nuevos y explicarles el programa – Diario',
+      '- Dar seguimiento al avance de cada seller – Diario',
+      '- Reportar avances a Mercado Libre – Semanal',
+    ].join('\n'),
+  },
+  validationPoints: {
+    guide: 'Cómo se mide (uno por línea).',
+    placeholder: ['- Sellers contactados en menos de 48 horas', '- Sellers que concluyen su arranque en tiempo', '- Reportes entregados en fecha'].join('\n'),
+  },
+};
+
+export type TextBlock = { kind: 'paragraph'; text: string } | { kind: 'list'; items: string[] };
+
+/**
+ * Presentación del texto guardado: las líneas que empiezan con «-», «*» o «•» forman listas con viñetas y el resto
+ * son párrafos (un salto de línea separa párrafos; las líneas vacías no generan bloques). No modifica el texto
+ * guardado y devuelve solo texto, nunca HTML.
+ */
+export function parseTextBlocks(text: string | null | undefined): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  for (const raw of (text ?? '').split(/\r\n|\r|\n/)) {
+    const line = raw.trim();
+    if (line === '') continue;
+    const bullet = /^[-*•]\s*(.*)$/.exec(line);
+    if (bullet) {
+      const item = bullet[1]!.trim();
+      if (item === '') continue;
+      const last = blocks[blocks.length - 1];
+      if (last?.kind === 'list') last.items.push(item);
+      else blocks.push({ kind: 'list', items: [item] });
+    } else {
+      blocks.push({ kind: 'paragraph', text: line });
+    }
+  }
+  return blocks;
+}

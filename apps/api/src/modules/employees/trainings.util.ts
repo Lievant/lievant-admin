@@ -1,8 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const DEVELOPMENT_TYPES = ['tecnico', 'habilidades_blandas', 'academico'] as const;
-export const TRAINING_LEVELS = ['basico', 'intermedio', 'avanzado', 'especializacion'] as const;
-export const DURATION_UNITS = ['horas', 'meses'] as const;
+export const DEVELOPMENT_TYPES = ['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial'] as const;
+export const TRAINING_LEVELS = ['basico', 'intermedio', 'avanzado', 'especializacion', 'obligatoria'] as const;
+export const DURATION_UNITS = ['horas', 'dias', 'meses'] as const;
 
 export type DevelopmentType = (typeof DEVELOPMENT_TYPES)[number];
 export type TrainingLevel = (typeof TRAINING_LEVELS)[number];
@@ -12,6 +12,33 @@ export type DurationUnit = (typeof DURATION_UNITS)[number];
 export const ALLOWED_CERTIFICATE_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const;
 
 export const TRAINING_NOT_FOUND = 'Capacitación no encontrada';
+
+/** Tope de competencias por capacitación. */
+export const MAX_COMPETENCIES = 30;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Una competencia ligada a una capacitación (`catalogs.competencies`). */
+export interface CompetencyRef {
+  id: string;
+  name: string;
+}
+
+/**
+ * Las competencias que llegan al guardar: al menos 1, hasta 30, sin repetidas y con ids válidos. El servidor lo exige
+ * siempre (el DTO lo valida también, pero el servicio no depende de él).
+ */
+export function normalizeCompetencyIds(ids: unknown): string[] {
+  if (!Array.isArray(ids) || ids.length === 0) throw new BadRequestException('Selecciona al menos una competencia');
+  if (ids.length > MAX_COMPETENCIES) {
+    throw new BadRequestException(`Una capacitación no puede tener más de ${MAX_COMPETENCIES} competencias`);
+  }
+  if (!ids.every((i) => typeof i === 'string' && UUID.test(i))) {
+    throw new BadRequestException('Alguna competencia elegida no es válida');
+  }
+  const lower = (ids as string[]).map((i) => i.toLowerCase());
+  if (new Set(lower).size !== lower.length) throw new BadRequestException('Hay competencias repetidas');
+  return lower;
+}
 
 /** Prefijo de S3 de los certificados de un empleado; sirve también para validar pertenencia. */
 export function trainingPrefix(employeeId: string): string {
@@ -78,7 +105,6 @@ export interface TrainingRow {
   end_date: string | null;
   duration_value: number | null;
   duration_unit: DurationUnit | null;
-  is_company_recognition: boolean;
   certificate_s3_key: string | null;
   certificate_original_name: string | null;
   notes: string | null;
@@ -89,7 +115,7 @@ export interface TrainingRow {
 /** Columnas con las fechas de negocio como 'YYYY-MM-DD' (sin pasar por Date). */
 export const TRAINING_COLUMNS = `id, employee_id, name, institution, development_type, level,
   to_char(start_date, 'YYYY-MM-DD') AS start_date, to_char(end_date, 'YYYY-MM-DD') AS end_date,
-  duration_value, duration_unit, is_company_recognition, certificate_s3_key,
+  duration_value, duration_unit, certificate_s3_key,
   certificate_original_name, notes, created_at, updated_at`;
 
 /** Lo que RRHH ve de una capacitación: nunca la llave de S3 ni campos de auditoría. */
@@ -105,13 +131,14 @@ export interface TrainingView {
   inProgress: boolean;
   durationValue: number | null;
   durationUnit: DurationUnit | null;
-  isCompanyRecognition: boolean;
+  /** Ordenadas por el orden del catálogo y luego por nombre. */
+  competencies: CompetencyRef[];
   hasCertificate: boolean;
   certificateOriginalName: string | null;
   notes: string | null;
 }
 
-export function toTrainingView(r: TrainingRow): TrainingView {
+export function toTrainingView(r: TrainingRow, competencies: CompetencyRef[] = []): TrainingView {
   return {
     id: r.id,
     employeeId: r.employee_id,
@@ -124,7 +151,7 @@ export function toTrainingView(r: TrainingRow): TrainingView {
     inProgress: r.end_date === null,
     durationValue: r.duration_value,
     durationUnit: r.duration_unit,
-    isCompanyRecognition: r.is_company_recognition,
+    competencies,
     hasCertificate: r.certificate_s3_key !== null,
     certificateOriginalName: r.certificate_original_name,
     notes: r.notes,
@@ -146,11 +173,11 @@ export interface MyTrainingView {
   inProgress: boolean;
   durationValue: number | null;
   durationUnit: DurationUnit | null;
-  isCompanyRecognition: boolean;
+  competencies: CompetencyRef[];
   hasCertificate: boolean;
 }
 
-export function toMyTrainingView(r: TrainingRow): MyTrainingView {
+export function toMyTrainingView(r: TrainingRow, competencies: CompetencyRef[] = []): MyTrainingView {
   return {
     id: r.id,
     name: r.name,
@@ -162,7 +189,7 @@ export function toMyTrainingView(r: TrainingRow): MyTrainingView {
     inProgress: r.end_date === null,
     durationValue: r.duration_value,
     durationUnit: r.duration_unit,
-    isCompanyRecognition: r.is_company_recognition,
+    competencies,
     hasCertificate: r.certificate_s3_key !== null,
   };
 }

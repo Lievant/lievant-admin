@@ -30,7 +30,11 @@ const SELECT = `
          t.name, t.institution, t.development_type, t.level,
          to_char(t.start_date, 'YYYY-MM-DD') AS start_date,
          to_char(t.end_date, 'YYYY-MM-DD') AS end_date,
-         t.duration_value, t.duration_unit, t.is_company_recognition`;
+         t.duration_value, t.duration_unit,
+         COALESCE((SELECT string_agg(c.name, ', ' ORDER BY c.sort_order, c.name)
+                   FROM employees.training_competencies tc
+                   JOIN catalogs.competencies c ON c.id = tc.competency_id
+                   WHERE tc.training_id = t.id), '') AS competencies`;
 const FROM = `
   FROM employees.employee_trainings t
   JOIN employees.employee_records e ON e.id = t.employee_id`;

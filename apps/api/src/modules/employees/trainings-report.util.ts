@@ -1,15 +1,16 @@
 import { BadRequestException } from '@nestjs/common';
 import { DEVELOPMENT_TYPES, isRealDate, type DurationUnit } from './trainings.util';
 
-/** Tipos del filtro del RIAC: los tres de desarrollo más "Reconocimientos" (sin importar su tipo). */
-export const RIAC_TYPES = [...DEVELOPMENT_TYPES, 'reconocimientos'] as const;
+/** Tipos del filtro del RIAC: los de desarrollo (los tres originales más SGSI y Bienestar). */
+export const RIAC_TYPES = DEVELOPMENT_TYPES;
 export type RiacType = (typeof RIAC_TYPES)[number];
 
 export const RIAC_TYPE_LABELS: Record<RiacType, string> = {
   tecnico: 'Técnico',
   habilidades_blandas: 'Habilidades Blandas',
   academico: 'Académico',
-  reconocimientos: 'Reconocimientos',
+  sgsi: 'Sistema de Gestión de Seguridad de la Información',
+  bienestar_psicosocial: 'Bienestar y Factores Psicosociales',
 };
 
 export const RIAC_LEVEL_LABELS: Record<string, string> = {
@@ -17,6 +18,7 @@ export const RIAC_LEVEL_LABELS: Record<string, string> = {
   intermedio: 'Intermedio',
   avanzado: 'Avanzado',
   especializacion: 'Especialización',
+  obligatoria: 'Obligatoria',
 };
 
 /** Tope de filas del Excel; por encima se pide acotar los filtros. */
@@ -51,10 +53,11 @@ export function validateRiacRange(from: string, to: string): void {
   }
 }
 
-/** "40 horas", "1 hora", "6 meses", "1 mes"; vacío si no hay duración. */
+/** "40 horas", "1 hora", "5 días", "1 día", "6 meses", "1 mes"; vacío si no hay duración. */
 export function formatRiacDuration(value: number | null, unit: DurationUnit | null): string {
   if (value === null || unit === null) return '';
-  const word = unit === 'horas' ? (value === 1 ? 'hora' : 'horas') : value === 1 ? 'mes' : 'meses';
+  const words: Record<DurationUnit, [string, string]> = { horas: ['hora', 'horas'], dias: ['día', 'días'], meses: ['mes', 'meses'] };
+  const word = words[unit][value === 1 ? 0 : 1];
   return `${value} ${word}`;
 }
 
@@ -88,9 +91,7 @@ export function buildRiacWhere(f: RiacFilters): { where: string; params: unknown
     't.start_date <= $2::date',
     `COALESCE(t.end_date, GREATEST(t.start_date, ${TODAY_MX_SQL})) >= $1::date`,
   ];
-  if (f.type === 'reconocimientos') {
-    clauses.push('t.is_company_recognition = true');
-  } else if (f.type) {
+  if (f.type) {
     params.push(f.type);
     clauses.push(`t.development_type = $${params.length}`);
   }
@@ -123,7 +124,8 @@ export interface RiacRow {
   end_date: string | null;
   duration_value: number | null;
   duration_unit: DurationUnit | null;
-  is_company_recognition: boolean;
+  /** Nombres de las competencias, separados por coma, por el orden del catálogo (vacío si no tiene). */
+  competencies: string | null;
   total_count?: string | number;
 }
 
@@ -139,7 +141,8 @@ export interface RiacItem {
   startDate: string;
   endDate: string | null;
   duration: string;
-  isCompanyRecognition: boolean;
+  /** Nombres separados por coma; vacío si la capacitación no tiene competencias. */
+  competencies: string;
 }
 
 export function toRiacItem(r: RiacRow): RiacItem {
@@ -155,7 +158,7 @@ export function toRiacItem(r: RiacRow): RiacItem {
     startDate: r.start_date,
     endDate: r.end_date,
     duration: formatRiacDuration(r.duration_value, r.duration_unit),
-    isCompanyRecognition: r.is_company_recognition,
+    competencies: r.competencies ?? '',
   };
 }
 

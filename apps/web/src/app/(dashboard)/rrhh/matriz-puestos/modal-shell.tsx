@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { CloseIcon } from '@/components/icons';
 
 /**
@@ -25,6 +26,15 @@ export function ModalShell({
   maxWidth?: string;
   role?: 'dialog' | 'alertdialog';
 }) {
+  // Mientras el modal está abierto, la página de atrás no se desplaza.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const content = (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">{children}</div>

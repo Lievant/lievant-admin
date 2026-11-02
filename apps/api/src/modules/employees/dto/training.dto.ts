@@ -1,6 +1,5 @@
 import { Transform, Type } from 'class-transformer';
 import {
-  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -10,11 +9,43 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested,
+  registerDecorator,
+  type ValidationOptions,
 } from 'class-validator';
-import { DEVELOPMENT_TYPES, DURATION_UNITS, TRAINING_LEVELS } from '../trainings.util';
+import { DEVELOPMENT_TYPES, DURATION_UNITS, TRAINING_LEVELS, normalizeCompetencyIds } from '../trainings.util';
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Arreglo de ids de competencia válido (1 a 30, UUID, sin repetidos); da UN solo mensaje claro en español. */
+function IsCompetencyIds(options?: ValidationOptions): PropertyDecorator {
+  return (target, propertyName) =>
+    registerDecorator({
+      name: 'isCompetencyIds',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      ...(options ? { options } : {}),
+      validator: {
+        validate: (value: unknown) => {
+          try {
+            normalizeCompetencyIds(value);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        defaultMessage: (args) => {
+          try {
+            normalizeCompetencyIds(args?.value);
+            return '';
+          } catch (e) {
+            return (e as Error).message;
+          }
+        },
+      },
+    });
+}
 
 /** Paso 1: el navegador pide la URL prefirmada antes de subir el certificado a S3. */
 export class CertificateUploadDto {
@@ -76,9 +107,9 @@ export class CreateTrainingDto {
   @IsIn(DURATION_UNITS)
   durationUnit?: string | null;
 
-  @IsOptional()
-  @IsBoolean()
-  isCompanyRecognition?: boolean;
+  /** Competencias del catálogo: al menos 1, hasta 30 y sin repetidas (mismo criterio y mensajes que el servicio). */
+  @IsCompetencyIds()
+  competencyIds!: string[];
 
   @IsOptional()
   @IsString()
@@ -133,9 +164,10 @@ export class UpdateTrainingDto {
   @IsIn(DURATION_UNITS)
   durationUnit?: string | null;
 
-  @IsOptional()
-  @IsBoolean()
-  isCompanyRecognition?: boolean;
+  /** Si se envía reemplaza el conjunto completo (mínimo 1); si no se envía se conservan las actuales. */
+  @ValidateIf((o: UpdateTrainingDto) => o.competencyIds !== undefined)
+  @IsCompetencyIds()
+  competencyIds?: string[];
 
   @IsOptional()
   @IsString()
