@@ -14,7 +14,8 @@ export interface TrainingItem {
   inProgress: boolean;
   durationValue: number | null;
   durationUnit: DurationUnit | null;
-  isCompanyRecognition: boolean;
+  /** Por el orden del catálogo y luego por nombre. */
+  competencies: { id: string; name: string }[];
   hasCertificate: boolean;
   certificateOriginalName?: string | null;
   notes?: string | null;
@@ -38,7 +39,9 @@ export const DURATION_UNIT_OPTIONS: { value: DurationUnit; label: string }[] = [
   { value: 'meses', label: 'Meses' },
 ];
 
-export const RECOGNITION_LABEL = 'Reconocimiento de la Empresa (por ejemplo, aniversario)';
+/** Tope de competencias por capacitación (el servidor lo exige igual). */
+export const MAX_COMPETENCIES = 30;
+export const COMPETENCY_REQUIRED = 'Selecciona al menos una competencia';
 
 export const CERTIFICATE_ACCEPT = '.pdf,.jpg,.jpeg,.png';
 export const CERTIFICATE_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
@@ -88,6 +91,7 @@ export interface TrainingFormValues {
   institution: string;
   developmentType: string;
   level: string;
+  competencyIds: string[];
   startDate: string;
   endDate: string;
   durationValue: string;
@@ -98,9 +102,11 @@ export interface TrainingFormValues {
 export function validateTrainingForm(v: TrainingFormValues): string | null {
   if (!v.name.trim()) return 'El nombre del curso o certificado es obligatorio.';
   if (v.name.trim().length > 300) return 'El nombre no puede pasar de 300 caracteres.';
+  if (!v.developmentType) return 'Elige el tipo de desarrollo.';
+  if (v.competencyIds.length === 0) return COMPETENCY_REQUIRED;
+  if (v.competencyIds.length > MAX_COMPETENCIES) return `No puedes elegir más de ${MAX_COMPETENCIES} competencias.`;
   if (!v.institution.trim()) return 'La institución es obligatoria.';
   if (v.institution.trim().length > 200) return 'La institución no puede pasar de 200 caracteres.';
-  if (!v.developmentType) return 'Elige el tipo de desarrollo.';
   if (!v.startDate) return 'La fecha de inicio es obligatoria.';
   if (v.endDate && v.endDate < v.startDate) return 'La fecha de fin no puede ser menor que la de inicio.';
   const hasValue = v.durationValue.trim() !== '';

@@ -88,7 +88,7 @@ export default async function ReportesRrhhPage() {
             <div>
               <h2 className="font-semibold text-navy">RIAC</h2>
               <p className="mt-0.5 text-sm text-slate-500">
-                Capacitaciones y reconocimientos por periodo, con filtros y exportación a Excel
+                Capacitaciones y competencias por periodo, con filtros y exportación a Excel
               </p>
             </div>
           </Link>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CloseIcon } from '@/components/icons';
+import { MultiSelect, type MultiSelectOption } from '@/components/ui/multi-select';
 import { UploadProgress } from '@/components/upload-progress';
 import { MAX_UPLOAD_LABEL, uploadToPresignedUrl, validateUploadSize, type UploadedFileRef } from '@/lib/presigned-upload';
 import {
@@ -9,8 +10,9 @@ import {
   CERTIFICATE_MIME_TYPES,
   DEVELOPMENT_TYPE_OPTIONS,
   DURATION_UNIT_OPTIONS,
+  COMPETENCY_REQUIRED,
   LEVEL_OPTIONS,
-  RECOGNITION_LABEL,
+  MAX_COMPETENCIES,
   validateTrainingForm,
   type TrainingItem,
 } from './training-constants';
@@ -40,13 +42,40 @@ export function TrainingDialog({
   const [endDate, setEndDate] = useState(training?.endDate ?? '');
   const [durationValue, setDurationValue] = useState(training?.durationValue != null ? String(training.durationValue) : '');
   const [durationUnit, setDurationUnit] = useState<string>(training?.durationUnit ?? '');
-  const [recognition, setRecognition] = useState(training?.isCompanyRecognition ?? false);
   const [notes, setNotes] = useState(training?.notes ?? '');
+  const [competencyIds, setCompetencyIds] = useState<string[]>(() => training?.competencies.map((c) => c.id) ?? []);
+  const [competencyError, setCompetencyError] = useState<string | null>(null);
+  // Competencias activas del catálogo (por orden y nombre); null = cargando, [] con fallo = no se pudo cargar.
+  const [activeCompetencies, setActiveCompetencies] = useState<{ id: string; name: string }[] | null>(null);
+  const [competenciesFailed, setCompetenciesFailed] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [removeCertificate, setRemoveCertificate] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetch('/api/catalogs/competencies/active')
+      .then((r) => (r.ok ? (r.json() as Promise<{ id: string; name: string }[]>) : Promise.reject(new Error())))
+      .then((rows) => alive && setActiveCompetencies(Array.isArray(rows) ? rows : []))
+      .catch(() => {
+        if (!alive) return;
+        setActiveCompetencies([]);
+        setCompetenciesFailed(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Solo las activas se pueden elegir; las que ya estaban ligadas y se desactivaron se muestran marcadas como inactivas.
+  const competencyOptions: MultiSelectOption[] = (() => {
+    const active = (activeCompetencies ?? []).map((c) => ({ id: c.id, label: c.name }));
+    const ids = new Set(active.map((c) => c.id));
+    const kept = (training?.competencies ?? []).filter((c) => !ids.has(c.id)).map((c) => ({ id: c.id, label: c.name, inactive: true }));
+    return [...active, ...kept];
+  })();
 
   const pickFile = (selected: File | null) => {
     setFile(selected);
@@ -58,8 +87,10 @@ export function TrainingDialog({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setCompetencyError(null);
 
-    const invalid = validateTrainingForm({ name, institution, developmentType, level, startDate, endDate, durationValue, durationUnit });
+    const invalid = validateTrainingForm({ name, institution, developmentType, level, competencyIds, startDate, endDate, durationValue, durationUnit });
+    if (invalid === COMPETENCY_REQUIRED) return setCompetencyError(invalid);
     if (invalid) return setError(invalid);
     if (file && !CERTIFICATE_MIME_TYPES.includes(file.type)) return setError('El certificado debe ser PDF, JPEG o PNG.');
     if (file) {
@@ -86,7 +117,7 @@ export function TrainingDialog({
         endDate: endDate || null,
         durationValue: durationValue.trim() ? Number(durationValue) : null,
         durationUnit: durationUnit || null,
-        isCompanyRecognition: recognition,
+        competencyIds,
         notes: notes.trim() || null,
       };
       if (certificate !== undefined) payload.certificate = certificate;
@@ -124,10 +155,6 @@ export function TrainingDialog({
             <label className={LABEL} htmlFor="tr-name">Nombre del Curso o Certificado</label>
             <input id="tr-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={300} className={INPUT} />
           </div>
-          <div className="flex flex-col gap-1">
-            <label className={LABEL} htmlFor="tr-inst">Institución</label>
-            <input id="tr-inst" value={institution} onChange={(e) => setInstitution(e.target.value)} maxLength={200} className={INPUT} />
-          </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
@@ -144,6 +171,37 @@ export function TrainingDialog({
                 {LEVEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className={LABEL} htmlFor="tr-comp">
+              Competencias<span className="ml-0.5 text-red-600" aria-hidden="true">*</span>
+              <span className="ml-2 font-normal normal-case tracking-normal text-slate-400">· Elige de 1 a {MAX_COMPETENCIES}.</span>
+            </label>
+            <MultiSelect
+              id="tr-comp"
+              options={competencyOptions}
+              value={competencyIds}
+              onChange={(ids) => {
+                setCompetencyIds(ids);
+                if (ids.length > 0) setCompetencyError(null);
+              }}
+              maxItems={MAX_COMPETENCIES}
+              loading={activeCompetencies === null}
+              invalid={competencyError !== null}
+              placeholder="Busca una competencia…"
+              describedBy={competencyError ? 'tr-comp-error' : undefined}
+            />
+            {competenciesFailed && <p className="text-xs text-red-600">No se pudo cargar el catálogo de competencias. Cierra e inténtalo de nuevo.</p>}
+            {competencyError && <p id="tr-comp-error" role="alert" className="text-xs text-red-600">{competencyError}</p>}
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className={LABEL} htmlFor="tr-inst">Institución</label>
+            <input id="tr-inst" value={institution} onChange={(e) => setInstitution(e.target.value)} maxLength={200} className={INPUT} />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
               <label className={LABEL} htmlFor="tr-start">Fecha de Inicio</label>
               <input id="tr-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={INPUT} />
@@ -152,23 +210,18 @@ export function TrainingDialog({
               <label className={LABEL} htmlFor="tr-end">Fecha de Fin (Vacío = En Curso)</label>
               <input id="tr-end" type="date" value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} className={INPUT} />
             </div>
-            <div className="flex flex-col gap-1">
-              <label className={LABEL} htmlFor="tr-dur">Duración (Opcional)</label>
-              <input id="tr-dur" type="number" min={1} step={1} inputMode="numeric" value={durationValue} onChange={(e) => setDurationValue(e.target.value)} className={INPUT} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className={LABEL} htmlFor="tr-unit">Unidad</label>
-              <select id="tr-unit" value={durationUnit} onChange={(e) => setDurationUnit(e.target.value)} className={INPUT}>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className={LABEL} id="tr-dur-label">Duración (Opcional)</span>
+            <div className="grid grid-cols-2 gap-3" role="group" aria-labelledby="tr-dur-label">
+              <input id="tr-dur" aria-label="Duración" type="number" min={1} step={1} inputMode="numeric" placeholder="Cantidad" value={durationValue} onChange={(e) => setDurationValue(e.target.value)} className={INPUT} />
+              <select id="tr-unit" aria-label="Unidad de duración" value={durationUnit} onChange={(e) => setDurationUnit(e.target.value)} className={INPUT}>
                 <option value="">Sin unidad</option>
                 {DURATION_UNIT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </div>
           </div>
-
-          <label className="flex items-start gap-2 text-sm text-slate-700">
-            <input type="checkbox" checked={recognition} onChange={(e) => setRecognition(e.target.checked)} className="mt-0.5" />
-            {RECOGNITION_LABEL}
-          </label>
 
           <div className="flex flex-col gap-1">
             <label className={LABEL} htmlFor="tr-file">Certificado (Opcional)</label>

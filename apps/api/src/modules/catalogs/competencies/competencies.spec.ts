@@ -209,3 +209,46 @@ describe('Migración 047 · catálogo de competencias', () => {
     expect(src).toMatch(/DROP INDEX IF EXISTS catalogs\.uq_catalog_competencies_name/);
   });
 });
+
+describe('Competencias · bloqueo de eliminar si está en uso', () => {
+  it('no deja eliminar una competencia ligada a capacitaciones y dice cuántas la usan', async () => {
+    const { service, repo } = build();
+    const a = await service.create({ name: 'TEST-En uso' });
+    repo.trainingUse[a.id] = 3;
+    await expect(service.remove(a.id)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.remove(a.id)).rejects.toThrow(/3 capacitaciones/);
+    expect((await service.findAll()).map((c) => c.name)).toEqual(['TEST-En uso']); // sigue viva
+  });
+
+  it('con una sola capacitación el mensaje va en singular', async () => {
+    const { service, repo } = build();
+    const a = await service.create({ name: 'TEST-Una' });
+    repo.trainingUse[a.id] = 1;
+    await expect(service.remove(a.id)).rejects.toThrow(/la usa 1 capacitación\./);
+  });
+
+  it('desactivarla sigue permitido aunque esté en uso', async () => {
+    const { service, repo } = build();
+    const a = await service.create({ name: 'TEST-Desactivable' });
+    repo.trainingUse[a.id] = 2;
+    await expect(service.deactivate(a.id)).resolves.toBeUndefined();
+    expect((await service.findActive()).map((c) => c.name)).toEqual([]);
+  });
+
+  it('sin capacitaciones vivas (las eliminadas no cuentan: el conteo ya las excluye) sí se elimina', async () => {
+    const { service, repo } = build();
+    const a = await service.create({ name: 'TEST-Libre' });
+    repo.trainingUse[a.id] = 0;
+    await expect(service.remove(a.id)).resolves.toBeUndefined();
+    expect(await service.findAll()).toEqual([]);
+  });
+
+  it('el conteo solo mira capacitaciones no eliminadas (deleted_at IS NULL) y la competencia pedida', async () => {
+    const calls: { sql: string; params: unknown[] }[] = [];
+    const svc = new CompetenciesService({ query: async (sql: string, params: unknown[]) => (calls.push({ sql, params }), [{ n: 2 }]) } as never);
+    expect(await svc.countTrainingsUsing('c-1')).toBe(2);
+    expect(calls[0]!.sql).toMatch(/t\.deleted_at IS NULL/);
+    expect(calls[0]!.sql).toMatch(/training_competencies/);
+    expect(calls[0]!.params).toEqual(['c-1']);
+  });
+});
