@@ -1,7 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { DEVELOPMENT_TYPES, isRealDate, type DurationUnit } from './trainings.util';
 
-/** Tipos del filtro del RIAC: los tres de desarrollo. */
+/** Tipos del filtro del RIAC: los de desarrollo (los tres originales más SGSI y Bienestar). */
 export const RIAC_TYPES = DEVELOPMENT_TYPES;
 export type RiacType = (typeof RIAC_TYPES)[number];
 
@@ -9,6 +9,8 @@ export const RIAC_TYPE_LABELS: Record<RiacType, string> = {
   tecnico: 'Técnico',
   habilidades_blandas: 'Habilidades Blandas',
   academico: 'Académico',
+  sgsi: 'Sistema de Gestión de Seguridad de la Información',
+  bienestar_psicosocial: 'Bienestar y Factores Psicosociales',
 };
 
 export const RIAC_LEVEL_LABELS: Record<string, string> = {
@@ -16,6 +18,7 @@ export const RIAC_LEVEL_LABELS: Record<string, string> = {
   intermedio: 'Intermedio',
   avanzado: 'Avanzado',
   especializacion: 'Especialización',
+  obligatoria: 'Obligatoria',
 };
 
 /** Tope de filas del Excel; por encima se pide acotar los filtros. */
@@ -50,10 +53,11 @@ export function validateRiacRange(from: string, to: string): void {
   }
 }
 
-/** "40 horas", "1 hora", "6 meses", "1 mes"; vacío si no hay duración. */
+/** "40 horas", "1 hora", "5 días", "1 día", "6 meses", "1 mes"; vacío si no hay duración. */
 export function formatRiacDuration(value: number | null, unit: DurationUnit | null): string {
   if (value === null || unit === null) return '';
-  const word = unit === 'horas' ? (value === 1 ? 'hora' : 'horas') : value === 1 ? 'mes' : 'meses';
+  const words: Record<DurationUnit, [string, string]> = { horas: ['hora', 'horas'], dias: ['día', 'días'], meses: ['mes', 'meses'] };
+  const word = words[unit][value === 1 ? 0 : 1];
   return `${value} ${word}`;
 }
 

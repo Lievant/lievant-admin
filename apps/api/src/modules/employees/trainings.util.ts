@@ -1,8 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const DEVELOPMENT_TYPES = ['tecnico', 'habilidades_blandas', 'academico'] as const;
-export const TRAINING_LEVELS = ['basico', 'intermedio', 'avanzado', 'especializacion'] as const;
-export const DURATION_UNITS = ['horas', 'meses'] as const;
+export const DEVELOPMENT_TYPES = ['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial'] as const;
+export const TRAINING_LEVELS = ['basico', 'intermedio', 'avanzado', 'especializacion', 'obligatoria'] as const;
+export const DURATION_UNITS = ['horas', 'dias', 'meses'] as const;
 
 export type DevelopmentType = (typeof DEVELOPMENT_TYPES)[number];
 export type TrainingLevel = (typeof TRAINING_LEVELS)[number];

@@ -8,6 +8,9 @@ import { EmployeesController } from './employees.controller';
 import { MyProfileService } from './my-profile.service';
 import { TrainingsService } from './trainings.service';
 import {
+  DEVELOPMENT_TYPES,
+  DURATION_UNITS,
+  TRAINING_LEVELS,
   buildTrainingFilter,
   firstReturnedRow,
   isRealDate,
@@ -69,7 +72,7 @@ describe('Capacitaciones · validaciones de negocio', () => {
     expect(() => validateTraining({ ...base, durationUnit: 'horas' })).toThrow(/duración/);
     expect(() => validateTraining({ ...base, durationValue: 0, durationUnit: 'horas' })).toThrow();
     expect(() => validateTraining({ ...base, durationValue: 1.5, durationUnit: 'horas' })).toThrow();
-    expect(() => validateTraining({ ...base, durationValue: 2, durationUnit: 'dias' as never })).toThrow(/unidad/);
+    expect(() => validateTraining({ ...base, durationValue: 2, durationUnit: 'semanas' as never })).toThrow(/unidad/);
   });
 
   it('rechaza tipo y nivel fuera de catálogo', () => {
@@ -93,7 +96,7 @@ describe('Capacitaciones · DTO', () => {
     expect(await errorsOf(CreateTrainingDto, { ...ok, institution: 'x'.repeat(201) })).toContain('institution');
     expect(await errorsOf(CreateTrainingDto, { ...ok, developmentType: 'otro' })).toContain('developmentType');
     expect(await errorsOf(CreateTrainingDto, { ...ok, level: 'experto' })).toContain('level');
-    expect(await errorsOf(CreateTrainingDto, { ...ok, durationValue: 3, durationUnit: 'dias' })).toContain('durationUnit');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, durationValue: 3, durationUnit: 'semanas' })).toContain('durationUnit');
     expect(await errorsOf(CreateTrainingDto, { ...ok, durationValue: -2, durationUnit: 'horas' })).toContain('durationValue');
     expect(await errorsOf(CreateTrainingDto, { ...ok, startDate: '10/01/2026' })).toContain('startDate');
   });
@@ -578,5 +581,53 @@ describe('Capacitaciones · competencias en las listas', () => {
     expect(toTrainingView(row())).not.toHaveProperty('isCompanyRecognition');
     expect(toTrainingView(row()).competencies).toEqual([]);
     expect(toMyTrainingView(row(), [{ id: C1, name: 'x' }]).competencies).toEqual([{ id: C1, name: 'x' }]);
+  });
+});
+
+describe('Capacitaciones · listas ampliadas (tipo, nivel y unidad)', () => {
+  const ok = { name: 'Curso', institution: 'Inst', developmentType: 'tecnico', startDate: '2026-01-10', competencyIds: [C1] };
+  const errorsOf = async (cls: new () => object, plain: object) =>
+    (await validate(plainToInstance(cls, plain) as object)).map((e) => e.property);
+
+  it('las listas quedan en el orden pedido y conservan los valores anteriores', () => {
+    expect([...DEVELOPMENT_TYPES]).toEqual(['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial']);
+    expect([...TRAINING_LEVELS]).toEqual(['basico', 'intermedio', 'avanzado', 'especializacion', 'obligatoria']);
+    expect([...DURATION_UNITS]).toEqual(['horas', 'dias', 'meses']);
+  });
+
+  it('los valores nuevos son válidos en el DTO de alta y de edición, y los viejos siguen válidos', async () => {
+    for (const developmentType of ['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial']) {
+      expect(await errorsOf(CreateTrainingDto, { ...ok, developmentType })).toEqual([]);
+      expect(await errorsOf(UpdateTrainingDto, { developmentType })).toEqual([]);
+    }
+    for (const level of ['basico', 'intermedio', 'avanzado', 'especializacion', 'obligatoria', null]) {
+      expect(await errorsOf(CreateTrainingDto, { ...ok, level })).toEqual([]);
+    }
+    for (const durationUnit of ['horas', 'dias', 'meses']) {
+      expect(await errorsOf(CreateTrainingDto, { ...ok, durationValue: 5, durationUnit })).toEqual([]);
+    }
+  });
+
+  it('un valor inventado se rechaza (tipo, nivel y unidad)', async () => {
+    expect(await errorsOf(CreateTrainingDto, { ...ok, developmentType: 'otro' })).toContain('developmentType');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, level: 'experto' })).toContain('level');
+    expect(await errorsOf(CreateTrainingDto, { ...ok, durationValue: 3, durationUnit: 'semanas' })).toContain('durationUnit');
+    expect(await errorsOf(UpdateTrainingDto, { developmentType: 'SGSI' })).toContain('developmentType');
+  });
+
+  it('validateTraining acepta los nuevos y rechaza los inventados', () => {
+    expect(() => validateTraining({ ...base, developmentType: 'sgsi', level: 'obligatoria', durationValue: 5, durationUnit: 'dias' })).not.toThrow();
+    expect(() => validateTraining({ ...base, developmentType: 'bienestar_psicosocial' })).not.toThrow();
+    expect(() => validateTraining({ ...base, level: 'otro' })).toThrow(/nivel/);
+    expect(() => validateTraining({ ...base, durationValue: 2, durationUnit: 'semanas' as never })).toThrow(/unidad/);
+    // la regla de que valor y unidad van juntos sigue igual con Días
+    expect(() => validateTraining({ ...base, durationUnit: 'dias' })).toThrow(/duración/);
+  });
+
+  it('crear con tipo SGSI, nivel Obligatoria y duración en Días llega a la base con esos valores', async () => {
+    const { service, queries } = setup();
+    await service.create(EMP_A, createDto({ developmentType: 'sgsi', level: 'obligatoria', durationValue: 5, durationUnit: 'dias' }), ACTOR);
+    const insert = queries.find((q) => /INSERT INTO employees\.employee_trainings/.test(q.sql))!;
+    expect(insert.params.slice(3, 9)).toEqual(expect.arrayContaining(['sgsi', 'obligatoria', 5, 'dias']));
   });
 });
