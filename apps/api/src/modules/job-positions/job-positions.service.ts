@@ -228,7 +228,7 @@ export class JobPositionsService {
         `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
            division, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
            reports_to_employee_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
         [
           code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
           lists.division, dto.reportsTo ?? null, dto.plazas ?? null,
