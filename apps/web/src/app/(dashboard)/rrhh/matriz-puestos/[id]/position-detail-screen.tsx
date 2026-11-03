@@ -6,12 +6,11 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeftIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
-import { ActivityDialog, ConfirmDelete, KpiDialog, OkrDialog } from '../item-dialogs';
+import { ActivityDialog, ConfirmDelete, CopyOkrsDialog, KpiDialog, OkrDialog } from '../item-dialogs';
 import { FormattedText } from '../formatted-text';
 import { ModalShell } from '../modal-shell';
 import { PositionFormDialog, readError } from '../position-form-dialog';
 import {
-  BASE_PERIOD,
   EMPTY_OPTIONS,
   FIELD_GUIDES,
   STATUS_BADGE,
@@ -26,7 +25,6 @@ import {
   frequencyLabel,
   groupActivities,
   groupOkrs,
-  hasAnyWeight,
   makePeriod,
   okrPeriodLabel,
   okrsOfPeriod,
@@ -37,6 +35,7 @@ import {
   parsePeriod,
   sumPeriodWeights,
   weightState,
+  weightSummary,
   yearOptions,
   type ActivityItem,
   type GuidedFieldKey,
@@ -82,10 +81,10 @@ function GuidedField({ label, guide, text, bullets }: { label: string; guide: Gu
   );
 }
 
-/** Opciones del selector de periodo: la plantilla y los semestres de los años cercanos (y los que ya tengan datos). */
+/** Opciones del selector de periodo: los semestres de los años cercanos (y los que ya tengan datos). Ya no hay plantilla. */
 function periodOptions(okrs: OkrItem[]): string[] {
-  const years = yearOptions(currentYearMx(), okrs.map((o) => parsePeriod(o.period ?? '')?.year ?? 0).filter(Boolean));
-  return [BASE_PERIOD, ...years.flatMap((y) => [makePeriod(y, 2), makePeriod(y, 1)])];
+  const years = yearOptions(currentYearMx(), okrs.map((o) => parsePeriod(o.period)?.year ?? 0).filter(Boolean));
+  return years.flatMap((y) => [makePeriod(y, 2), makePeriod(y, 1)]);
 }
 
 export function PositionDetailScreen({ id }: { id: string }) {
@@ -112,8 +111,9 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const [vComments, setVComments] = useState('');
   const [vSaved, setVSaved] = useState(false);
 
-  // null = todavía sin elegir: la plantilla si el puesto la tiene, si no el semestre actual.
+  // null = todavía sin elegir: arranca en el semestre actual.
   const [periodChoice, setPeriodChoice] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [okrDialog, setOkrDialog] = useState<OkrItem | 'new' | null>(null);
   const [okrToDelete, setOkrToDelete] = useState<OkrItem | null>(null);
   const [kpiDialog, setKpiDialog] = useState<KpiItem | 'new' | null>(null);
@@ -177,13 +177,12 @@ export function PositionDetailScreen({ id }: { id: string }) {
   }
 
   const approveVisible = canApprove && position.hasDescription && !position.descriptionApproved;
-  const period = periodChoice ?? (position.okrs.some((o) => o.period === null) ? BASE_PERIOD : currentPeriod());
+  const period = periodChoice ?? currentPeriod();
   const okrsInPeriod = okrsOfPeriod(position.okrs, period);
   const activeInPeriod = okrsInPeriod.filter((o) => o.isActive);
   const sum = sumPeriodWeights(position.okrs, period);
-  const anyWeight = hasAnyWeight(position.okrs, period);
-  const wState = anyWeight ? weightState(sum, activeInPeriod.length) : 'empty';
-  const otherPeriods = [...new Set(position.okrs.map((o) => o.period ?? BASE_PERIOD))].filter((p) => p !== period);
+  const wState = weightState(sum, activeInPeriod.length);
+  const otherPeriods = [...new Set(position.okrs.map((o) => o.period))].filter((p) => p !== period);
   const activityGroups = groupActivities(position.activities);
   const validationChanged = vStatus !== position.validationStatus || vComments.trim() !== (position.headComments ?? '');
 
@@ -406,11 +405,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
               {canAssignBulk && (
                 <button
                   type="button"
-                  onClick={() => { setActionError(null); setBulkResult(null); setBulkPeriod(period === BASE_PERIOD ? currentPeriod() : period); setBulkConfirm(true); }}
+                  onClick={() => { setActionError(null); setBulkResult(null); setBulkPeriod(period); setBulkConfirm(true); }}
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50"
                 >
                   Asignar a Colaboradores del Puesto
                 </button>
+              )}
+              {canUpdate && (
+                <button type="button" onClick={() => { setActionError(null); setCopyOpen(true); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50">Copiar a Otro Semestre</button>
               )}
               {canUpdate && (
                 <button type="button" onClick={() => setOkrDialog('new')} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nuevo OKR</button>
@@ -424,19 +426,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
               wState === 'complete' && 'bg-emerald-50 text-emerald-800',
               wState === 'incomplete' && 'bg-amber-50 text-amber-800',
               wState === 'over' && 'bg-red-50 text-red-700',
-              wState === 'empty' && 'bg-slate-50 text-slate-500',
+              wState === 'none' && 'bg-slate-50 text-slate-500',
             )}
           >
-            <strong>{okrPeriodLabel(period)}</strong> · Suma: {anyWeight ? formatPct(sum) : '—'}
-            {wState === 'incomplete' && ` · Falta ${formatPct(Math.round((100 - sum) * 100) / 100)} para llegar a 100 %`}
+            <strong>{okrPeriodLabel(period)}</strong>
+            {wState === 'none' ? ' · Sin OKRs activos en este periodo' : ` · ${weightSummary(sum)}`}
+            {wState === 'incomplete' && ' (aviso: no impide guardar)'}
             {wState === 'complete' && ' · Completo'}
-            {wState === 'over' && ' · Pasa de 100 %'}
-            {activeInPeriod.length === 0 && ' · Sin OKRs activos en este periodo'}
-            {activeInPeriod.length > 0 && !anyWeight && ' · Sin pesos asignados'}
           </div>
-          {period === BASE_PERIOD && okrsInPeriod.length > 0 && (
-            <p className="text-xs text-slate-500">La plantilla vale para cualquier semestre: al asignar OKRs a un colaborador se copia junto con los OKRs de ese semestre.</p>
-          )}
           {otherPeriods.length > 0 && (
             <p className="text-xs text-slate-400">Otros periodos con OKRs: {otherPeriods.map(okrPeriodLabel).join(', ')}</p>
           )}
@@ -457,7 +454,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
                           <p className="whitespace-pre-line text-sm text-slate-700">{o.keyResult}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{o.weight !== null ? formatPct(o.weight) : 'Sin peso'}</span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{formatPct(o.weight)}</span>
                           <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', o.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>{o.isActive ? 'Activo' : 'Inactivo'}</span>
                         </div>
                         {canUpdate && (
@@ -544,6 +541,19 @@ export function PositionDetailScreen({ id }: { id: string }) {
         />
       )}
 
+      {copyOpen && (
+        <CopyOkrsDialog
+          positionId={id}
+          fromPeriod={period}
+          activeCount={activeInPeriod.length}
+          onClose={() => setCopyOpen(false)}
+          onDone={() => {
+            setCopyOpen(false);
+            void load();
+          }}
+        />
+      )}
+
       {kpiDialog && (
         <KpiDialog
           positionId={id}
@@ -613,11 +623,11 @@ export function PositionDetailScreen({ id }: { id: string }) {
               <div className="flex flex-col gap-1">
                 <label htmlFor="bulk-period" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semestre a Asignar</label>
                 <select id="bulk-period" value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)} className={SELECT}>
-                  {periodOptions(position.okrs).filter((p) => p !== BASE_PERIOD).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
+                  {periodOptions(position.okrs).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
                 </select>
               </div>
               <p className="mt-3 text-sm text-slate-600">
-                Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> (más los de la plantilla, sin periodo) y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
+                Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
               </p>
             </>
           )}

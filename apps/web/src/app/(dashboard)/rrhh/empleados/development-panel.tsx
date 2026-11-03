@@ -250,9 +250,9 @@ export function DevelopmentPanel(props: Source) {
           )}
         </div>
 
-        <p className={cn('mt-3 rounded-lg px-3 py-2 text-sm', state === 'complete' && 'bg-emerald-50 text-emerald-800', state === 'incomplete' && 'bg-amber-50 text-amber-800', state === 'over' && 'bg-red-50 text-red-700', state === 'empty' && 'bg-slate-50 text-slate-500')}>
+        <p className={cn('mt-3 rounded-lg px-3 py-2 text-sm', state === 'complete' && 'bg-emerald-50 text-emerald-800', state === 'incomplete' && 'bg-amber-50 text-amber-800', state === 'over' && 'bg-red-50 text-red-700', state === 'none' && 'bg-slate-50 text-slate-500')}>
           <strong>{periodLabel(period)}</strong> · Suma: {formatPct(data.weightSum)}
-          {state === 'empty' && ' · Sin OKRs en este periodo'}
+          {state === 'none' && ' · Sin OKRs en este periodo'}
         </p>
         {others.length > 0 && <p className="mt-2 text-xs text-slate-400">Otros periodos con OKRs: {others.map(periodLabel).join(', ')}</p>}
 

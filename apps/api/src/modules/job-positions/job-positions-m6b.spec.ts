@@ -4,7 +4,7 @@ import { validate } from 'class-validator';
 import { CreateKpiDto, CreateOkrDto, ImportBodyDto, UpdateOkrDto, UpdatePositionDto } from './dto/job-position.dto';
 import { JobPositionItemsService } from './job-position-items.service';
 import { JobPositionsService } from './job-positions.service';
-import { applyValidationChange, buildPositionWhere, normalizeOkrPeriod } from './job-positions.util';
+import { applyValidationChange, buildPositionWhere, requireOkrPeriod, splitWeights } from './job-positions.util';
 
 const ACTOR = { id: 'user-1', email: 'rrhh@lievant.com', name: 'RRHH' };
 const NOW = new Date('2026-03-01T10:00:00Z');
@@ -29,14 +29,22 @@ describe('Matriz de Puestos (M6-B) · estado de validación', () => {
   });
 });
 
-describe('Matriz de Puestos (M6-B) · periodo de plantilla y filtros', () => {
-  it('vacío, null y «base» son plantilla (NULL); un semestre válido se conserva; undefined = sin cambio', () => {
-    expect(normalizeOkrPeriod(undefined)).toBeUndefined();
-    expect(normalizeOkrPeriod(null)).toBeNull();
-    expect(normalizeOkrPeriod('')).toBeNull();
-    expect(normalizeOkrPeriod(' base ')).toBeNull();
-    expect(normalizeOkrPeriod('2026-S1')).toBe('2026-S1');
-    expect(() => normalizeOkrPeriod('2026-S3')).toThrow();
+describe('Matriz de Puestos (M6-B) · semestre obligatorio y filtros', () => {
+  it('el semestre es obligatorio: vacío, null, undefined y «base» se rechazan; AAAA-S1/S2 se conserva', () => {
+    for (const bad of [undefined, null, '', '  ', 'base', ' base ', '2026-S3']) expect(() => requireOkrPeriod(bad as never)).toThrow();
+    expect(requireOkrPeriod('2026-S1')).toBe('2026-S1');
+    expect(requireOkrPeriod(' 2026-S2 ')).toBe('2026-S2');
+  });
+  it('el reparto equitativo con enteros: 100/3 → 34, 33, 33; sin capacidad para 1 por OKR → null', () => {
+    expect(splitWeights(100, 3)).toEqual([34, 33, 33]);
+    expect(splitWeights(100, 1)).toEqual([100]);
+    expect(splitWeights(100, 4)).toEqual([25, 25, 25, 25]);
+    expect(splitWeights(70, 3)).toEqual([24, 23, 23]);
+    expect(splitWeights(3, 3)).toEqual([1, 1, 1]);
+    expect(splitWeights(2, 3)).toBeNull();
+    expect(splitWeights(0, 1)).toBeNull();
+    expect(splitWeights(50, 0)).toEqual([]);
+    expect(splitWeights(100, 3)!.reduce((a, b) => a + b, 0)).toBe(100);
   });
   it('filtros de división y estado de validación como parámetros', () => {
     const { where, params } = buildPositionWhere({ division: 'E-Commerce', validationStatus: 'validado' });
@@ -59,9 +67,9 @@ function fakeDb(answer: (sql: string, params: unknown[]) => unknown) {
   return { db, calls };
 }
 
-describe('Matriz de Puestos (M6-B) · OKRs de plantilla', () => {
+describe('Matriz de Puestos (M6-B) · OKRs por semestre', () => {
   const okrRow = (over: Record<string, unknown> = {}) => ({
-    id: 'o1', job_position_id: 'p1', period: null, objective_code: 'O1', kr_code: 'KR1', objective: 'Obj', key_result: 'KR', weight: null, sort_order: 0, is_active: true, ...over,
+    id: 'o1', job_position_id: 'p1', period: '2026-S1', objective_code: 'O1', kr_code: 'KR1', objective: 'Obj', key_result: 'KR', weight: 50, sort_order: 0, is_active: true, ...over,
   });
   const build = (others: unknown[] = []) => {
     const { db, calls } = fakeDb((sql) => {
@@ -75,30 +83,38 @@ describe('Matriz de Puestos (M6-B) · OKRs de plantilla', () => {
     return { service: new JobPositionItemsService(db as never, audit as never), calls, audit };
   };
 
-  it('alta sin periodo: queda NULL (plantilla) con códigos, y los pesos se validan en su propio grupo', async () => {
+  it('alta con semestre y peso: guarda códigos y los pesos se validan dentro del mismo semestre', async () => {
     const { service, calls, audit } = build();
-    const okr = await service.createOkr('p1', { objective: 'Obj', keyResult: 'KR', objectiveCode: 'O1', krCode: 'KR1' }, ACTOR);
-    expect(okr).toMatchObject({ period: null, objectiveCode: 'O1', krCode: 'KR1', weight: null });
+    const okr = await service.createOkr('p1', { period: '2026-S1', weight: 50, objective: 'Obj', keyResult: 'KR', objectiveCode: 'O1', krCode: 'KR1' }, ACTOR);
+    expect(okr).toMatchObject({ period: '2026-S1', objectiveCode: 'O1', krCode: 'KR1', weight: 50 });
     const weights = calls.find((c) => /^SELECT weight/.test(c.sql))!;
-    expect(weights.sql).toContain('period IS NOT DISTINCT FROM $2');
-    expect(weights.params[1]).toBeNull();
+    expect(weights.sql).toContain('period = $2');
+    expect(weights.params[1]).toBe('2026-S1');
     const insert = calls.find((c) => /^INSERT INTO hr\.job_position_okrs/.test(c.sql))!;
-    expect(insert.params.slice(0, 4)).toEqual(['p1', null, 'O1', 'KR1']);
-    expect(audit.logActivity.mock.calls[0]![0].entityName).toBe('JP-001 · Plantilla');
+    expect(insert.params.slice(0, 4)).toEqual(['p1', '2026-S1', 'O1', 'KR1']);
+    expect(audit.logActivity.mock.calls[0]![0].entityName).toBe('JP-001 · 2026-S1');
   });
 
-  it('«base» también es plantilla; la suma de pesos de la plantilla no pasa de 100', async () => {
-    const { service } = build([{ weight: '70' }]);
-    await expect(service.createOkr('p1', { period: 'base', objective: 'O', keyResult: 'K', weight: 40 }, ACTOR)).rejects.toThrow(/no puede pasar de 100/);
-  });
-
-  it('listar «base» pide solo la plantilla; sin parámetro, todos', async () => {
+  it('ya no existe la plantilla: «base» y la falta de semestre se rechazan', async () => {
     const { service, calls } = build();
-    await service.listOkrs('p1', 'base');
+    await expect(service.createOkr('p1', { period: 'base', objective: 'O', keyResult: 'K', weight: 40 }, ACTOR)).rejects.toThrow(/AAAA-S1 o AAAA-S2/);
+    await expect(service.createOkr('p1', { objective: 'O', keyResult: 'K', weight: 40 } as never, ACTOR)).rejects.toThrow(/semestre es obligatorio/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('la suma de pesos del semestre no pasa de 100', async () => {
+    const { service } = build([{ weight: '70' }]);
+    await expect(service.createOkr('p1', { period: '2026-S1', objective: 'O', keyResult: 'K', weight: 40 }, ACTOR)).rejects.toThrow(/no puede pasar de 100/);
+  });
+
+  it('listar un semestre pide solo ese semestre; sin parámetro, todos; «base» ya no es válido', async () => {
+    const { service, calls } = build();
+    await service.listOkrs('p1', '2026-S2');
     await service.listOkrs('p1');
+    await expect(service.listOkrs('p1', 'base')).rejects.toThrow(/AAAA-S1 o AAAA-S2/);
     const lists = calls.filter((c) => /^SELECT .* FROM hr\.job_position_okrs/.test(c.sql));
-    expect(lists[0]!.params[1]).toBe('base');
-    expect(lists[0]!.sql).toContain("($2 = 'base' AND period IS NULL)");
+    expect(lists[0]!.params[1]).toBe('2026-S2');
+    expect(lists[0]!.sql).not.toMatch(/period IS NULL|'base'/);
     expect(lists[1]!.params[1]).toBeNull();
   });
 
@@ -167,13 +183,16 @@ describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nue
 describe('Matriz de Puestos (M6-B) · validación de los DTO', () => {
   const errs = async (cls: new () => object, plain: object) => (await validate(plainToInstance(cls, plain))).map((e) => e.property);
 
-  it('OKR: periodo vacío o «base» es plantilla; formato inválido o códigos largos se rechazan', async () => {
-    expect(await errs(CreateOkrDto, { objective: 'O', keyResult: 'K' })).toEqual([]);
-    expect(await errs(CreateOkrDto, { period: '', objective: 'O', keyResult: 'K' })).toEqual([]);
-    expect(await errs(CreateOkrDto, { period: 'base', objective: 'O', keyResult: 'K', objectiveCode: 'O1', krCode: 'KR1' })).toEqual([]);
-    expect(await errs(CreateOkrDto, { period: '2026-S3', objective: 'O', keyResult: 'K' })).toEqual(['period']);
-    expect(await errs(CreateOkrDto, { objective: 'O', keyResult: 'K', objectiveCode: 'x'.repeat(11) })).toEqual(['objectiveCode']);
-    expect(await errs(UpdateOkrDto, { period: 'base' })).toEqual([]);
+  it('OKR: el semestre es obligatorio (vacío o «base» se rechazan); formato inválido o códigos largos también', async () => {
+    const ok = { period: '2026-S1', weight: 50, objective: 'O', keyResult: 'K' };
+    expect(await errs(CreateOkrDto, { ...ok, objectiveCode: 'O1', krCode: 'KR1' })).toEqual([]);
+    expect(await errs(CreateOkrDto, { ...ok, period: '' })).toEqual(['period']);
+    expect(await errs(CreateOkrDto, { ...ok, period: 'base' })).toEqual(['period']);
+    expect(await errs(CreateOkrDto, { weight: 50, objective: 'O', keyResult: 'K' })).toEqual(['period']);
+    expect(await errs(CreateOkrDto, { ...ok, period: '2026-S3' })).toEqual(['period']);
+    expect(await errs(CreateOkrDto, { ...ok, objectiveCode: 'x'.repeat(11) })).toEqual(['objectiveCode']);
+    expect(await errs(UpdateOkrDto, { period: 'base' })).toEqual(['period']);
+    expect(await errs(UpdateOkrDto, { period: '2026-S2' })).toEqual([]);
   });
   it('KPI: frecuencias nuevas válidas', async () => {
     for (const f of ['diario', 'semanal', 'quincenal', 'mensual']) expect(await errs(CreateKpiDto, { name: 'K', measurementFrequency: f })).toEqual([]);
@@ -184,8 +203,10 @@ describe('Matriz de Puestos (M6-B) · validación de los DTO', () => {
     expect(await errs(UpdatePositionDto, { validationStatus: 'quizá' })).toEqual(['validationStatus']);
     expect(await errs(UpdatePositionDto, { plazas: -1 })).toEqual(['plazas']);
   });
-  it('importación: modo y división obligatorios', async () => {
-    expect(await errs(ImportBodyDto, { mode: 'preview', division: 'E-Commerce' })).toEqual([]);
-    expect((await errs(ImportBodyDto, { mode: 'otro', division: '' })).sort()).toEqual(['division', 'mode']);
+  it('importación: modo, división y semestre obligatorios', async () => {
+    expect(await errs(ImportBodyDto, { mode: 'preview', division: 'E-Commerce', period: '2026-S1' })).toEqual([]);
+    expect((await errs(ImportBodyDto, { mode: 'otro', division: '', period: '2026-S1' })).sort()).toEqual(['division', 'mode']);
+    expect(await errs(ImportBodyDto, { mode: 'apply', division: 'E-Commerce' })).toEqual(['period']);
+    for (const bad of ['base', '2026-S3', '', '2026']) expect(await errs(ImportBodyDto, { mode: 'apply', division: 'E-Commerce', period: bad })).toEqual(['period']);
   });
 });

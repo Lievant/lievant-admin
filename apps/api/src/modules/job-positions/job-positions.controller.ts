@@ -24,6 +24,7 @@ import {
   CreateActivityDto,
   CreateAreaDto,
   CreateKpiDto,
+  CopyOkrsDto,
   CreateOkrDto,
   CreatePositionDto,
   EmployeeSearchQueryDto,
@@ -78,7 +79,7 @@ export class JobPositionsController {
   @RequirePermission('rrhh', 'matriz-puestos', 'import')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES + 1, files: 1 } }))
   importPositions(@Body() body: ImportBodyDto, @UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: User) {
-    return this.importer.run(body.mode, body.division, file, actorOf(user));
+    return this.importer.run(body.mode, body.division, file, actorOf(user), body.period);
   }
 
   /** Buscador de empleados activos para «Reporta a» (solo id, nombre, cargo y área). Va antes de `:id`. */
@@ -171,6 +172,13 @@ export class JobPositionsController {
   @RequirePermission('rrhh', 'matriz-puestos', 'update')
   createOkr(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateOkrDto, @CurrentUser() user: User) {
     return this.items.createOkr(id, dto, actorOf(user));
+  }
+
+  /** Copia los OKRs activos de un semestre a otro (todo o nada). Mismo permiso que editar OKRs de la Matriz. */
+  @Post('job-positions/:id/okrs/copy')
+  @RequirePermission('rrhh', 'matriz-puestos', 'update')
+  copyOkrs(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CopyOkrsDto, @CurrentUser() user: User) {
+    return this.items.copyOkrs(id, dto, actorOf(user));
   }
 
   @Patch('job-position-okrs/:okrId')

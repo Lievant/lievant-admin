@@ -326,6 +326,18 @@ describe('Desarrollo Organizacional · asignar OKRs y KPIs', () => {
     expect(kpi.sql).not.toContain('period'); // los KPIs no dependen del periodo
   });
 
+  it('ya no copia OKRs sin periodo: el conteo y el INSERT piden el semestre exacto', async () => {
+    const { service, db } = build();
+    await service.assign(E1, '2026-S2', ACTOR);
+    for (const c of db.calls.filter((x) => /hr\.job_position_okrs/.test(x.sql))) {
+      expect(c.sql).not.toMatch(/period IS NULL/i);
+      expect(c.sql).not.toMatch(/OR\s+\(?\w*\.?period/i);
+    }
+    const count = db.calls.find((c) => /COUNT\(\*\) AS n FROM hr\.job_position_okrs/.test(c.sql))!;
+    expect(count.sql).toContain('period = $2');
+    expect(count.params).toEqual([P1, '2026-S2']);
+  });
+
   it('es idempotente: lo ya copiado se omite (ON CONFLICT por origen) y la respuesta dice copiados y omitidos', async () => {
     const first = build({ okrInPosition: 3, okrNew: 3, kpiInPosition: 2, kpiNew: 2 });
     const r1 = await first.service.assign(E1, '2026-S2', ACTOR);
