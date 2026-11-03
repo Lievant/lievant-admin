@@ -32,8 +32,9 @@ import { PasswordsService } from './passwords.service';
  * TIC-RE-17. Cualquier usuario autenticado puede abrir la pantalla. Ver,
  * revelar, crear, editar y revocar no piden permiso: el alcance lo fija el
  * servicio en cada llamada y vale para las cuentas propias y las de los
- * subordinados directos activos. Solo el catálogo de aplicaciones conserva
- * `herramientas.passwords.write`.
+ * subordinados directos activos. Dar de alta una aplicación en el catálogo
+ * tampoco pide permiso (con tope por usuario); editarla o desactivarla sí
+ * conserva `herramientas.passwords.write`.
  */
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('passwords')
@@ -50,10 +51,12 @@ export class PasswordsController {
     return this.service.listApplications();
   }
 
+  // Sin permiso: cualquier usuario autenticado puede dar de alta una aplicación
+  // desde el modal de cuenta. El servicio normaliza, rechaza duplicados y topa
+  // las altas por usuario.
   @Post('applications')
-  @RequirePermission('herramientas', 'passwords', 'write')
-  createApplication(@Body() dto: CreatePasswordApplicationDto) {
-    return this.service.createApplication(dto);
+  createApplication(@CurrentUser() user: User, @Body() dto: CreatePasswordApplicationDto) {
+    return this.service.createApplication(dto, user.id);
   }
 
   @Patch('applications/:id')

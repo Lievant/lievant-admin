@@ -25,8 +25,6 @@ interface PasswordDialogProps {
   people: PasswordVisiblePerson[];
   /** Titular preseleccionado al crear: la persona elegida en el selector de la pantalla. */
   defaultEmployeeId: string;
-  /** Agregar aplicaciones al catálogo exige el permiso de escritura del catálogo. */
-  canAddApplication?: boolean;
   onClose: () => void;
   /** `warnings`: sugerencias sobre la contraseña guardada (reutilizada, débil); no bloquean. */
   onSaved: (message: string, warnings: string[]) => void;
@@ -37,7 +35,6 @@ export function PasswordDialog({
   applications,
   people,
   defaultEmployeeId,
-  canAddApplication = false,
   onClose,
   onSaved,
 }: PasswordDialogProps) {
@@ -99,7 +96,6 @@ export function PasswordDialog({
               applications={appOptions}
               value={applicationId}
               onChange={setApplicationId}
-              canAdd={canAddApplication}
               onCreated={(app) => {
                 setApps((prev) => [...prev, app]);
                 setApplicationId(app.id);
@@ -287,19 +283,18 @@ function errorMessage(body: unknown, fallback: string): string {
 /**
  * Autocompletado sobre el catálogo. Elegir «Otra» (o «Agregar aplicación»)
  * abre un campo para darla de alta: se crea en el catálogo y queda elegida.
+ * Cualquier usuario puede dar de alta; editar o desactivar sigue en Catálogos.
  * Si el nombre ya existe se ofrece usar la existente.
  */
 function ApplicationCombobox({
   applications,
   value,
   onChange,
-  canAdd,
   onCreated,
 }: {
   applications: PasswordApplication[];
   value: string;
   onChange: (id: string) => void;
-  canAdd: boolean;
   onCreated: (app: PasswordApplication) => void;
 }) {
   const selected = applications.find((a) => a.id === value) ?? null;
@@ -347,11 +342,7 @@ function ApplicationCombobox({
       });
       const body = (await res.json().catch(() => null)) as unknown;
       if (!res.ok) {
-        setAddError(
-          res.status === 403
-            ? 'No tienes permiso para agregar aplicaciones al catálogo.'
-            : errorMessage(body, 'No se pudo crear la aplicación.'),
-        );
+        setAddError(errorMessage(body, 'No se pudo crear la aplicación.'));
         return;
       }
       const app = body as PasswordApplication;
@@ -399,7 +390,7 @@ function ApplicationCombobox({
         )}
       </div>
 
-      {adding && canAdd && (
+      {adding && (
         <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50 p-3">
           <label className={labelClass} htmlFor="pw-new-app">
             Nombre de la aplicación
@@ -455,12 +446,7 @@ function ApplicationCombobox({
           {addError && <p className="text-xs text-rose-600">{addError}</p>}
         </div>
       )}
-      {adding && !canAdd && (
-        <p className="text-xs text-slate-500">
-          Puedes guardar la cuenta con «Otra». Para agregar la aplicación al catálogo, pídeselo a TI.
-        </p>
-      )}
-      {!adding && canAdd && (
+      {!adding && (
         <button
           type="button"
           onClick={() => {
