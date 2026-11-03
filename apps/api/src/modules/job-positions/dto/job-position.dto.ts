@@ -328,6 +328,15 @@ export class CreateOkrDto {
   isActive?: boolean;
 }
 
+/** Copia de los OKRs activos de un semestre a otro. */
+export class CopyOkrsDto {
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
+  fromPeriod!: string;
+
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
+  toPeriod!: string;
+}
+
 export class UpdateOkrDto {
   /** Si viene no puede ser null ni vacío. */
   @ValidateIf((o: UpdateOkrDto) => o.period !== undefined)

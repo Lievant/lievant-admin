@@ -24,6 +24,7 @@ import {
   CreateActivityDto,
   CreateAreaDto,
   CreateKpiDto,
+  CopyOkrsDto,
   CreateOkrDto,
   CreatePositionDto,
   EmployeeSearchQueryDto,
@@ -171,6 +172,13 @@ export class JobPositionsController {
   @RequirePermission('rrhh', 'matriz-puestos', 'update')
   createOkr(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CreateOkrDto, @CurrentUser() user: User) {
     return this.items.createOkr(id, dto, actorOf(user));
+  }
+
+  /** Copia los OKRs activos de un semestre a otro (todo o nada). Mismo permiso que editar OKRs de la Matriz. */
+  @Post('job-positions/:id/okrs/copy')
+  @RequirePermission('rrhh', 'matriz-puestos', 'update')
+  copyOkrs(@Param('id', ParseUUIDPipe) id: string, @Body() dto: CopyOkrsDto, @CurrentUser() user: User) {
+    return this.items.copyOkrs(id, dto, actorOf(user));
   }
 
   @Patch('job-position-okrs/:okrId')

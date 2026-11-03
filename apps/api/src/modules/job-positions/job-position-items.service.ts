@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { AuditService } from '../audit/audit.service';
-import { CreateKpiDto, CreateOkrDto, UpdateKpiDto, UpdateOkrDto } from './dto/job-position.dto';
+import { CopyOkrsDto, CreateKpiDto, CreateOkrDto, UpdateKpiDto, UpdateOkrDto } from './dto/job-position.dto';
+import { normText } from './job-positions-catalog.util';
 import type { Actor } from './job-positions.service';
 import {
   KPI_NOT_FOUND,
@@ -12,6 +13,8 @@ import {
   assertPeriod,
   assertWeightSum,
   requireOkrPeriod,
+  sumWeights,
+  MAX_WEIGHT_SUM,
   toKpiView,
   toOkrView,
   type KpiRow,
@@ -71,7 +74,7 @@ export class JobPositionItemsService {
   }
 
   private async log(
-    action: 'create' | 'update' | 'delete',
+    action: 'create' | 'update' | 'delete' | 'copy',
     actor: Actor,
     entityType: 'job_position_okr' | 'job_position_kpi',
     entityId: string,
@@ -180,6 +183,70 @@ export class JobPositionItemsService {
     if (before.kr_code !== after.kr_code) diff.krCode = { from: before.kr_code, to: after.kr_code };
     await this.log('update', actor, 'job_position_okr', okrId, `${position.code} · ${after.period}`, diff);
     return toOkrView(after);
+  }
+
+  /**
+   * Copia los OKRs activos y vivos de `fromPeriod` a `toPeriod` con códigos, textos, peso y orden. Omite los que ya
+   * existen en el destino (misma clave objective_code + kr_code si ambos existen; si no, objective + key_result
+   * normalizados). Todo o nada: si la suma final de pesos activos del destino pasara de 100, no se copia nada.
+   */
+  async copyOkrs(positionId: string, dto: CopyOkrsDto, actor: Actor): Promise<{ fromPeriod: string; toPeriod: string; copied: number; skipped: number }> {
+    const fromPeriod = requireOkrPeriod(dto.fromPeriod);
+    const toPeriod = requireOkrPeriod(dto.toPeriod);
+    if (fromPeriod === toPeriod) throw new BadRequestException('El semestre de origen y el de destino deben ser distintos');
+
+    const { position, copied, skipped } = await this.dataSource.transaction(async (m) => {
+      const position = await this.lockPosition(m, positionId);
+      const source = (await m.query(
+        `SELECT ${OKR_COLS} FROM hr.job_position_okrs
+         WHERE job_position_id = $1 AND period = $2 AND deleted_at IS NULL AND is_active = true
+         ORDER BY sort_order ASC, created_at ASC`,
+        [positionId, fromPeriod],
+      )) as OkrRow[];
+      const target = (await m.query(
+        `SELECT ${OKR_COLS} FROM hr.job_position_okrs WHERE job_position_id = $1 AND period = $2 AND deleted_at IS NULL`,
+        [positionId, toPeriod],
+      )) as OkrRow[];
+
+      const codeKey = (o: OkrRow): string | null => (o.objective_code && o.kr_code ? `${o.objective_code}|${o.kr_code}` : null);
+      const textKey = (o: OkrRow): string => `${normText(o.objective)}|${normText(o.key_result)}`;
+      const targetCodes = new Set(target.map(codeKey).filter((k): k is string => k !== null));
+      const targetTexts = new Set(target.map(textKey));
+
+      const toCopy: OkrRow[] = [];
+      for (const o of source) {
+        const ck = codeKey(o);
+        const exists = ck !== null ? targetCodes.has(ck) : targetTexts.has(textKey(o));
+        if (!exists) toCopy.push(o);
+      }
+
+      // El tope de 100 aplica al total activo del semestre destino (lo que ya tenía + lo que se copia).
+      const total = sumWeights([
+        ...target.filter((o) => o.is_active).map((o) => Number(o.weight)),
+        ...toCopy.map((o) => Number(o.weight)),
+      ]);
+      if (total > MAX_WEIGHT_SUM) {
+        throw new BadRequestException(
+          `La suma de pesos de ${toPeriod} no puede pasar de ${MAX_WEIGHT_SUM} % (con esta copia quedaría en ${total} %). No se copió nada`,
+        );
+      }
+      if (toCopy.length > 0) {
+        await m.query(
+          `INSERT INTO hr.job_position_okrs (job_position_id, period, objective_code, kr_code, objective, key_result, weight, sort_order, is_active)
+           SELECT job_position_id, $2, objective_code, kr_code, objective, key_result, weight, sort_order, true
+           FROM hr.job_position_okrs WHERE id = ANY($1::uuid[]) ORDER BY sort_order ASC, created_at ASC`,
+          [toCopy.map((o) => o.id), toPeriod],
+        );
+      }
+      return { position, copied: toCopy.length, skipped: source.length - toCopy.length };
+    });
+    await this.log('copy', actor, 'job_position_okr', positionId, `${position.code} · ${fromPeriod} → ${toPeriod}`, {
+      fromPeriod: { from: null, to: fromPeriod },
+      toPeriod: { from: null, to: toPeriod },
+      copied: { from: null, to: copied },
+      skipped: { from: null, to: skipped },
+    });
+    return { fromPeriod, toPeriod, copied, skipped };
   }
 
   async removeOkr(okrId: string, actor: Actor): Promise<void> {
