@@ -502,6 +502,10 @@ export class ImportBodyDto {
   @IsIn(['preview', 'apply'])
   mode!: 'preview' | 'apply';
 
+  /** Semestre (AAAA-S1 o AAAA-S2) en el que se crean los OKRs nuevos y sobre el que se comparan los existentes. */
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
+  period!: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)

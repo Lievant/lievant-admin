@@ -78,7 +78,7 @@ export class JobPositionsController {
   @RequirePermission('rrhh', 'matriz-puestos', 'import')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_IMPORT_BYTES + 1, files: 1 } }))
   importPositions(@Body() body: ImportBodyDto, @UploadedFile() file: Express.Multer.File | undefined, @CurrentUser() user: User) {
-    return this.importer.run(body.mode, body.division, file, actorOf(user));
+    return this.importer.run(body.mode, body.division, file, actorOf(user), body.period);
   }
 
   /** Buscador de empleados activos para «Reporta a» (solo id, nombre, cargo y área). Va antes de `:id`. */

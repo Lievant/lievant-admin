@@ -203,8 +203,10 @@ describe('Matriz de Puestos (M6-B) · validación de los DTO', () => {
     expect(await errs(UpdatePositionDto, { validationStatus: 'quizá' })).toEqual(['validationStatus']);
     expect(await errs(UpdatePositionDto, { plazas: -1 })).toEqual(['plazas']);
   });
-  it('importación: modo y división obligatorios', async () => {
-    expect(await errs(ImportBodyDto, { mode: 'preview', division: 'E-Commerce' })).toEqual([]);
-    expect((await errs(ImportBodyDto, { mode: 'otro', division: '' })).sort()).toEqual(['division', 'mode']);
+  it('importación: modo, división y semestre obligatorios', async () => {
+    expect(await errs(ImportBodyDto, { mode: 'preview', division: 'E-Commerce', period: '2026-S1' })).toEqual([]);
+    expect((await errs(ImportBodyDto, { mode: 'otro', division: '', period: '2026-S1' })).sort()).toEqual(['division', 'mode']);
+    expect(await errs(ImportBodyDto, { mode: 'apply', division: 'E-Commerce' })).toEqual(['period']);
+    for (const bad of ['base', '2026-S3', '', '2026']) expect(await errs(ImportBodyDto, { mode: 'apply', division: 'E-Commerce', period: bad })).toEqual(['period']);
   });
 });

@@ -8,6 +8,7 @@ import { JobPositionsImportService } from './job-positions-import.service';
 
 /** Memoria que imita lo que el servicio le pide a la base (solo las consultas de la importación). */
 type Row = Record<string, unknown>;
+const PERIOD = '2026-S1';
 class FakeDb {
   positions: Row[] = [];
   activities: Row[] = [];
@@ -55,7 +56,7 @@ class FakeDb {
       return live(this.activities).filter((a) => a.job_position_id === params[0]).sort((a, b) => (a.group_order as number) - (b.group_order as number) || (a.sort_order as number) - (b.sort_order as number));
     }
     if (/^SELECT id, objective_code.* FROM hr\.job_position_okrs/.test(sql)) {
-      return live(this.okrs).filter((o) => o.job_position_id === params[0] && o.period === null).sort((a, b) => (a.sort_order as number) - (b.sort_order as number));
+      return live(this.okrs).filter((o) => o.job_position_id === params[0] && o.period === params[1]).sort((a, b) => (a.sort_order as number) - (b.sort_order as number));
     }
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
@@ -92,8 +93,8 @@ class FakeDb {
       return [];
     }
     if (/^INSERT INTO hr\.job_position_okrs/.test(sql)) {
-      const [pid, oc, kc, o, k, so] = params;
-      this.okrs.push({ id: this.id('O'), job_position_id: pid, period: null, objective_code: oc, kr_code: kc, objective: o, key_result: k, weight: null, sort_order: so, is_active: true, deleted_at: null });
+      const [pid, period, oc, kc, o, k, weight, so] = params;
+      this.okrs.push({ id: this.id('O'), job_position_id: pid, period, objective_code: oc, kr_code: kc, objective: o, key_result: k, weight, sort_order: so, is_active: true, deleted_at: null });
       return [];
     }
     if (/^UPDATE hr\.job_position_kpis SET name = \$2/.test(sql)) {
@@ -155,7 +156,7 @@ function setup() {
 describe('Importación de la Matriz · vista previa', () => {
   it('no escribe nada ni audita; dice crear y da los conteos', async () => {
     const { db, audit, service } = setup();
-    const r = await service.run('preview', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    const r = await service.run('preview', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD);
     expect(db.writes).toEqual([]);
     expect(audit.logActivity).not.toHaveBeenCalled();
     expect(r.applied).toBe(false);
@@ -167,9 +168,9 @@ describe('Importación de la Matriz · vista previa', () => {
 });
 
 describe('Importación de la Matriz · aplicar', () => {
-  it('crea puestos con código consecutivo, activos y sin descripción; OKRs de plantilla sin periodo ni peso; la vacante con plazas 0', async () => {
+  it('crea puestos con código consecutivo, activos y sin descripción; OKRs del semestre elegido con peso entero repartido; la vacante con plazas 0', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD);
     expect(r.applied).toBe(true);
     expect(db.positions.map((p) => [p.code, p.title, p.division, p.status, p.description, p.plazas])).toEqual([
       ['JP-001', 'TEST-Analista', 'TEST-Ecom', 'activo', null, 2],
@@ -177,7 +178,9 @@ describe('Importación de la Matriz · aplicar', () => {
     ]);
     expect(db.positions[0]).toMatchObject({ validation_status: 'pendiente', level: 'II', role_summary: 'TEST-Rol' });
     expect(db.okrs).toHaveLength(4);
-    expect(db.okrs.every((o) => o.period === null && o.weight === null && o.is_active === true)).toBe(true);
+    expect(db.okrs.every((o) => o.period === PERIOD && o.is_active === true)).toBe(true);
+    // 2 OKRs por puesto: 100 entre 2 = 50 y 50
+    expect(db.okrs.map((o) => o.weight)).toEqual([50, 50, 50, 50]);
     expect(db.okrs.slice(0, 2).map((o) => [o.objective_code, o.kr_code, o.objective])).toEqual([['O1', 'KR1', 'TEST-Obj uno.'], ['O1', 'KR2', 'TEST-Obj uno.']]);
     expect(db.kpis.map((k) => [k.name, k.measurement_frequency, k.description])).toEqual([
       ['TEST-KPI A', 'mensual', null], ['TEST-KPI B', 'semanal', 'detalle'], ['TEST-KPI A', 'mensual', null], ['TEST-KPI B', 'semanal', 'detalle'],
@@ -187,13 +190,13 @@ describe('Importación de la Matriz · aplicar', () => {
 
   it('audita archivo, división y conteos, y cada área nueva del catálogo', async () => {
     const { audit, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD);
     const calls = audit.logActivity.mock.calls.map((c) => c[0]);
     const imp = calls.find((c) => c.action === 'import');
     expect(imp).toMatchObject({ module: 'matriz-puestos', userId: 'user-1', entityName: 'TEST-matriz.xlsx' });
     expect(imp.changes).toEqual({
       fileName: { from: null, to: 'TEST-matriz.xlsx' }, division: { from: null, to: 'TEST-Ecom' },
-      created: { from: null, to: 2 }, updated: { from: null, to: 0 }, unchanged: { from: null, to: 0 }, newAreas: { from: null, to: 2 },
+      created: { from: null, to: 2 }, updated: { from: null, to: 0 }, unchanged: { from: null, to: 0 }, newAreas: { from: null, to: 2 }, period: { from: null, to: PERIOD },
     });
     const areas = calls.filter((c) => c.entityType === 'catalog_area');
     expect(areas.map((c) => c.entityName)).toEqual(['TEST-Ecom · TEST-Marketplace', 'TEST-Ecom · TEST-Performance']);
@@ -203,11 +206,11 @@ describe('Importación de la Matriz · aplicar', () => {
   it('es idempotente: la segunda vez todo sale «sin cambios», sin escribir ni duplicar', async () => {
     const { db, service } = setup();
     const file = await xlsx(FILE_ROWS);
-    await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
     const counts = () => [db.positions.length, db.activities.length, db.okrs.length, db.kpis.length];
     const before = counts();
     db.calls.length = 0;
-    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
     expect(again.positions.map((p) => p.action)).toEqual(['sin cambios', 'sin cambios']);
     expect(again.summary).toMatchObject({ created: 0, updated: 0, unchanged: 2 });
     expect(db.writes).toEqual([]);
@@ -217,7 +220,7 @@ describe('Importación de la Matriz · aplicar', () => {
 
   it('una reimportación con cambios actualiza CONSERVANDO los id de OKRs y KPIs (lo asignado a colaboradores no se duplica)', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     const okrIds = db.okrs.map((o) => o.id);
     const kpiIds = db.kpis.map((k) => k.id);
 
@@ -226,13 +229,15 @@ describe('Importación de la Matriz · aplicar', () => {
       12: '• TEST-KPI A | Meta: 99 | Diario\n• TEST-KPI C | Meta: 3 | Mensual',
       10: '1. TEST-Grupo.\n   1.1 Hacer algo distinto (Anual)',
     });
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([changed]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([changed]), ACTOR, PERIOD);
     expect(r.positions[0]!.action).toBe('actualizar');
     const liveOkrs = db.okrs.filter((o) => !o.deleted_at);
     expect(liveOkrs.map((o) => [o.objective_code, o.kr_code])).toEqual([['O1', 'KR1'], ['O1', 'KR3']]);
     // KR1 conserva su id y toma el texto nuevo; KR2 se dio de baja; KR3 es nuevo.
     expect(liveOkrs[0]!.id).toBe(okrIds[0]);
     expect(liveOkrs[0]!.objective).toBe('TEST-Obj uno cambiado.');
+    // El que ya existía conserva su peso (50); el nuevo recibe la capacidad que queda en el semestre (100 - 50 = 50).
+    expect(liveOkrs.map((o) => o.weight)).toEqual([50, 50]);
     expect(db.okrs.find((o) => o.id === okrIds[1])!.deleted_at).toBeTruthy();
     expect(okrIds).not.toContain(liveOkrs[1]!.id);
     const liveKpis = db.kpis.filter((k) => !k.deleted_at);
@@ -244,13 +249,13 @@ describe('Importación de la Matriz · aplicar', () => {
     expect(db.activities.filter((a) => a.deleted_at)).toHaveLength(2);
   });
 
-  it('al actualizar NO toca description, aprobación, status, business_unit ni los OKRs con periodo', async () => {
+  it('al actualizar NO toca description, aprobación, status, business_unit ni los OKRs de otros semestres', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     Object.assign(db.positions[0]!, { description: 'Descripción formal', description_approved: true, description_approved_by: 'u9', status: 'inactivo', business_unit: 'TEST-UN' });
-    db.okrs.push({ id: 'O-periodo', job_position_id: db.positions[0]!.id, period: '2026-S1', objective_code: null, kr_code: null, objective: 'Con periodo', key_result: 'x', weight: 50, sort_order: 9, is_active: true, deleted_at: null });
+    db.okrs.push({ id: 'O-periodo', job_position_id: db.positions[0]!.id, period: '2026-S2', objective_code: null, kr_code: null, objective: 'Con periodo', key_result: 'x', weight: 50, sort_order: 9, is_active: true, deleted_at: null });
 
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 3: 'IV', 8: 'TEST-Rol nuevo', 7: '5' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 3: 'IV', 8: 'TEST-Rol nuevo', 7: '5' })]), ACTOR, PERIOD);
     expect(db.positions[0]).toMatchObject({ level: 'IV', role_summary: 'TEST-Rol nuevo', plazas: 5, description: 'Descripción formal', description_approved: true, description_approved_by: 'u9', status: 'inactivo', business_unit: 'TEST-UN' });
     for (const call of db.writes.filter((c) => /^UPDATE hr\.job_positions/.test(c.sql))) {
       expect(call.sql).not.toMatch(/description|status =|business_unit|description_approved/);
@@ -260,33 +265,33 @@ describe('Importación de la Matriz · aplicar', () => {
 
   it('identidad por (división, área, título) sin acentos ni mayúsculas: no duplica; otra división sí crea', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
-    const again = await service.run('apply', ' test-ECOM ', await xlsx([row(' test-marketplace', 'TEST-ANALISTA ')]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
+    const again = await service.run('apply', ' test-ECOM ', await xlsx([row(' test-marketplace', 'TEST-ANALISTA ')]), ACTOR, PERIOD);
     // Es el mismo puesto (no se duplica); solo cambia la escritura de mayúsculas, así que se actualiza.
     expect(again.positions[0]!.action).toBe('actualizar');
     expect(db.positions).toHaveLength(1);
     expect(db.positions[0]!.title).toBe('TEST-ANALISTA');
-    const other = await service.run('apply', 'TEST-Otra', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    const other = await service.run('apply', 'TEST-Otra', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     expect(other.positions[0]!.action).toBe('crear');
     expect(db.positions).toHaveLength(2);
   });
 
   it('estatus de validación y comentarios del Head: solo se actualizan si el archivo trae contenido', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     Object.assign(db.positions[0]!, { validation_status: 'validado', validated_by: 'u-head', validated_at: new Date('2026-01-01'), head_comments: 'Comentario del sistema' });
 
     // Pendiente y sin comentarios en el archivo: se conservan los del sistema.
-    const same = await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    const same = await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     expect(same.positions[0]!.action).toBe('sin cambios');
     expect(db.positions[0]).toMatchObject({ validation_status: 'validado', validated_by: 'u-head', head_comments: 'Comentario del sistema' });
 
     // Comentario nuevo: se actualiza el comentario, el estatus del sistema se conserva.
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 15: 'Comentario nuevo' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 15: 'Comentario nuevo' })]), ACTOR, PERIOD);
     expect(db.positions[0]).toMatchObject({ validation_status: 'validado', head_comments: 'Comentario nuevo' });
 
     // Estatus distinto de Pendiente: se actualiza y se guarda quién (de la sesión) y cuándo.
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 14: 'Rechazado', 15: 'Comentario nuevo' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-Analista', { 14: 'Rechazado', 15: 'Comentario nuevo' })]), ACTOR, PERIOD);
     expect(db.positions[0]).toMatchObject({ validation_status: 'rechazado', validated_by: 'user-1' });
     expect(db.positions[0]!.validated_at).toBeInstanceOf(Date);
   });
@@ -294,14 +299,14 @@ describe('Importación de la Matriz · aplicar', () => {
   it('todo o nada: si falla una escritura a medias no queda nada importado', async () => {
     const { db, audit, service } = setup();
     db.failOn = /^INSERT INTO hr\.job_position_kpis/;
-    await expect(service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR)).rejects.toThrow('fallo simulado');
+    await expect(service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD)).rejects.toThrow('fallo simulado');
     expect([db.positions.length, db.activities.length, db.okrs.length, db.kpis.length]).toEqual([0, 0, 0, 0]);
     expect(audit.logActivity).not.toHaveBeenCalled();
   });
 
   it('un error bloqueante no importa nada (ni siquiera los puestos buenos) y no audita', async () => {
     const { db, audit, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!, row('', 'TEST-Sin área')]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!, row('', 'TEST-Sin área')]), ACTOR, PERIOD);
     expect(r.applied).toBe(false);
     expect(r.errors).toEqual([{ row: 5, message: 'Falta la Sub-área del puesto «TEST-Sin área»' }]);
     expect(db.writes).toEqual([]);
@@ -311,13 +316,13 @@ describe('Importación de la Matriz · aplicar', () => {
 
   it('si el archivo no trae la columna de OKRs, no se tocan los OKRs existentes', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Matriz TEST');
     ws.addRow(['Sub-área', 'Puesto', 'Plazas ocupadas']);
     ws.addRow(['TEST-Marketplace', 'TEST-Analista', '7']);
     const buffer = Buffer.from(await wb.xlsx.writeBuffer());
-    await service.run('apply', 'TEST-Ecom', { buffer, originalname: 'a.xlsx', size: buffer.length }, ACTOR);
+    await service.run('apply', 'TEST-Ecom', { buffer, originalname: 'a.xlsx', size: buffer.length }, ACTOR, PERIOD);
     expect(db.positions[0]!.plazas).toBe(7);
     expect(db.okrs.filter((o) => !o.deleted_at)).toHaveLength(2);
     expect(db.kpis.filter((k) => !k.deleted_at)).toHaveLength(2);
@@ -326,7 +331,7 @@ describe('Importación de la Matriz · aplicar', () => {
 });
 
 describe('Importación de la Matriz · archivo', () => {
-  const run = (file: { buffer: Buffer; originalname: string; size: number } | undefined) => setup().service.run('preview', 'TEST-Ecom', file, ACTOR);
+  const run = (file: { buffer: Buffer; originalname: string; size: number } | undefined) => setup().service.run('preview', 'TEST-Ecom', file, ACTOR, PERIOD);
 
   it('rechaza sin archivo y archivo vacío', async () => {
     await expect(run(undefined)).rejects.toBeInstanceOf(BadRequestException);
@@ -394,12 +399,12 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 
   it('área nueva: la vista previa avisa y no escribe; al aplicar queda en el catálogo, una sola vez', async () => {
     const { db, service } = setup();
-    const prev = await service.run('preview', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD);
     expect(prev.newAreas).toEqual(['TEST-Marketplace', 'TEST-Performance']);
     expect(prev.warnings.filter((w) => /Área nueva/.test(w.message))).toHaveLength(2);
     expect(db.areas).toEqual([]);
     expect(db.writes).toEqual([]);
-    await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD);
     expect(names(db)).toEqual(['TEST-Marketplace', 'TEST-Performance']);
     expect(db.areas.every((a) => a.division_name === 'TEST-Ecom')).toBe(true);
   });
@@ -407,7 +412,7 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
   it('con las áreas ya en el catálogo no hay avisos de área y se usa el nombre canónico', async () => {
     const { db, service } = setup();
     db.areas.push({ name: 'TEST-Marketplace', division_name: 'TEST-Ecom' }, { name: 'TEST-Performance', division_name: 'test-ecom ' });
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row(' test-marketplace', 'TEST-A'), row('TEST-PERFORMANCE ', 'TEST-B')]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row(' test-marketplace', 'TEST-A'), row('TEST-PERFORMANCE ', 'TEST-B')]), ACTOR, PERIOD);
     expect(r.warnings.filter((w) => /Área nueva/.test(w.message))).toEqual([]);
     expect(r.newAreas).toEqual([]);
     expect(db.positions.map((p) => p.area)).toEqual(['TEST-Marketplace', 'TEST-Performance']);
@@ -416,7 +421,7 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 
   it('«Marketplace» y «marketplace » en el mismo archivo no crean dos áreas', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('Marketplace', 'TEST-A'), row('marketplace ', 'TEST-B'), row('MARKETPLACE', 'TEST-C')]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('Marketplace', 'TEST-A'), row('marketplace ', 'TEST-B'), row('MARKETPLACE', 'TEST-C')]), ACTOR, PERIOD);
     expect(r.newAreas).toEqual(['Marketplace']);
     expect(names(db)).toEqual(['Marketplace']);
     expect(db.positions.map((p) => p.area)).toEqual(['Marketplace', 'Marketplace', 'Marketplace']);
@@ -425,22 +430,22 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
   it('el área de otra división no cuenta: se crea la de esta división', async () => {
     const { db, service } = setup();
     db.areas.push({ name: 'TEST-Marketplace', division_name: 'Otra División' });
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-A')]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('TEST-Marketplace', 'TEST-A')]), ACTOR, PERIOD);
     expect(db.areas).toHaveLength(2);
   });
 
   it('todo o nada: si falla el alta de un puesto, el área nueva tampoco queda en el catálogo', async () => {
     const { db, service } = setup();
     db.failOn = /^INSERT INTO hr\.job_positions/;
-    await expect(service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR)).rejects.toThrow('fallo simulado');
+    await expect(service.run('apply', 'TEST-Ecom', await xlsx(FILE_ROWS), ACTOR, PERIOD)).rejects.toThrow('fallo simulado');
     expect(db.areas).toEqual([]);
   });
 
   it('reimportar el mismo archivo con las áreas ya creadas sigue dando «sin cambios» y sin áreas nuevas', async () => {
     const { db, service } = setup();
     const file = await xlsx(FILE_ROWS);
-    await service.run('apply', 'TEST-Ecom', file, ACTOR);
-    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
     expect(again.positions.map((p) => p.action)).toEqual(['sin cambios', 'sin cambios']);
     expect(again.newAreas).toEqual([]);
     expect(db.areas).toHaveLength(2);
@@ -448,22 +453,22 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 
   it('nivel: «iv», « IV » y «4» se leen como IV', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'iv' }), row('A1', 'P2', { 3: ' IV ' }), row('A1', 'P3', { 3: '4' }), row('A1', 'P4', { 3: 'VIII' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'iv' }), row('A1', 'P2', { 3: ' IV ' }), row('A1', 'P3', { 3: '4' }), row('A1', 'P4', { 3: 'VIII' })]), ACTOR, PERIOD);
     expect(db.positions.map((p) => p.level)).toEqual(['IV', 'IV', 'IV', 'VIII']);
     expect(db.positions[2]!.level_original).toBe('4');
   });
 
   it('nivel IX es válido («ix» y «9» también) y X es error bloqueante', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'ix' }), row('A1', 'P2', { 3: '9' }), row('A1', 'P3', { 3: 'IX' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'ix' }), row('A1', 'P2', { 3: '9' }), row('A1', 'P3', { 3: 'IX' })]), ACTOR, PERIOD);
     expect(db.positions.map((p) => p.level)).toEqual(['IX', 'IX', 'IX']);
-    const bad = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P9', { 3: 'X' })]), ACTOR);
+    const bad = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P9', { 3: 'X' })]), ACTOR, PERIOD);
     expect(bad.errors).toEqual([{ row: 4, message: expect.stringMatching(/El nivel «X» no está en el catálogo de niveles/) }]);
   });
 
   it('nivel fuera del catálogo: error bloqueante con su fila; no se importa nada', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 3: 'XX' })]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 3: 'XX' })]), ACTOR, PERIOD);
     expect(r.applied).toBe(false);
     expect(r.errors).toEqual([{ row: 5, message: expect.stringMatching(/El nivel «XX» no está en el catálogo de niveles/) }]);
     expect(db.positions).toHaveLength(0);
@@ -471,7 +476,7 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 
   it('nivel ambiguo (rango, «Sin nivel», «Por definir»): queda vacío con aviso y guarda el texto original', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' }), row('A1', 'P2', { 3: 'Sin nivel (MEOT: III)' }), row('A1', 'P3', { 3: 'Por definir' }), row('A1', 'P4', { 3: '' })]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' }), row('A1', 'P2', { 3: 'Sin nivel (MEOT: III)' }), row('A1', 'P3', { 3: 'Por definir' }), row('A1', 'P4', { 3: '' })]), ACTOR, PERIOD);
     expect(r.errors).toEqual([]);
     expect(db.positions.map((p) => [p.level, p.level_original])).toEqual([[null, 'V / VI'], [null, 'Sin nivel (MEOT: III)'], [null, 'Por definir'], [null, null]]);
     expect(r.warnings.filter((w) => /es ambiguo/.test(w.message))).toHaveLength(3);
@@ -479,14 +484,14 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 
   it('un nivel elegido a mano no se pisa con un valor ambiguo ni se reporta como cambio; uno válido del archivo sí lo actualiza', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR, PERIOD);
     db.positions[0]!.level = 'III'; // elegido a mano en el desplegable
-    const same = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR);
+    const same = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'V / VI' })]), ACTOR, PERIOD);
     expect(same.positions[0]!.action).toBe('sin cambios');
-    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'Sin nivel' })]), ACTOR);
+    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'Sin nivel' })]), ACTOR, PERIOD);
     expect(other.positions[0]!.action).toBe('sin cambios');
     expect(db.positions[0]).toMatchObject({ level: 'III', level_original: 'V / VI' });
-    const valid = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'VI' })]), ACTOR);
+    const valid = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 3: 'VI' })]), ACTOR, PERIOD);
     expect(valid.positions[0]!.action).toBe('actualizar');
     expect(db.positions[0]).toMatchObject({ level: 'VI', level_original: 'VI' });
   });
@@ -496,11 +501,11 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
     const r = await service.run('apply', 'TEST-Ecom', await xlsx([
       row('A1', 'P1', { 4: 'Especialista Semi Senior (MEOT)' }), row('A1', 'P2', { 4: 'Operativo Junior' }),
       row('A1', 'P3', { 4: 'Especialista Senior' }), row('A1', 'P4', { 4: 'Liderazgo Operativo' }),
-    ]), ACTOR);
+    ]), ACTOR, PERIOD);
     expect(r.errors).toEqual([]);
     expect(db.positions.map((p) => p.seniority)).toEqual(['semi_senior', 'junior', 'senior', null]);
     db.positions[3]!.seniority = 'senior'; // elegida a mano
-    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P4', { 4: 'Liderazgo Operativo' })]), ACTOR);
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P4', { 4: 'Liderazgo Operativo' })]), ACTOR, PERIOD);
     expect(again.positions[0]!.action).toBe('sin cambios');
     expect(db.positions[3]!.seniority).toBe('senior');
   });
@@ -509,7 +514,7 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos obligatorios', () => {
   it('«Supervisa a» ya no se lee: la columna del archivo se ignora sin avisos y no se guarda', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(r.errors).toEqual([]);
     expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false);
     expect(db.positions[0]).not.toHaveProperty('supervises_text');
@@ -520,17 +525,17 @@ describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos o
 
   it('la importación nunca escribe ni pisa reports_to_employee_id', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(db.writes.some((c) => /reports_to_employee_id/.test(c.sql))).toBe(false);
     db.positions[0]!.reports_to_employee_id = 'emp-jefe';
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 5: 'TEST-Otro jefe en el Excel', 3: 'IV' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 5: 'TEST-Otro jefe en el Excel', 3: 'IV' })]), ACTOR, PERIOD);
     expect(db.positions[0]).toMatchObject({ reports_to_text: 'TEST-Otro jefe en el Excel', level: 'IV', reports_to_employee_id: 'emp-jefe' });
     expect(db.writes.some((c) => /reports_to_employee_id/.test(c.sql))).toBe(false);
   });
 
   it('un aviso por fila con los campos obligatorios que faltan (sin errores bloqueantes); la descripción nunca viene en el Excel', async () => {
     const { db, service } = setup();
-    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR);
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR, PERIOD);
     expect(prev.errors).toEqual([]);
     const missing = prev.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message));
     expect(missing).toEqual([
@@ -539,7 +544,7 @@ describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos o
     ]);
     expect(db.writes).toEqual([]);
     // aplicar importa igual
-    const applied = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR);
+    const applied = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1'), row('A1', 'P2', { 8: '', 9: '', 13: '' })]), ACTOR, PERIOD);
     expect(applied.applied).toBe(true);
     expect(db.positions).toHaveLength(2);
     expect(applied.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message))).toHaveLength(2);
@@ -547,9 +552,9 @@ describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos o
 
   it('un puesto que ya tiene descripción y los campos llenos no avisa; la reimportación sigue dando «sin cambios»', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     db.positions[0]!.description = 'TEST-Descripción formal';
-    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR);
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(again.positions[0]!.action).toBe('sin cambios');
     expect(again.warnings.filter((w) => /Faltan campos obligatorios/.test(w.message))).toEqual([]);
   });
@@ -558,11 +563,11 @@ describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos o
 describe('Importación de la Matriz · la división es una lista cerrada (catalogs.divisions)', () => {
   it('«e-commerce» se empareja con «E-Commerce» (sin mayúsculas, acentos ni espacios) y se guarda el nombre canónico', async () => {
     const { db, service } = setup();
-    const r = await service.run('apply', ' e-COMMERCE ', await xlsx([row('A1', 'P1')]), ACTOR);
+    const r = await service.run('apply', ' e-COMMERCE ', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(r.division).toBe('E-Commerce');
     expect(db.positions[0]!.division).toBe('E-Commerce');
     // la reimportación con otra escritura empareja por el nombre canónico: mismo puesto, sin cambios
-    const again = await service.run('apply', 'E-COMMERCE', await xlsx([row('A1', 'P1')]), ACTOR);
+    const again = await service.run('apply', 'E-COMMERCE', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(again.positions[0]!.action).toBe('sin cambios');
     expect(db.positions).toHaveLength(1);
   });
@@ -570,7 +575,7 @@ describe('Importación de la Matriz · la división es una lista cerrada (catalo
   it('una división que no existe en el catálogo da 400 con la lista de las válidas, en vista previa y al aplicar, y no escribe ni crea nada', async () => {
     const { db, audit, service } = setup();
     for (const mode of ['preview', 'apply'] as const) {
-      const err = await service.run(mode, 'División Inventada', await xlsx([row('A1', 'P1')]), ACTOR).catch((e) => e);
+      const err = await service.run(mode, 'División Inventada', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD).catch((e) => e);
       expect(err).toBeInstanceOf(BadRequestException);
       expect((err as BadRequestException).message).toMatch(/«División Inventada» no está en el catálogo de divisiones.*E-Commerce, TEST-Ecom, TEST-Otra/);
     }
@@ -628,22 +633,22 @@ describe('Importación de la Matriz · la división es una lista cerrada (catalo
 describe('Importación de la Matriz · la jerarquía del Excel solo sirve para la categoría', () => {
   it('el texto de la columna de jerarquía ya no se guarda ni se escribe en ningún INSERT/UPDATE', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR, PERIOD);
     expect(db.positions[0]).not.toHaveProperty('meot_hierarchy');
     expect(db.positions[0]!.seniority).toBe('semi_senior');
     expect(db.writes.some((c) => /meot_hierarchy/.test(c.sql) || c.params.includes('Especialista Semi Senior'))).toBe(false);
     // reimportar el mismo texto no es un cambio
-    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR);
+    const again = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Especialista Semi Senior' })]), ACTOR, PERIOD);
     expect(again.positions[0]!.action).toBe('sin cambios');
     // y cambiar solo ese texto (sin otra categoría) tampoco toca nada
-    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Liderazgo Funcional' })]), ACTOR);
+    const other = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Liderazgo Funcional' })]), ACTOR, PERIOD);
     expect(other.positions[0]!.action).toBe('sin cambios');
     expect(db.positions[0]!.seniority).toBe('semi_senior');
   });
 
   it('las reglas de categoría siguen igual: «Operativo Junior» es Junior y «Especialista Senior» es Senior', async () => {
     const { db, service } = setup();
-    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Operativo Junior' }), row('A1', 'P2', { 4: 'Especialista Senior' }), row('A1', 'P3', { 4: 'Dirección' })]), ACTOR);
+    await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'Operativo Junior' }), row('A1', 'P2', { 4: 'Especialista Senior' }), row('A1', 'P3', { 4: 'Dirección' })]), ACTOR, PERIOD);
     expect(db.positions.map((p) => p.seniority)).toEqual(['junior', 'senior', null]);
   });
 
@@ -657,17 +662,140 @@ describe('Importación de la Matriz · la jerarquía del Excel solo sirve para l
     ws.addRow(['A1', 'P1', '2']);
     const buffer = Buffer.from(await wb.xlsx.writeBuffer());
     const file = { buffer, originalname: 'sin-jerarquia.xlsx', size: buffer.length };
-    const r = await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    const r = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
     expect(r.warnings.some((w) => /Jerarqu/i.test(w.message) || /MEOT/i.test(w.message))).toBe(false);
     expect(db.positions[0]!.seniority).toBeNull();
     db.positions[0]!.seniority = 'senior'; // elegida a mano
-    await service.run('apply', 'TEST-Ecom', file, ACTOR);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
     expect(db.positions[0]!.seniority).toBe('senior');
   });
 
   it('ningún aviso ni mensaje menciona MEOT', async () => {
     const { service } = setup();
-    const r = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'x'.repeat(300) })]), ACTOR);
+    const r = await service.run('preview', 'TEST-Ecom', await xlsx([row('A1', 'P1', { 4: 'x'.repeat(300) })]), ACTOR, PERIOD);
     expect(JSON.stringify([r.warnings, r.errors])).not.toMatch(/MEOT/i);
+  });
+});
+
+describe('Importación de la Matriz · semestre y reparto equitativo del peso', () => {
+  const okrCell = (n: number) => Array.from({ length: n }, (_, i) => `O${i + 1}: TEST-Objetivo ${i + 1}\n   KR1: TEST-KR ${i + 1}.`).join('\n');
+  const oneRow = (okrs: string) => row('TEST-Marketplace', 'TEST-Analista', { 11: okrs });
+
+  it('el semestre es obligatorio y con formato AAAA-S1 o AAAA-S2', async () => {
+    const { service } = setup();
+    for (const bad of [undefined, '', 'base', '2026-S3', '2026']) {
+      await expect(service.run('preview', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, bad as never)).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('los OKRs nuevos se insertan con el semestre elegido y la vista previa muestra el semestre y el peso por OKR', async () => {
+    const { db, service } = setup();
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([oneRow(okrCell(3))]), ACTOR, '2027-S2');
+    expect(prev.period).toBe('2027-S2');
+    expect(prev.positions[0]!.okrs).toEqual([
+      { objectiveCode: 'O1', krCode: 'KR1', weight: 34, isNew: true },
+      { objectiveCode: 'O2', krCode: 'KR1', weight: 33, isNew: true },
+      { objectiveCode: 'O3', krCode: 'KR1', weight: 33, isNew: true },
+    ]);
+    expect(db.okrs).toHaveLength(0); // la vista previa no escribe
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(3))]), ACTOR, '2027-S2');
+    expect(db.okrs.map((o) => [o.period, o.weight])).toEqual([['2027-S2', 34], ['2027-S2', 33], ['2027-S2', 33]]);
+    expect(db.okrs.reduce((n, o) => n + (o.weight as number), 0)).toBe(100);
+  });
+
+  it('el reparto da enteros que suman la capacidad: 100/3 → 34/33/33 y 100/4 → 25 cada uno', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(4))]), ACTOR, PERIOD);
+    expect(db.okrs.map((o) => o.weight)).toEqual([25, 25, 25, 25]);
+  });
+
+  it('un OKR existente conserva su peso: los nuevos se reparten SOLO lo que queda (capacidad = 100 - pesos activos que se conservan)', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(1))]), ACTOR, PERIOD);
+    db.okrs[0]!.weight = 40; // RRHH lo ajustó a mano
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(3))]), ACTOR, PERIOD);
+    expect(r.positions[0]!.action).toBe('actualizar');
+    const live = db.okrs.filter((o) => !o.deleted_at);
+    expect(live.map((o) => [o.objective_code, o.weight])).toEqual([['O1', 40], ['O2', 30], ['O3', 30]]); // 60 entre 2
+    expect(live.reduce((n, o) => n + (o.weight as number), 0)).toBe(100);
+  });
+
+  it('los que ya no vienen en el archivo se dan de baja SOLO dentro del semestre elegido (y liberan su peso)', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(2))]), ACTOR, '2026-S1');
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(2))]), ACTOR, '2026-S2');
+    expect(db.okrs.filter((o) => o.period === '2026-S2' && !o.deleted_at)).toHaveLength(2);
+    // En 2026-S1 el archivo solo trae O1: O2 se da de baja; el semestre 2026-S2 no se toca.
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(1))]), ACTOR, '2026-S1');
+    expect(db.okrs.filter((o) => o.period === '2026-S1' && !o.deleted_at).map((o) => o.objective_code)).toEqual(['O1']);
+    expect(db.okrs.filter((o) => o.period === '2026-S2' && !o.deleted_at)).toHaveLength(2);
+  });
+
+  it('reimportar el mismo archivo en el mismo semestre no cambia nada (sin cambios, mismos pesos)', async () => {
+    const { db, service } = setup();
+    const file = await xlsx([oneRow(okrCell(3))]);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    const before = JSON.stringify(db.okrs);
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(again.summary.unchanged).toBe(1);
+    expect(JSON.stringify(db.okrs)).toBe(before);
+  });
+
+  it('sin peso disponible (capacidad 2 para 3 OKRs) el puesto es un error en la vista previa y no se escribe nada', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(1))]), ACTOR, PERIOD);
+    db.okrs[0]!.weight = 98;
+    const writesBefore = db.writes.length;
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([oneRow(okrCell(4))]), ACTOR, PERIOD);
+    expect(prev.errors).toHaveLength(1);
+    expect(prev.errors[0]!.message).toMatch(/No hay peso disponible en el semestre 2026-S1/);
+    const applied = await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(4))]), ACTOR, PERIOD);
+    expect(applied.applied).toBe(false);
+    expect(applied.errors).toHaveLength(1);
+    expect(db.writes.length).toBe(writesBefore);
+    expect(db.okrs.filter((o) => !o.deleted_at)).toHaveLength(1);
+  });
+
+  it('un error de peso en un puesto bloquea toda la importación (todo o nada)', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(1))]), ACTOR, PERIOD);
+    db.okrs[0]!.weight = 99;
+    const rows = [oneRow(okrCell(3)), row('TEST-Marketplace', 'TEST-Otro puesto', { 11: okrCell(2) })];
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx(rows), ACTOR, PERIOD);
+    expect(r.applied).toBe(false);
+    expect(db.positions).toHaveLength(1); // el puesto nuevo tampoco se creó
+  });
+
+  it('el INSERT de OKRs lleva semestre y peso (8 parámetros) y nunca NULL', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([oneRow(okrCell(2))]), ACTOR, '2026-S2');
+    const ins = db.calls.filter((c) => /^INSERT INTO hr\.job_position_okrs/.test(c.sql));
+    expect(ins).toHaveLength(2);
+    for (const c of ins) {
+      expect(c.sql).not.toMatch(/NULL/);
+      expect(c.params).toHaveLength(8);
+      expect(c.params[1]).toBe('2026-S2');
+      expect(Number.isInteger(c.params[6])).toBe(true);
+    }
+  });
+
+  it('la consulta de OKRs existentes filtra por el semestre elegido (no por period IS NULL)', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
+    await service.run('preview', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, '2026-S2');
+    const sel = db.calls.filter((c) => /^SELECT id, objective_code.* FROM hr\.job_position_okrs/.test(c.sql));
+    expect(sel.length).toBeGreaterThan(0);
+    for (const c of sel) {
+      expect(c.sql).toContain('period = $2');
+      expect(c.sql).not.toMatch(/period IS NULL/);
+    }
+    expect(sel[sel.length - 1]!.params[1]).toBe('2026-S2');
+  });
+
+  it('la bitácora de la importación guarda el semestre', async () => {
+    const { service, audit } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
+    const call = audit.logActivity.mock.calls.map((c) => (c as unknown[])[0] as { entityType: string; changes: Record<string, unknown> }).find((c) => c.entityType === 'job_position_import')!;
+    expect(call.changes.period).toEqual({ from: null, to: PERIOD });
   });
 });
