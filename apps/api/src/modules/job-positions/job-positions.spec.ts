@@ -102,15 +102,17 @@ describe('Matriz de Puestos · periodo, frecuencia y pesos', () => {
   it('la suma de pesos no arrastra errores de coma flotante', () => {
     expect(sumWeights([0.1, 0.2])).toBe(0.3);
     expect(sumWeights([33.33, 33.33, 33.34])).toBe(100);
-    expect(sumWeights([null, 40])).toBe(40);
+    expect(sumWeights([34, 33, 33])).toBe(100);
   });
   it('justo 100 se acepta; 100.01 se rechaza con mensaje claro', () => {
     expect(() => assertWeightSum([60, 30], 10, true)).not.toThrow();
     expect(() => assertWeightSum([60, 30], 10.01, true)).toThrow(/no puede pasar de 100/);
   });
-  it('un OKR inactivo o sin peso no cuenta', () => {
+  it('un OKR inactivo no cuenta para el tope', () => {
     expect(() => assertWeightSum([90], 50, false)).not.toThrow();
-    expect(() => assertWeightSum([90], null, true)).not.toThrow();
+  });
+  it('una suma menor a 100 se deja guardar (solo el tope de 100 bloquea)', () => {
+    expect(() => assertWeightSum([30, 20], 10, true)).not.toThrow();
   });
 });
 
@@ -173,14 +175,32 @@ describe('Matriz de Puestos · DTO', () => {
   it('nivel libre (sin lista cerrada)', async () => {
     expect(await errs(CreatePositionDto, { title: 'A', area: 'B', level: 'Cualquier valor del Excel' })).toEqual([]);
   });
-  it('OKR: periodo, textos, peso 0–100', async () => {
+  it('OKR: semestre obligatorio, peso entero de 1 a 100, textos acotados', async () => {
     const ok = { period: '2026-S1', objective: 'o', keyResult: 'k', weight: 50 };
     expect(await errs(CreateOkrDto, ok)).toEqual([]);
     expect(await errs(CreateOkrDto, { ...ok, period: '2026-S3' })).toContain('period');
-    expect(await errs(CreateOkrDto, { ...ok, weight: 101 })).toContain('weight');
-    expect(await errs(CreateOkrDto, { ...ok, weight: -1 })).toContain('weight');
+    expect(await errs(CreateOkrDto, { ...ok, period: 'base' })).toContain('period');
+    expect(await errs(CreateOkrDto, { ...ok, period: '' })).toContain('period');
+    expect(await errs(CreateOkrDto, { objective: 'o', keyResult: 'k', weight: 50 })).toContain('period');
+    for (const weight of [0, -1, 101, 33.5, 'abc', null]) expect(await errs(CreateOkrDto, { ...ok, weight })).toContain('weight');
+    expect(await errs(CreateOkrDto, { objective: 'o', keyResult: 'k', period: '2026-S1' })).toContain('weight');
+    for (const weight of [1, 100, '33']) expect(await errs(CreateOkrDto, { ...ok, weight })).toEqual([]);
     expect(await errs(CreateOkrDto, { ...ok, objective: 'x'.repeat(2001) })).toContain('objective');
-    expect(await errs(UpdateOkrDto, { weight: null })).toEqual([]);
+  });
+  it('OKR: el peso que llega como texto numérico se convierte a número; uno con decimales se rechaza', async () => {
+    const dto = plainToInstance(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight: '34' });
+    expect(dto.weight).toBe(34);
+    expect(await errs(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight: '33.5' })).toContain('weight');
+  });
+  it('OKR en edición: el peso y el semestre, si vienen, no pueden ser null ni inválidos', async () => {
+    expect(await errs(UpdateOkrDto, {})).toEqual([]);
+    expect(await errs(UpdateOkrDto, { weight: 40, period: '2026-S2' })).toEqual([]);
+    expect(await errs(UpdateOkrDto, { weight: null })).toContain('weight');
+    expect(await errs(UpdateOkrDto, { weight: 0 })).toContain('weight');
+    expect(await errs(UpdateOkrDto, { weight: 33.5 })).toContain('weight');
+    expect(await errs(UpdateOkrDto, { weight: 101 })).toContain('weight');
+    expect(await errs(UpdateOkrDto, { period: null })).toContain('period');
+    expect(await errs(UpdateOkrDto, { period: 'base' })).toContain('period');
   });
   it('KPI: frecuencia válida', async () => {
     expect(await errs(CreateKpiDto, { name: 'k', measurementFrequency: 'mensual' })).toEqual([]);
@@ -342,14 +362,14 @@ describe('Matriz de Puestos · servicio de puestos', () => {
 });
 
 describe('Matriz de Puestos · OKRs y KPIs', () => {
-  const okrRow = (weight: number | null, over: object = {}) => ({
+  const okrRow = (weight: number, over: object = {}) => ({
     id: OKR1, job_position_id: P1, period: '2026-S1', objective: 'o', key_result: 'k', weight, sort_order: 0, is_active: true, ...over,
   });
   const build = (others: number[], existing: ReturnType<typeof okrRow> | null = null) => {
     const db = fakeDb((sql, params) => {
       if (/FROM hr\.job_positions WHERE id = \$1 AND deleted_at IS NULL FOR UPDATE/.test(sql)) return [{ id: P1, code: 'JP-001', title: 'Analista' }];
       if (/SELECT weight FROM hr\.job_position_okrs/.test(sql)) return others.map((w) => ({ weight: String(w) }));
-      if (/INSERT INTO hr\.job_position_okrs/.test(sql)) return [okrRow(params[4] as number | null)];
+      if (/INSERT INTO hr\.job_position_okrs/.test(sql)) return [okrRow(params[6] as number)];
       if (/SELECT .* FROM hr\.job_position_okrs WHERE id/.test(sql)) return existing ? [existing] : [];
       if (/UPDATE hr\.job_position_okrs SET period/.test(sql)) return [[okrRow(40)], 1];
       if (/UPDATE hr\.job_position_okrs SET deleted_at/.test(sql)) return [[{ id: OKR1, period: '2026-S1', job_position_id: P1 }], 1];
@@ -358,7 +378,7 @@ describe('Matriz de Puestos · OKRs y KPIs', () => {
     const audit = { logActivity: jest.fn(async () => undefined) };
     return { service: new JobPositionItemsService(db.dataSource as never, audit as never), db, audit };
   };
-  const okrDto = (weight: number | null, over: object = {}) => plainToInstance(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight, ...over });
+  const okrDto = (weight: unknown, over: object = {}) => plainToInstance(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight, ...over });
 
   it('rechaza un peso que haga pasar de 100 (400) y no inserta ni audita', async () => {
     const { service, db, audit } = build([60, 30]);
@@ -379,7 +399,8 @@ describe('Matriz de Puestos · OKRs y KPIs', () => {
     const q = db.calls.find((c) => /SELECT weight FROM hr\.job_position_okrs/.test(c.sql))!;
     expect(q.sql).toContain('deleted_at IS NULL');
     expect(q.sql).toContain('is_active = true');
-    expect(q.sql).toContain('period IS NOT DISTINCT FROM $2');
+    expect(q.sql).toContain('period = $2');
+    expect(q.sql).not.toContain('IS NOT DISTINCT FROM');
     expect(q.params).toEqual([P1, '2026-S1', null]);
   });
 
@@ -397,6 +418,41 @@ describe('Matriz de Puestos · OKRs y KPIs', () => {
     const { service, db } = build([]);
     await expect(service.createOkr(P1, okrDto(10, { period: '2026-S3' }), ACTOR)).rejects.toBeInstanceOf(BadRequestException);
     expect(db.calls).toHaveLength(0);
+  });
+
+  it('sin semestre o sin peso se rechaza (400) también en el servicio, antes de tocar la BD', async () => {
+    const { service, db } = build([]);
+    await expect(service.createOkr(P1, okrDto(10, { period: undefined }), ACTOR)).rejects.toThrow(/semestre es obligatorio/);
+    await expect(service.createOkr(P1, okrDto(10, { period: 'base' }), ACTOR)).rejects.toThrow(/AAAA-S1 o AAAA-S2/);
+    await expect(service.createOkr(P1, okrDto(undefined), ACTOR)).rejects.toThrow(/entero entre 1 y 100/);
+    await expect(service.createOkr(P1, okrDto(null), ACTOR)).rejects.toThrow(/entero entre 1 y 100/);
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('peso 0, con decimales o mayor a 100 se rechaza (400)', async () => {
+    const { service, db } = build([]);
+    for (const w of [0, 33.5, 100.01, 101, -5]) {
+      await expect(service.createOkr(P1, okrDto(w), ACTOR)).rejects.toThrow(/entero entre 1 y 100/);
+    }
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('una suma menor a 100 se deja guardar', async () => {
+    const { service } = build([30, 20]);
+    await expect(service.createOkr(P1, okrDto(10), ACTOR)).resolves.toMatchObject({ weight: 10 });
+  });
+
+  it('editar con un peso inválido (decimal, 0 o null) se rechaza y no toca la BD', async () => {
+    const { service, db } = build([70], okrRow(20));
+    for (const w of [0, 33.5, null]) {
+      await expect(service.updateOkr(OKR1, { weight: w } as never, ACTOR)).rejects.toThrow(/entero entre 1 y 100/);
+    }
+    expect(db.calls).toHaveLength(0);
+  });
+
+  it('editar un OKR sin semestre (dato viejo) pide uno', async () => {
+    const { service } = build([], okrRow(20, { period: null }));
+    await expect(service.updateOkr(OKR1, plainToInstance(UpdateOkrDto, { sortOrder: 3 }), ACTOR)).rejects.toThrow(/semestre es obligatorio/);
   });
 
   it('editar: excluye al propio OKR de la suma y revalida contra el periodo final', async () => {

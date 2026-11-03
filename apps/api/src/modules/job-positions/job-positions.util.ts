@@ -12,14 +12,16 @@ export type ActivityFrequency = (typeof ACTIVITY_FREQUENCIES)[number];
 
 export const VALIDATION_STATUSES = ['pendiente', 'validado', 'validado_con_ajustes', 'rechazado'] as const;
 export type ValidationStatus = (typeof VALIDATION_STATUSES)[number];
-/** Valor del parámetro de periodo que designa la plantilla (OKRs sin periodo). */
-export const BASE_PERIOD = 'base';
 export const PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
 
 export const MAX_TITLE = 200;
 export const MAX_DESCRIPTION = 10000;
 export const MAX_OKR_TEXT = 2000;
 export const MAX_WEIGHT_SUM = 100;
+/** Peso de un OKR de puesto: entero de 1 a 100. */
+export const MIN_OKR_WEIGHT = 1;
+export const MAX_OKR_WEIGHT = 100;
+export const OKR_WEIGHT_MESSAGE = 'El peso debe ser un número entero entre 1 y 100';
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
 
@@ -119,16 +121,31 @@ export function assertPeriod(period: string): void {
   }
 }
 
-/**
- * Periodo de un OKR de la Matriz: vacío/null/'base' = plantilla (NULL en la base); en otro caso AAAA-S1/S2.
- * `undefined` se conserva (no se pidió cambiar).
- */
-export function normalizeOkrPeriod(period: string | null | undefined): string | null | undefined {
-  if (period === undefined) return undefined;
+/** Semestre de un OKR de la Matriz: obligatorio, AAAA-S1 o AAAA-S2 (ya no existe la plantilla sin periodo). */
+export function requireOkrPeriod(period: string | null | undefined): string {
   const p = (period ?? '').trim();
-  if (p === '' || p === BASE_PERIOD) return null;
+  if (p === '') throw new BadRequestException('El semestre es obligatorio (AAAA-S1 o AAAA-S2)');
   assertPeriod(p);
   return p;
+}
+
+/** Peso de un OKR de puesto: obligatorio y entero de 1 a 100 (la columna sigue siendo DECIMAL(5,2)). */
+export function assertOkrWeight(weight: unknown): asserts weight is number {
+  if (typeof weight !== 'number' || !Number.isInteger(weight) || weight < MIN_OKR_WEIGHT || weight > MAX_OKR_WEIGHT) {
+    throw new BadRequestException(OKR_WEIGHT_MESSAGE);
+  }
+}
+
+/**
+ * Reparto equitativo con enteros de la capacidad entre `n` OKRs nuevos: base = floor(capacidad / n) y los primeros
+ * `capacidad % n` reciben una unidad más (100 entre 3 → 34, 33, 33). `null` si no alcanza 1 por OKR.
+ */
+export function splitWeights(capacity: number, n: number): number[] | null {
+  if (n <= 0) return [];
+  const base = Math.floor(capacity / n);
+  if (base < MIN_OKR_WEIGHT) return null;
+  const rest = capacity % n;
+  return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
 export function assertFrequency(freq: string | null | undefined): void {
@@ -139,8 +156,8 @@ export function assertFrequency(freq: string | null | undefined): void {
 }
 
 /** Suma de pesos (en centésimas, para no arrastrar errores de coma flotante). */
-export function sumWeights(weights: (number | null)[]): number {
-  return weights.reduce<number>((acc, w) => acc + Math.round((w ?? 0) * 100), 0) / 100;
+export function sumWeights(weights: number[]): number {
+  return weights.reduce<number>((acc, w) => acc + Math.round(w * 100), 0) / 100;
 }
 
 /**
@@ -148,8 +165,8 @@ export function sumWeights(weights: (number | null)[]): number {
  * de 100. `others` son los demás OKRs vivos del periodo (sin el que se guarda);
  * justo 100 es válido y los eliminados no cuentan (ni llegan aquí).
  */
-export function assertWeightSum(others: (number | null)[], own: number | null, ownActive: boolean): void {
-  if (!ownActive || own === null) return;
+export function assertWeightSum(others: number[], own: number, ownActive: boolean): void {
+  if (!ownActive) return;
   const total = sumWeights([...others, own]);
   if (total > MAX_WEIGHT_SUM) {
     throw new BadRequestException(
@@ -338,7 +355,7 @@ export interface OkrRow {
   kr_code: string | null;
   objective: string;
   key_result: string;
-  weight: string | number | null;
+  weight: string | number;
   sort_order: number;
   is_active: boolean;
 }
@@ -346,13 +363,14 @@ export interface OkrRow {
 export interface OkrView {
   id: string;
   jobPositionId: string;
-  /** null = plantilla (vale para cualquier semestre). */
-  period: string | null;
+  /** Semestre AAAA-S1 / AAAA-S2. */
+  period: string;
   objectiveCode: string | null;
   krCode: string | null;
   objective: string;
   keyResult: string;
-  weight: number | null;
+  /** Entero de 1 a 100. */
+  weight: number;
   sortOrder: number;
   isActive: boolean;
 }
@@ -361,12 +379,12 @@ export function toOkrView(r: OkrRow): OkrView {
   return {
     id: r.id,
     jobPositionId: r.job_position_id,
-    period: r.period,
+    period: r.period as string,
     objectiveCode: r.objective_code,
     krCode: r.kr_code,
     objective: r.objective,
     keyResult: r.key_result,
-    weight: r.weight === null ? null : Number(r.weight),
+    weight: Number(r.weight),
     sortOrder: r.sort_order,
     isActive: r.is_active,
   };

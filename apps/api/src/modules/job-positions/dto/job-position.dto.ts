@@ -4,7 +4,6 @@ import {
   IsIn,
   IsInt,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -12,12 +11,16 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import {
   MANUAL_STATUSES,
   MAX_DESCRIPTION,
   MAX_LIMIT,
   MAX_OKR_TEXT,
+  MAX_OKR_WEIGHT,
+  MIN_OKR_WEIGHT,
+  OKR_WEIGHT_MESSAGE,
   ACTIVITY_FREQUENCIES,
   MAX_TITLE,
   MEASUREMENT_FREQUENCIES,
@@ -269,20 +272,22 @@ export class PositionQueryDto {
   limit?: number;
 }
 
-const OKR_PERIOD_REGEX = /^([0-9]{4}-S[12]|base)$/;
+const OKR_PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
+const OKR_PERIOD_MESSAGE = 'El periodo debe tener formato AAAA-S1 o AAAA-S2';
+
+/** El peso llega como número o como texto numérico: se convierte; lo demás se deja tal cual para que la validación lo rechace. */
+const toWeight = Transform(({ value }) => (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : value));
 
 export class OkrQueryDto {
   @IsOptional()
-  @Matches(OKR_PERIOD_REGEX, { message: 'El periodo debe tener formato AAAA-S1 o AAAA-S2 (o «base» para la plantilla)' })
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
   period?: string;
 }
 
 export class CreateOkrDto {
-  /** Vacío o «base» = plantilla (sin periodo). */
-  @IsOptional()
-  @emptyToNull
-  @Matches(OKR_PERIOD_REGEX, { message: 'El periodo debe tener formato AAAA-S1 o AAAA-S2 (o «base» para la plantilla)' })
-  period?: string | null;
+  /** Semestre obligatorio (AAAA-S1 o AAAA-S2): ya no hay plantilla sin periodo. */
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
+  period!: string;
 
   @IsOptional()
   @emptyToNull
@@ -306,11 +311,12 @@ export class CreateOkrDto {
   @MaxLength(MAX_OKR_TEXT)
   keyResult!: string;
 
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100)
-  weight?: number | null;
+  /** Obligatorio: entero de 1 a 100 (activo o no). */
+  @toWeight
+  @IsInt({ message: OKR_WEIGHT_MESSAGE })
+  @Min(MIN_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  @Max(MAX_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  weight!: number;
 
   @IsOptional()
   @IsInt()
@@ -323,10 +329,10 @@ export class CreateOkrDto {
 }
 
 export class UpdateOkrDto {
-  @IsOptional()
-  @emptyToNull
-  @Matches(OKR_PERIOD_REGEX, { message: 'El periodo debe tener formato AAAA-S1 o AAAA-S2 (o «base» para la plantilla)' })
-  period?: string | null;
+  /** Si viene no puede ser null ni vacío. */
+  @ValidateIf((o: UpdateOkrDto) => o.period !== undefined)
+  @Matches(OKR_PERIOD_REGEX, { message: OKR_PERIOD_MESSAGE })
+  period?: string;
 
   @IsOptional()
   @emptyToNull
@@ -352,11 +358,13 @@ export class UpdateOkrDto {
   @MaxLength(MAX_OKR_TEXT)
   keyResult?: string;
 
-  @IsOptional()
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(100)
-  weight?: number | null;
+  /** Si viene no puede ser null: entero de 1 a 100. */
+  @ValidateIf((o: UpdateOkrDto) => o.weight !== undefined)
+  @toWeight
+  @IsInt({ message: OKR_WEIGHT_MESSAGE })
+  @Min(MIN_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  @Max(MAX_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  weight?: number;
 
   @IsOptional()
   @IsInt()

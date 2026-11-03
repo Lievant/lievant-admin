@@ -7,11 +7,11 @@ import {
   KPI_NOT_FOUND,
   OKR_NOT_FOUND,
   POSITION_NOT_FOUND,
-  BASE_PERIOD,
   assertFrequency,
+  assertOkrWeight,
   assertPeriod,
   assertWeightSum,
-  normalizeOkrPeriod,
+  requireOkrPeriod,
   toKpiView,
   toOkrView,
   type KpiRow,
@@ -59,15 +59,15 @@ export class JobPositionItemsService {
     if (!rows[0]) throw new NotFoundException(POSITION_NOT_FOUND);
   }
 
-  /** Pesos de los OKRs ACTIVOS y vivos del grupo de periodo (la plantilla, NULL, es su propio grupo), sin contar el que se guarda. */
-  private async otherWeights(m: Q, positionId: string, period: string | null, excludeId: string | null): Promise<(number | null)[]> {
+  /** Pesos de los OKRs ACTIVOS y vivos del semestre, sin contar el que se guarda. */
+  private async otherWeights(m: Q, positionId: string, period: string, excludeId: string | null): Promise<number[]> {
     const rows = (await m.query(
       `SELECT weight FROM hr.job_position_okrs
-       WHERE job_position_id = $1 AND period IS NOT DISTINCT FROM $2::text AND deleted_at IS NULL AND is_active = true
+       WHERE job_position_id = $1 AND period = $2::text AND deleted_at IS NULL AND is_active = true
          AND ($3::uuid IS NULL OR id <> $3::uuid)`,
       [positionId, period, excludeId],
-    )) as { weight: string | null }[];
-    return rows.map((r) => (r.weight === null ? null : Number(r.weight)));
+    )) as { weight: string }[];
+    return rows.map((r) => Number(r.weight));
   }
 
   private async log(
@@ -95,23 +95,25 @@ export class JobPositionItemsService {
 
   async listOkrs(positionId: string, period?: string): Promise<OkrView[]> {
     await this.assertPositionExists(positionId);
-    if (period && period !== BASE_PERIOD) assertPeriod(period);
-    // Sin parámetro: todos; «base»: solo la plantilla (period NULL); AAAA-S1/S2: ese semestre.
+    if (period) assertPeriod(period);
+    // Sin parámetro: todos los semestres; AAAA-S1/S2: ese semestre.
     const rows = (await this.dataSource.query(
       `SELECT ${OKR_COLS} FROM hr.job_position_okrs
        WHERE job_position_id = $1 AND deleted_at IS NULL
-         AND ($2::text IS NULL OR ($2 = 'base' AND period IS NULL) OR period = $2)
-       ORDER BY period DESC NULLS FIRST, sort_order ASC, created_at ASC`,
+         AND ($2::text IS NULL OR period = $2)
+       ORDER BY period DESC, sort_order ASC, created_at ASC`,
       [positionId, period ?? null],
     )) as OkrRow[];
     return rows.map(toOkrView);
   }
 
   async createOkr(positionId: string, dto: CreateOkrDto, actor: Actor): Promise<OkrView> {
-    const period = normalizeOkrPeriod(dto.period) ?? null;
+    // Semestre y peso son obligatorios; el servidor los exige igual que el DTO.
+    const period = requireOkrPeriod(dto.period);
+    assertOkrWeight(dto.weight);
     const { okr, position } = await this.dataSource.transaction(async (m) => {
       const position = await this.lockPosition(m, positionId);
-      const weight = dto.weight ?? null;
+      const weight = dto.weight;
       const active = dto.isActive ?? true;
       assertWeightSum(await this.otherWeights(m, positionId, period, null), weight, active);
       const rows = (await m.query(
@@ -121,7 +123,7 @@ export class JobPositionItemsService {
       )) as OkrRow[];
       return { okr: rows[0]!, position };
     });
-    await this.log('create', actor, 'job_position_okr', okr.id, `${position.code} · ${okr.period ?? 'Plantilla'}`, {
+    await this.log('create', actor, 'job_position_okr', okr.id, `${position.code} · ${okr.period}`, {
       period: { from: null, to: okr.period },
       weight: { from: null, to: okr.weight },
     });
@@ -129,7 +131,8 @@ export class JobPositionItemsService {
   }
 
   async updateOkr(okrId: string, dto: UpdateOkrDto, actor: Actor): Promise<OkrView> {
-    const requestedPeriod = normalizeOkrPeriod(dto.period);
+    const requestedPeriod = dto.period !== undefined ? requireOkrPeriod(dto.period) : undefined;
+    if (dto.weight !== undefined) assertOkrWeight(dto.weight);
     const { before, after, position } = await this.dataSource.transaction(async (m) => {
       const found = (await m.query(
         `SELECT ${OKR_COLS} FROM hr.job_position_okrs WHERE id = $1 AND deleted_at IS NULL`,
@@ -146,12 +149,12 @@ export class JobPositionItemsService {
       if (!cur) throw new NotFoundException(OKR_NOT_FOUND);
 
       const next = {
-        period: requestedPeriod !== undefined ? requestedPeriod : cur.period,
+        period: requestedPeriod ?? requireOkrPeriod(cur.period),
         objectiveCode: dto.objectiveCode !== undefined ? (dto.objectiveCode?.trim() || null) : cur.objective_code,
         krCode: dto.krCode !== undefined ? (dto.krCode?.trim() || null) : cur.kr_code,
         objective: dto.objective?.trim() ?? cur.objective,
         keyResult: dto.keyResult?.trim() ?? cur.key_result,
-        weight: dto.weight !== undefined ? dto.weight : cur.weight === null ? null : Number(cur.weight),
+        weight: dto.weight ?? Number(cur.weight),
         sortOrder: dto.sortOrder ?? cur.sort_order,
         isActive: dto.isActive ?? cur.is_active,
       };
@@ -175,7 +178,7 @@ export class JobPositionItemsService {
     if (before.key_result !== after.key_result) diff.keyResult = { from: 'modificado', to: 'modificado' };
     if (before.objective_code !== after.objective_code) diff.objectiveCode = { from: before.objective_code, to: after.objective_code };
     if (before.kr_code !== after.kr_code) diff.krCode = { from: before.kr_code, to: after.kr_code };
-    await this.log('update', actor, 'job_position_okr', okrId, `${position.code} · ${after.period ?? 'Plantilla'}`, diff);
+    await this.log('update', actor, 'job_position_okr', okrId, `${position.code} · ${after.period}`, diff);
     return toOkrView(after);
   }
 
@@ -188,7 +191,7 @@ export class JobPositionItemsService {
       ),
     );
     if (!hit) throw new NotFoundException(OKR_NOT_FOUND);
-    await this.log('delete', actor, 'job_position_okr', hit.id, `OKR ${hit.period ?? 'Plantilla'}`, {
+    await this.log('delete', actor, 'job_position_okr', hit.id, `OKR ${hit.period}`, {
       deleted: { from: false, to: true },
       jobPositionId: hit.job_position_id,
     });
