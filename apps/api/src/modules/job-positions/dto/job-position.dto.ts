@@ -12,6 +12,7 @@ import {
   MaxLength,
   Min,
   ValidateIf,
+  registerDecorator,
 } from 'class-validator';
 import {
   MANUAL_STATUSES,
@@ -276,6 +277,20 @@ const OKR_PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
 const OKR_PERIOD_MESSAGE = 'El periodo debe tener formato AAAA-S1 o AAAA-S2';
 
 /** El peso llega como número o como texto numérico: se convierte; lo demás se deja tal cual para que la validación lo rechace. */
+/** Entero de 1 a 100; da UN solo mensaje (no uno por cada regla). */
+function IsOkrWeight(): PropertyDecorator {
+  return (target, propertyName) =>
+    registerDecorator({
+      name: 'isOkrWeight',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate: (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= MIN_OKR_WEIGHT && value <= MAX_OKR_WEIGHT,
+        defaultMessage: () => OKR_WEIGHT_MESSAGE,
+      },
+    });
+}
+
 const toWeight = Transform(({ value }) => (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value)) ? Number(value) : value));
 
 export class OkrQueryDto {
@@ -313,9 +328,7 @@ export class CreateOkrDto {
 
   /** Obligatorio: entero de 1 a 100 (activo o no). */
   @toWeight
-  @IsInt({ message: OKR_WEIGHT_MESSAGE })
-  @Min(MIN_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
-  @Max(MAX_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  @IsOkrWeight()
   weight!: number;
 
   @IsOptional()
@@ -370,9 +383,7 @@ export class UpdateOkrDto {
   /** Si viene no puede ser null: entero de 1 a 100. */
   @ValidateIf((o: UpdateOkrDto) => o.weight !== undefined)
   @toWeight
-  @IsInt({ message: OKR_WEIGHT_MESSAGE })
-  @Min(MIN_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
-  @Max(MAX_OKR_WEIGHT, { message: OKR_WEIGHT_MESSAGE })
+  @IsOkrWeight()
   weight?: number;
 
   @IsOptional()

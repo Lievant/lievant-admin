@@ -192,6 +192,13 @@ describe('Matriz de Puestos · DTO', () => {
     expect(dto.weight).toBe(34);
     expect(await errs(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight: '33.5' })).toContain('weight');
   });
+  it('OKR: un peso inválido o faltante da UN solo mensaje claro (no uno por cada regla)', async () => {
+    for (const weight of [undefined, 0, 33.5, 101, 'abc']) {
+      const errors = await validate(plainToInstance(CreateOkrDto, { period: '2026-S1', objective: 'o', keyResult: 'k', weight }));
+      const messages = errors.flatMap((e) => Object.values(e.constraints ?? {}));
+      expect(messages).toEqual(['El peso debe ser un número entero entre 1 y 100']);
+    }
+  });
   it('OKR en edición: el peso y el semestre, si vienen, no pueden ser null ni inválidos', async () => {
     expect(await errs(UpdateOkrDto, {})).toEqual([]);
     expect(await errs(UpdateOkrDto, { weight: 40, period: '2026-S2' })).toEqual([]);
