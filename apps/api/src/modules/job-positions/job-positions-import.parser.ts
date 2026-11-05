@@ -18,7 +18,7 @@ export const MAX_KPI_TARGET = 100;
 export const NO_KEY_RESULT = 'Por definir';
 
 // Límites de las columnas de la base (los textos más largos bloquean la importación).
-const LIMITS = { title: 200, area: 100, level: 50, reportsTo: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
+const LIMITS = { title: 200, area: 100, level: 50, reportsTo: 500, supervises: 5000, groupTitle: 300, kpiName: 200, code: 10 } as const;
 
 export interface ImportIssue {
   /** Fila del Excel (null = del archivo en general). */
@@ -63,6 +63,10 @@ export interface ParsedPosition {
   /** Categoría Junior / Semi Senior / Senior deducida de la columna de jerarquía del Excel; null si no trae. */
   seniority: Seniority | null;
   reportsTo: string | null;
+  /** Texto original de la celda «Supervisa a». */
+  supervisesText: string | null;
+  /** Nombres de «Supervisa a» (separados por «;» o salto de línea, sin vacíos ni repetidos). */
+  supervises: string[];
   plazas: number | null;
   roleSummary: string | null;
   positionObjective: string | null;
@@ -76,7 +80,7 @@ export interface ParsedPosition {
 
 /** Columnas del archivo que se encontraron (las que faltan no se tocan al actualizar). */
 export type ColumnKey =
-  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'plazas' | 'role' | 'objective'
+  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'supervises' | 'plazas' | 'role' | 'objective'
   | 'activities' | 'okrs' | 'kpis' | 'validationPoints' | 'status' | 'comments';
 
 export interface ParseResult {
@@ -106,6 +110,19 @@ export function norm(text: string | null | undefined): string {
     .trim();
 }
 
+/** «A; B\nC» → ['A', 'B', 'C']: separado por «;» o salto de línea, sin vacíos ni repetidos (sin acentos ni mayúsculas). */
+export function splitNames(text: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of (text ?? '').split(/[;\n\r]+/)) {
+    const name = part.replace(/\s+/g, ' ').trim();
+    if (name === '' || seen.has(norm(name))) continue;
+    seen.add(norm(name));
+    out.push(name);
+  }
+  return out;
+}
+
 const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; silent?: boolean }[] = [
   { key: 'area', test: (h) => /^sub[- ]?area\b/.test(h) || h === 'area', label: 'Sub-área' },
   { key: 'title', test: (h) => h === 'puesto', label: 'Puesto' },
@@ -113,6 +130,8 @@ const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; si
   // Solo sirve para deducir la Categoría: ya no es un campo del sistema, así que su ausencia no avisa y el texto no se guarda.
   { key: 'hierarchy', test: (h) => h.startsWith('jerarquia'), label: 'Jerarquía', silent: true },
   { key: 'reportsTo', test: (h) => h.startsWith('reporta a'), label: 'Reporta a' },
+  // Opcional: los archivos que no la traen no avisan nada y no se tocan las supervisiones.
+  { key: 'supervises', test: (h) => h.startsWith('supervisa a'), label: 'Supervisa a', silent: true },
   { key: 'plazas', test: (h) => h.startsWith('plazas'), label: 'Plazas ocupadas' },
   { key: 'role', test: (h) => h === 'rol', label: 'Rol' },
   { key: 'objective', test: (h) => h.startsWith('objetivo del puesto'), label: 'Objetivo del puesto' },
@@ -350,6 +369,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     // Una fila sin Puesto, sin Sub-área y sin nada más es una fila vacía; el "#" suelto no cuenta.
     const hasContent = [...map.entries()].some(([k, idx]) => k !== 'title' && k !== 'area' && (r[idx] ?? '').toString().trim() !== '');
     if (titleRaw === '' && area === '' && !hasContent) continue;
+    // Fila de totales (sin Puesto ni Sub-área y con «Total» en alguna celda): no es un puesto, se omite sin error.
+    if (titleRaw === '' && area === '' && r.some((c) => norm((c ?? '').toString()) === 'total')) continue;
     dataRows += 1;
     if (titleRaw === '') {
       errors.push({ row: rowNumber, message: 'Falta el Puesto' });
@@ -382,6 +403,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     const reportsTo = text(r, 'reportsTo');
     checkLen(levelRaw, 100, 'El Nivel');
     checkLen(reportsTo, LIMITS.reportsTo, '«Reporta a»');
+    const supervisesText = text(r, 'supervises');
+    checkLen(supervisesText, LIMITS.supervises, '«Supervisa a»');
 
     let plazas: number | null = null;
     const plazasText = cell(r, 'plazas');
@@ -406,6 +429,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       levelAmbiguous: resolved.kind === 'ambiguous',
       seniority: seniorityFromText(hierarchy),
       reportsTo,
+      supervisesText,
+      supervises: splitNames(supervisesText),
       plazas,
       roleSummary: text(r, 'role'),
       positionObjective: text(r, 'objective'),

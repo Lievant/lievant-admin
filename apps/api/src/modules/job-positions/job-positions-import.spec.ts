@@ -13,6 +13,8 @@ class FakeDb {
   positions: Row[] = [];
   activities: Row[] = [];
   okrs: Row[] = [];
+  /** Supervisiones entre puestos (supervisor → supervisado). */
+  sups: { sup: unknown; sub: unknown }[] = [];
   kpis: Row[] = [];
   areas: Row[] = [];
   /** Divisiones activas del catálogo (la importación no crea ninguna). */
@@ -28,7 +30,7 @@ class FakeDb {
   }
 
   async transaction<T>(cb: (m: FakeDb) => Promise<T>): Promise<T> {
-    const snap = structuredClone({ positions: this.positions, activities: this.activities, okrs: this.okrs, kpis: this.kpis, areas: this.areas });
+    const snap = structuredClone({ positions: this.positions, activities: this.activities, okrs: this.okrs, kpis: this.kpis, areas: this.areas, sups: this.sups });
     try {
       return await cb(this);
     } catch (e) {
@@ -61,14 +63,27 @@ class FakeDb {
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
     if (/^INSERT INTO hr\.job_positions/.test(sql)) {
-      const [code, title, area, level, createdBy, division, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority] = params;
+      const [code, title, area, level, createdBy, division, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority, supervisesText] = params;
       const row: Row = {
         id: this.id('P'), code, title, area, level, status: 'activo', description: null, description_approved: false, business_unit: null, created_by: createdBy,
         division, reports_to_text: reports, plazas, role_summary: role, position_objective: objective,
-        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, deleted_at: null,
+        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, supervises_text: supervisesText, reports_to_position_id: null, deleted_at: null,
       };
       this.positions.push(row);
       return [{ id: row.id }];
+    }
+    if (/^SELECT id, title, area, division, reports_to_position_id FROM hr\.job_positions/.test(sql)) return live(this.positions).map((r) => ({ id: r.id, title: r.title, area: r.area, division: r.division, reports_to_position_id: r.reports_to_position_id ?? null }));
+    if (/^SELECT s\.supervisor_position_id, s\.supervised_position_id FROM hr\.job_position_supervisions/.test(sql)) {
+      const alive = new Set(live(this.positions).map((r) => r.id));
+      return this.sups.filter((x) => alive.has(x.sup as string) && alive.has(x.sub as string)).map((x) => ({ supervisor_position_id: x.sup, supervised_position_id: x.sub }));
+    }
+    if (/^DELETE FROM hr\.job_position_supervisions WHERE supervisor_position_id = \$1 AND NOT/.test(sql)) {
+      this.sups = this.sups.filter((x) => !(x.sup === params[0] && !(params[1] as unknown[]).includes(x.sub)));
+      return [];
+    }
+    if (/^INSERT INTO hr\.job_position_supervisions/.test(sql)) {
+      for (const sub of params[1] as unknown[]) if (!this.sups.some((x) => x.sup === params[0] && x.sub === sub)) this.sups.push({ sup: params[0], sub });
+      return [];
     }
     if (/^UPDATE hr\.job_positions SET/.test(sql)) {
       const row = this.positions.find((p) => p.id === params[0])!;
@@ -512,14 +527,14 @@ describe('Importación de la Matriz · listas cerradas (nivel, categoría y áre
 });
 
 describe('Importación de la Matriz · «Reporta a», «Supervisa a» y campos obligatorios', () => {
-  it('«Supervisa a» ya no se lee: la columna del archivo se ignora sin avisos y no se guarda', async () => {
+  it('«Supervisa a» se lee: el texto original de la celda se guarda y los nombres sin coincidencia solo avisan', async () => {
     const { db, service } = setup();
     const r = await service.run('apply', 'TEST-Ecom', await xlsx([row('A1', 'P1')]), ACTOR, PERIOD);
     expect(r.errors).toEqual([]);
-    expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false);
-    expect(db.positions[0]).not.toHaveProperty('supervises_text');
-    expect(db.writes.some((c) => /supervises_text/.test(c.sql))).toBe(false);
-    // el texto de «Reporta a» del Excel sí se guarda
+    expect(db.positions[0]!.supervises_text).toBe('Nadie');
+    expect(r.warnings.some((w) => /«Supervisa a» «Nadie»/.test(w.message))).toBe(true);
+    expect(db.sups).toEqual([]);
+    // el texto de «Reporta a» del Excel sigue guardándose
     expect(db.positions[0]!.reports_to_text).toBe('TEST-Jefe');
   });
 
@@ -797,5 +812,158 @@ describe('Importación de la Matriz · semestre y reparto equitativo del peso', 
     await service.run('apply', 'TEST-Ecom', await xlsx([FILE_ROWS[0]!]), ACTOR, PERIOD);
     const call = audit.logActivity.mock.calls.map((c) => (c as unknown[])[0] as { entityType: string; changes: Record<string, unknown> }).find((c) => c.entityType === 'job_position_import')!;
     expect(call.changes.period).toEqual({ from: null, to: PERIOD });
+  });
+});
+
+// ── «Reporta a» y «Supervisa a» como relaciones entre puestos ───────────────────────────────────────────────
+
+describe('Importación de la Matriz · relaciones entre puestos', () => {
+  /** Fila con «Reporta a» (5) y «Supervisa a» (6). */
+  const rel = (area: string, title: string, reportsTo: string, supervises = '') => row(area, title, { 5: reportsTo, 6: supervises });
+  const byTitle = (db: FakeDb, title: string) => db.positions.find((p) => p.title === title)!;
+  const idsOf = (db: FakeDb, ...titles: string[]) => titles.map((t) => byTitle(db, t).id);
+
+  it('resuelve por título entre los puestos del propio archivo: «Reporta a» y «Supervisa a» (separados por «;» o salto de línea)', async () => {
+    const { db, service } = setup();
+    const file = await xlsx([
+      rel('A1', 'Director', '', 'Gerente; Analista\nAuxiliar'),
+      rel('A1', 'Gerente', 'Director'),
+      rel('A2', 'Analista', 'Gerente'),
+      rel('A2', 'Auxiliar', 'Analista'),
+    ]);
+    const r = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(r.errors).toEqual([]);
+    expect(byTitle(db, 'Director').reports_to_position_id).toBeNull();
+    expect(byTitle(db, 'Gerente').reports_to_position_id).toBe(byTitle(db, 'Director').id);
+    expect(byTitle(db, 'Auxiliar').reports_to_position_id).toBe(byTitle(db, 'Analista').id);
+    expect(db.sups.map((x) => x.sub).sort()).toEqual(idsOf(db, 'Gerente', 'Analista', 'Auxiliar').sort());
+    expect(db.sups.every((x) => x.sup === byTitle(db, 'Director').id)).toBe(true);
+    // el texto original de cada celda se conserva
+    expect(byTitle(db, 'Director').supervises_text).toBe('Gerente; Analista\nAuxiliar');
+    expect(byTitle(db, 'Gerente').reports_to_text).toBe('Director');
+  });
+
+  it('la vista previa muestra «Reporta a» y «Supervisa a» resueltos y no escribe nada', async () => {
+    const { db, service } = setup();
+    const prev = await service.run('preview', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente; Fantasma'), rel('A1', 'Gerente', 'Director')]), ACTOR, PERIOD);
+    expect(prev.positions[0]!.relations).toEqual({ reportsTo: null, reportsToText: null, supervises: ['Gerente'], supervisesUnresolved: ['Fantasma'] });
+    expect(prev.positions[1]!.relations).toMatchObject({ reportsTo: 'Director', reportsToText: 'Director' });
+    expect(db.positions).toHaveLength(0);
+    expect(db.sups).toHaveLength(0);
+  });
+
+  it('sin coincidencia: «Reporta a» («CEO») no bloquea, se guarda el texto, el enlace queda NULL y sale un aviso; «Supervisa a» enlaza solo lo que resuelve', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Gerente', 'CEO', 'Analista; Nadie Existe'), rel('A1', 'Analista', 'Gerente')]), ACTOR, PERIOD);
+    expect(r.applied).toBe(true);
+    expect(r.errors).toEqual([]);
+    expect(byTitle(db, 'Gerente').reports_to_text).toBe('CEO');
+    expect(byTitle(db, 'Gerente').reports_to_position_id).toBeNull();
+    expect(r.warnings.some((w) => /«Reporta a» «CEO» no coincide/.test(w.message))).toBe(true);
+    expect(r.warnings.some((w) => /«Supervisa a» «Nadie Existe» no coincide/.test(w.message))).toBe(true);
+    expect(db.sups).toEqual([{ sup: byTitle(db, 'Gerente').id, sub: byTitle(db, 'Analista').id }]);
+    expect(byTitle(db, 'Gerente').supervises_text).toBe('Analista; Nadie Existe'); // el texto original completo
+  });
+
+  it('resuelve también contra los puestos existentes de la MISMA división (no de otra) con título sin acentos ni mayúsculas', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Dirección General', '')]), ACTOR, PERIOD);
+    await service.run('apply', 'TEST-Otra', await xlsx([rel('A1', 'Jefatura Otra', '')]), ACTOR, PERIOD);
+    const r = await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Analista', 'direccion general', 'JEFATURA OTRA')]), ACTOR, PERIOD);
+    expect(byTitle(db, 'Analista').reports_to_position_id).toBe(byTitle(db, 'Dirección General').id);
+    expect(db.sups).toEqual([]); // «Jefatura Otra» es de otra división
+    expect(r.warnings.some((w) => /«Supervisa a» «JEFATURA OTRA» no coincide/.test(w.message))).toBe(true);
+  });
+
+  it('un título que coincide con más de un puesto es un error de esa fila, con las áreas', async () => {
+    const { db, service } = setup();
+    const file = await xlsx([rel('Marketplace', 'Líder', ''), rel('Performance', 'Líder', ''), rel('A1', 'Analista', 'Líder')]);
+    const r = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(r.applied).toBe(false);
+    expect(r.errors).toHaveLength(1);
+    expect(r.errors[0]!.message).toMatch(/«Reporta a»: el título «Líder» es ambiguo: existe en las áreas Marketplace y Performance/);
+    expect(db.positions).toHaveLength(0); // todo o nada
+  });
+
+  it('la autorreferencia y los ciclos en «Reporta a» bloquean y dicen las filas', async () => {
+    const { db, service } = setup();
+    const self = await service.run('preview', 'TEST-Ecom', await xlsx([rel('A1', 'Solo', 'Solo')]), ACTOR, PERIOD);
+    expect(self.errors[0]!.message).toMatch(/se reporta a sí mismo/);
+    const cycle = await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Uno', 'Tres'), rel('A1', 'Dos', 'Uno'), rel('A1', 'Tres', 'Dos')]), ACTOR, PERIOD);
+    expect(cycle.applied).toBe(false);
+    expect(cycle.errors.length).toBeGreaterThan(0);
+    expect(cycle.errors[0]!.message).toMatch(/forma un ciclo: .*→.*\(filas \d+, \d+, \d+\)/);
+    expect(db.positions).toHaveLength(0);
+  });
+
+  it('reimportar el mismo archivo es «Sin cambios» y no reescribe relaciones', async () => {
+    const { db, service } = setup();
+    const file = await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director')]);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    const snapshot = () => JSON.stringify([db.positions.map((p) => [p.id, p.reports_to_position_id, p.supervises_text]), db.sups]);
+    const before = snapshot();
+    const writesBefore = db.writes.length;
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(again.summary).toMatchObject({ created: 0, updated: 0, unchanged: 2 });
+    expect(snapshot()).toBe(before);
+    expect(db.writes.length).toBe(writesBefore);
+  });
+
+  it('con la columna presente las relaciones se REEMPLAZAN por las del archivo, y un cambio de relación cuenta como «actualizar»', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente; Analista'), rel('A1', 'Gerente', 'Director'), rel('A1', 'Analista', 'Director')]), ACTOR, PERIOD);
+    const changed = await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director'), rel('A1', 'Analista', 'Gerente')]);
+    const prev = await service.run('preview', 'TEST-Ecom', changed, ACTOR, PERIOD);
+    expect(prev.positions.map((p) => p.action)).toEqual(['actualizar', 'sin cambios', 'actualizar']);
+    await service.run('apply', 'TEST-Ecom', changed, ACTOR, PERIOD);
+    expect(db.sups).toEqual([{ sup: byTitle(db, 'Director').id, sub: byTitle(db, 'Gerente').id }]);
+    expect(byTitle(db, 'Analista').reports_to_position_id).toBe(byTitle(db, 'Gerente').id);
+  });
+
+  it('una celda vacía con la columna presente quita la relación (queda NULL)', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', ''), rel('A1', 'Gerente', 'Director', 'Director')]), ACTOR, PERIOD);
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', ''), rel('A1', 'Gerente', '', '')]), ACTOR, PERIOD);
+    expect(byTitle(db, 'Gerente').reports_to_position_id).toBeNull();
+    expect(db.sups).toEqual([]);
+  });
+
+  it('sin la columna «Reporta a» / «Supervisa a» no se toca nada', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director')]), ACTOR, PERIOD);
+    const snapshot = () => JSON.stringify([db.positions.map((p) => [p.id, p.reports_to_position_id, p.supervises_text, p.reports_to_text]), db.sups]);
+    const before = snapshot();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Matriz TEST');
+    ws.addRow(['Matriz de Puestos – División TEST-Ecom']);
+    ws.addRow([]);
+    ws.addRow(['Sub-área', 'Puesto', 'Plazas ocupadas']);
+    ws.addRow(['A1', 'Director', '9']);
+    ws.addRow(['A1', 'Gerente', '9']);
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    const r = await service.run('apply', 'TEST-Ecom', { buffer, originalname: 'sin-relaciones.xlsx', size: buffer.length }, ACTOR, PERIOD);
+    expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false); // la columna es opcional: no avisa
+    expect(snapshot()).toBe(before);
+    expect(db.positions.every((p) => p.plazas === 9)).toBe(true);
+  });
+
+  it('si falla una escritura de relaciones no queda nada importado (todo o nada)', async () => {
+    const { db, service } = setup();
+    db.failOn = /^INSERT INTO hr\.job_position_supervisions/;
+    await expect(service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director')]), ACTOR, PERIOD)).rejects.toThrow('fallo simulado');
+    expect(db.positions).toHaveLength(0);
+    expect(db.sups).toHaveLength(0);
+  });
+
+  it('el INSERT de puestos lleva supervises_text y los SQL de relaciones usan marcadores y parámetros que cuadran', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director')]), ACTOR, PERIOD);
+    const ins = db.calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
+    expect(ins.sql).toContain('supervises_text');
+    expect(ins.params).toHaveLength(18);
+    for (const c of db.calls.filter((x) => /job_position_supervisions|reports_to_position_id = \$2/.test(x.sql) && /^(INSERT|UPDATE|DELETE)/.test(x.sql))) {
+      const max = Math.max(...[...c.sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
+      expect(c.params).toHaveLength(max);
+    }
   });
 });
