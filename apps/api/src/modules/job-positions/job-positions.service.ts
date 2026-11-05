@@ -33,11 +33,14 @@ import {
   toKpiView,
   toListItem,
   toOkrView,
+  toPositionRef,
   type ActivityRow,
   type KpiRow,
   type OkrRow,
   type PositionDetail,
   type PositionListItem,
+  type PositionRefRow,
+  type PositionRelations,
   type PositionRow,
   type PositionStatus,
   type ValidationStatus,
@@ -56,6 +59,10 @@ export interface PositionPage {
   limit: number;
   totalPages: number;
 }
+
+/** Tope de colaboradores que devuelve el detalle del puesto y de niveles que se recorren al buscar ciclos. */
+const MAX_POSITION_EMPLOYEES = 200;
+const MAX_CHAIN_DEPTH = 100;
 
 const DETAIL_SQL = `
   SELECT p.*, u.name AS approver_name, v.name AS validator_name,
@@ -187,7 +194,7 @@ export class JobPositionsService {
     const rows = (await m.query(DETAIL_SQL, [id])) as PositionRow[];
     const row = rows[0];
     if (!row) throw new NotFoundException(POSITION_NOT_FOUND);
-    const [okrs, kpis, activities] = await Promise.all([
+    const [okrs, kpis, activities, relations] = await Promise.all([
       m.query(
         `SELECT id, job_position_id, period, objective_code, kr_code, objective, key_result, weight, sort_order, is_active
          FROM hr.job_position_okrs WHERE job_position_id = $1 AND deleted_at IS NULL
@@ -206,12 +213,147 @@ export class JobPositionsService {
          ORDER BY group_order ASC, sort_order ASC, created_at ASC`,
         [id],
       ) as Promise<ActivityRow[]>,
+      this.loadRelations(m, row),
     ]);
-    return toDetail(row, okrs.map(toOkrView), kpis.map(toKpiView), activities.map(toActivityView));
+    return toDetail(row, okrs.map(toOkrView), kpis.map(toKpiView), activities.map(toActivityView), relations);
+  }
+
+  /**
+   * «Reporta a» / «Supervisa a» entre puestos y colaboradores asignados. Todo se lee con `deleted_at IS NULL`: una
+   * relación con un puesto dado de baja no se ve. Los empleados: activos y no eliminados, solo datos básicos, por nombre.
+   */
+  private async loadRelations(m: Q, row: PositionRow): Promise<PositionRelations> {
+    const refs = (sql: string, params: unknown[]) => m.query(sql, params) as Promise<PositionRefRow[]>;
+    const COLS = 'p.id, p.code, p.title, p.area, p.level';
+    const [parent, supervises, supervisedBy, directReports, employees, count] = await Promise.all([
+      row.reports_to_position_id
+        ? refs(`SELECT ${COLS} FROM hr.job_positions p WHERE p.id = $1 AND p.deleted_at IS NULL`, [row.reports_to_position_id])
+        : Promise.resolve([] as PositionRefRow[]),
+      refs(
+        `SELECT ${COLS} FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervised_position_id
+         WHERE s.supervisor_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`,
+        [row.id],
+      ),
+      refs(
+        `SELECT ${COLS} FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervisor_position_id
+         WHERE s.supervised_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`,
+        [row.id],
+      ),
+      refs(`SELECT ${COLS} FROM hr.job_positions p WHERE p.reports_to_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`, [row.id]),
+      m.query(
+        `SELECT id, full_name, position, area, status FROM employees.employee_records
+         WHERE job_position_id = $1 AND status = 'active' AND deleted_at IS NULL
+         ORDER BY full_name ASC LIMIT ${MAX_POSITION_EMPLOYEES}`,
+        [row.id],
+      ) as Promise<{ id: string; full_name: string; position: string; area: string | null; status: string }[]>,
+      m.query(
+        `SELECT COUNT(*) AS n FROM employees.employee_records WHERE job_position_id = $1 AND status = 'active' AND deleted_at IS NULL`,
+        [row.id],
+      ) as Promise<{ n: string }[]>,
+    ]);
+    return {
+      reportsToPosition: parent[0] ? toPositionRef(parent[0]) : null,
+      supervises: supervises.map(toPositionRef),
+      supervisedBy: supervisedBy.map(toPositionRef),
+      directReports: directReports.map(toPositionRef),
+      employees: (employees ?? []).map((e) => ({ id: e.id, fullName: e.full_name, position: e.position, area: e.area, status: e.status })),
+      employeesCount: Number(count?.[0]?.n ?? 0),
+    };
+  }
+
+  /** Etiquetas «JP-001 · Título» de varios puestos (para la bitácora), en el orden pedido. */
+  private async positionLabels(m: Q, ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = (await m.query(`SELECT id, code, title FROM hr.job_positions WHERE id = ANY($1::uuid[])`, [ids])) as { id: string; code: string; title: string }[];
+    const byId = new Map(rows.map((r) => [r.id, `${r.code} · ${r.title}`]));
+    return ids.map((i) => byId.get(i) ?? i);
+  }
+
+  /** Los puestos elegidos deben existir y no estar eliminados. */
+  private async assertLivePositions(m: Q, ids: string[]): Promise<void> {
+    const rows = (await m.query(`SELECT id FROM hr.job_positions WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`, [ids])) as { id: string }[];
+    const found = new Set(rows.map((r) => r.id));
+    if (ids.some((i) => !found.has(i))) throw new BadRequestException('Alguno de los puestos elegidos no existe o fue eliminado');
+  }
+
+  /**
+   * «Reporta a» no puede cerrar un ciclo: se recorre la cadena hacia arriba desde el puesto elegido (con tope de
+   * profundidad) y no debe pasar por este puesto.
+   */
+  private async assertNoReportCycle(m: Q, positionId: string, target: string): Promise<void> {
+    if (target === positionId) throw new BadRequestException('Un puesto no puede reportarse a sí mismo');
+    let cur: string | null = target;
+    for (let depth = 0; cur && depth < MAX_CHAIN_DEPTH; depth++) {
+      if (cur === positionId) {
+        const label = (await this.positionLabels(m, [target]))[0] ?? target;
+        throw new BadRequestException(`«Reporta a» formaría un ciclo: ${label} ya reporta, directa o indirectamente, a este puesto`);
+      }
+      const rows = (await m.query(`SELECT reports_to_position_id FROM hr.job_positions WHERE id = $1 AND deleted_at IS NULL`, [cur])) as { reports_to_position_id: string | null }[];
+      cur = rows[0]?.reports_to_position_id ?? null;
+    }
+  }
+
+  /**
+   * Guarda «Reporta a» (puesto) y «Supervisa a» en la misma transacción que el resto del puesto. Valida existencia,
+   * autorreferencia, ciclos en «Reporta a» y pares mutuos directos en «Supervisa a» (400 con mensaje claro) y
+   * devuelve el antes/después en etiquetas de puesto para la bitácora. Lo que no viene (`undefined`) no se toca.
+   */
+  private async saveRelations(
+    m: Q,
+    positionId: string,
+    dto: { reportsToPositionId?: string | null | undefined; supervisesPositionIds?: string[] | undefined },
+  ): Promise<Record<string, { from: unknown; to: unknown }>> {
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+
+    if (dto.reportsToPositionId !== undefined) {
+      const target = dto.reportsToPositionId;
+      const cur = (await m.query(`SELECT reports_to_position_id FROM hr.job_positions WHERE id = $1`, [positionId])) as { reports_to_position_id: string | null }[];
+      const before = cur[0]?.reports_to_position_id ?? null;
+      if (target !== before) {
+        if (target) {
+          await this.assertLivePositions(m, [target]);
+          await this.assertNoReportCycle(m, positionId, target);
+        }
+        await m.query(`UPDATE hr.job_positions SET reports_to_position_id = $2, updated_at = NOW() WHERE id = $1`, [positionId, target]);
+        diff.reportsToPosition = {
+          from: before ? (await this.positionLabels(m, [before]))[0] : null,
+          to: target ? (await this.positionLabels(m, [target]))[0] : null,
+        };
+      }
+    }
+
+    if (dto.supervisesPositionIds !== undefined) {
+      const wanted = [...new Set(dto.supervisesPositionIds)];
+      if (wanted.includes(positionId)) throw new BadRequestException('Un puesto no puede supervisarse a sí mismo');
+      if (wanted.length > 0) {
+        await this.assertLivePositions(m, wanted);
+        const mutual = (await m.query(
+          `SELECT p.title FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervisor_position_id
+           WHERE s.supervised_position_id = $1 AND s.supervisor_position_id = ANY($2::uuid[]) AND p.deleted_at IS NULL`,
+          [positionId, wanted],
+        )) as { title: string }[];
+        if (mutual.length > 0) {
+          throw new BadRequestException(`«${mutual[0]!.title}» ya supervisa a este puesto: dos puestos no pueden supervisarse entre sí`);
+        }
+      }
+      const current = ((await m.query(`SELECT supervised_position_id FROM hr.job_position_supervisions WHERE supervisor_position_id = $1`, [positionId])) as { supervised_position_id: string }[]).map((r) => r.supervised_position_id);
+      const same = current.length === wanted.length && wanted.every((w) => current.includes(w));
+      if (!same) {
+        await m.query(`DELETE FROM hr.job_position_supervisions WHERE supervisor_position_id = $1 AND NOT (supervised_position_id = ANY($2::uuid[]))`, [positionId, wanted]);
+        if (wanted.length > 0) {
+          await m.query(
+            `INSERT INTO hr.job_position_supervisions (supervisor_position_id, supervised_position_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`,
+            [positionId, wanted],
+          );
+        }
+        diff.supervises = { from: await this.positionLabels(m, current), to: await this.positionLabels(m, wanted) };
+      }
+    }
+    return diff;
   }
 
   async create(dto: CreatePositionDto, actor: Actor): Promise<PositionDetail> {
-    const id = await this.dataSource.transaction(async (m) => {
+    const created = await this.dataSource.transaction(async (m) => {
       // El consecutivo se calcula bajo un candado para que dos altas simultáneas no choquen;
       // lee también los códigos de puestos eliminados, así que nunca se reutilizan.
       await m.query(`SELECT pg_advisory_xact_lock(hashtext('hr.job_positions.code'))`);
@@ -236,10 +378,13 @@ export class JobPositionsService {
           dto.reportsToEmployeeId ?? null,
         ],
       )) as { id: string }[];
-      return rows[0]!.id;
+      const newId = rows[0]!.id;
+      const relations = await this.saveRelations(m, newId, dto);
+      return { id: newId, relations };
     });
+    const id = created.id;
     const detail = await this.getDetail(id);
-    await this.log('create', actor, detail, { code: { from: null, to: detail.code }, status: { from: null, to: detail.status } });
+    await this.log('create', actor, detail, { code: { from: null, to: detail.code }, status: { from: null, to: detail.status }, ...created.relations });
     return detail;
   }
 
@@ -287,7 +432,7 @@ export class JobPositionsService {
       const seniority = dto.seniority !== undefined ? dto.seniority : cur.seniority;
       // Los campos obligatorios se exigen al guardar el formulario; cambiar solo la validación del Head no se bloquea.
       // (el DTO ya validado trae todas las propiedades; solo cuentan las que llegaron con valor)
-      const touchesForm = Object.entries(dto).some(([k, v]) => v !== undefined && k !== 'validationStatus' && k !== 'headComments');
+      const touchesForm = Object.entries(dto).some(([k, v]) => v !== undefined && k !== 'validationStatus' && k !== 'headComments' && k !== 'reportsToPositionId' && k !== 'supervisesPositionIds');
       if (touchesForm) {
         this.assertRequired({
           roleSummary: simple.roleSummary as string | null,
@@ -338,6 +483,7 @@ export class JobPositionsService {
       // El texto de la descripción no se guarda en la bitácora: solo que cambió y si se invalidó la aprobación.
       if (cur.description !== desc.description) diff.description = { from: 'modificada', to: 'modificada' };
       if (cur.description_approved && !desc.approved) diff.descriptionApproved = { from: true, to: false };
+      Object.assign(diff, await this.saveRelations(m, id, dto));
       return diff;
     });
     const detail = await this.getDetail(id);
@@ -504,6 +650,9 @@ export class JobPositionsService {
         ),
       );
       if (!hit) throw new NotFoundException(POSITION_NOT_FOUND);
+      // Sus relaciones se limpian: los que reportaban a este puesto quedan sin «Reporta a» y se borran sus supervisiones.
+      await m.query(`UPDATE hr.job_positions SET reports_to_position_id = NULL, updated_at = NOW() WHERE reports_to_position_id = $1`, [id]);
+      await m.query(`DELETE FROM hr.job_position_supervisions WHERE supervisor_position_id = $1 OR supervised_position_id = $1`, [id]);
       await m.query(
         `UPDATE hr.job_position_okrs SET deleted_at = NOW(), updated_at = NOW() WHERE job_position_id = $1 AND deleted_at IS NULL`,
         [id],

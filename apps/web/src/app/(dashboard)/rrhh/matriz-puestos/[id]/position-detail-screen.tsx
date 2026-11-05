@@ -10,6 +10,7 @@ import { ActivityDialog, ConfirmDelete, CopyOkrsDialog, KpiDialog, OkrDialog } f
 import { FormattedText } from '../formatted-text';
 import { ModalShell } from '../modal-shell';
 import { PositionFormDialog, readError } from '../position-form-dialog';
+import { EmployeesSection, RelationsSection } from '../position-relations';
 import {
   EMPTY_OPTIONS,
   FIELD_GUIDES,
@@ -92,6 +93,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const canUpdate = usePermission('rrhh', 'matriz-puestos', 'update');
   const canDelete = usePermission('rrhh', 'matriz-puestos', 'delete');
   const canApprove = usePermission('rrhh', 'matriz-puestos', 'approve');
+  const canViewEmployees = usePermission('rrhh', 'empleados', 'read');
   // La asignación masiva exige ambos permisos: editar la Matriz y escribir en Desarrollo Organizacional.
   const canWriteDevelopment = usePermission('rrhh', 'desarrollo-organizacional', 'write');
   const canAssignBulk = canUpdate && canWriteDevelopment;
@@ -244,12 +246,16 @@ export function PositionDetailScreen({ id }: { id: string }) {
                 <Field label="Nivel Original (Excel)" value={position.levelOriginal} />
               )}
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
-              <Field label="Reporta a" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
+              <Field label="Reporta a (Persona)" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
               {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
               <Field label="Plazas" value={plazasLabel(position.plazas)} />
               <Field label="Estado" value={STATUS_LABELS[position.status]} />
             </div>
           </div>
+
+          <RelationsSection position={position} canUpdate={canUpdate} onSaved={() => void load()} />
+
+          <EmployeesSection position={position} canViewEmployees={canViewEmployees} />
 
           <div className={CARD}>
             <h2 className="text-sm font-semibold text-navy">Rol y Objetivo</h2>

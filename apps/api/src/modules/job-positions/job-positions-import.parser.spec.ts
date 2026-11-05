@@ -256,3 +256,56 @@ describe('Importación de la Matriz · hoja completa', () => {
     expect(r.warnings.some((w) => /Las plazas «dos»/.test(w.message))).toBe(true);
   });
 });
+
+describe('Importación de la Matriz · «Supervisa a»', () => {
+  it('lee la columna por su encabezado: texto original y nombres', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: 'Gerente; Analista' })])]);
+    expect(r.columns.has('supervises')).toBe(true);
+    expect(r.positions[0]!.supervisesText).toBe('Gerente; Analista');
+    expect(r.positions[0]!.supervises).toEqual(['Gerente', 'Analista']);
+    expect(r.positions[0]!.reportsTo).toBe('TEST-Jefe'); // «Reporta a» se sigue leyendo
+  });
+
+  it('separa por «;» y por salto de línea, recorta espacios, ignora vacíos y duplicados (sin acentos ni mayúsculas)', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: ' Gerente ;; Analista\n\nauxiliar  ;  AUXILIAR ; Dirección;direccion;  ' })])]);
+    expect(r.positions[0]!.supervises).toEqual(['Gerente', 'Analista', 'auxiliar', 'Dirección']);
+  });
+
+  it('celda vacía: sin nombres y sin texto', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: '' })])]);
+    expect(r.positions[0]!.supervisesText).toBeNull();
+    expect(r.positions[0]!.supervises).toEqual([]);
+  });
+
+  it('admite hasta 5,000 caracteres y más es un error con el número de fila', () => {
+    expect(parseMatrixSheets([sheet([dataRow({ 6: 'x'.repeat(5000) })])]).errors).toEqual([]);
+    const bad = parseMatrixSheets([sheet([dataRow({ 6: 'x'.repeat(5001) })])]);
+    expect(bad.errors.map((e) => [e.row, /Supervisa a/.test(e.message)])).toEqual([[4, true]]);
+  });
+
+  it('«Reporta a» mantiene su límite de 500 caracteres', () => {
+    expect(parseMatrixSheets([sheet([dataRow({ 5: 'x'.repeat(501) })])]).errors.length).toBe(1);
+  });
+
+  it('un archivo sin la columna no avisa nada y no la marca como encontrada', () => {
+    const noCol: RawSheet = { name: 'Matriz TEST', rows: [['Matriz de Puestos – División TEST-Ecom'], [], ['Sub-área', 'Puesto', 'Plazas ocupadas'], ['A1', 'P1', '2']] };
+    const r = parseMatrixSheets([noCol]);
+    expect(r.columns.has('supervises')).toBe(false);
+    expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false);
+  });
+});
+
+describe('Importación de la Matriz · fila de totales', () => {
+  it('una fila sin Puesto ni Sub-área con «Total» (y sumas) se omite sin error y no cuenta como fila de datos', () => {
+    const total = ['', '', '', '', '', '', 'Total', '64', '', '', '', '', '', '', '', ''];
+    const r = parseMatrixSheets([sheet([dataRow(), total])]);
+    expect(r.errors).toEqual([]);
+    expect(r.positions).toHaveLength(1);
+    expect(r.dataRows).toBe(1);
+  });
+
+  it('una fila con contenido pero sin Puesto y sin «Total» sigue siendo error', () => {
+    const r = parseMatrixSheets([sheet([['', '', '', '', '', '', 'algo', '5', '', '', '', '', '', '', '', '']])]);
+    expect(r.errors.map((e) => e.message)).toEqual(['Falta el Puesto']);
+  });
+});

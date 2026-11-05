@@ -18,7 +18,7 @@ const E2 = '22222222-2222-4222-8222-222222222222';
 const baseRow = (over: Partial<PositionRow> = {}): PositionRow => ({
   id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'TI', business_unit: null, level: null, description: 'TEST-Descripción', description_approved: false,
   description_approved_by: null, description_approved_at: null, status: 'pendiente_aprobacion', division: null, level_original: null, seniority: null,
-  reports_to_text: 'Texto del Excel', reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
+  reports_to_text: 'Texto del Excel', reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
   validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null,
   created_at: new Date(), updated_at: new Date(), ...over,
 });
@@ -162,7 +162,7 @@ describe('Matriz de Puestos · «Reporta a» como empleado', () => {
     const gone = toDetail(baseRow({ reports_to_employee_id: E1, reports_to_name: 'TEST-Ana', reports_to_position: 'Analista', reports_to_active: false }), [], []);
     expect(gone.reportsToEmployee!.active).toBe(false);
     expect(toDetail(baseRow(), [], []).reportsToEmployee).toBeNull();
-    expect(toDetail(baseRow(), [], [])).not.toHaveProperty('supervises');
+    expect(toDetail(baseRow(), [], [])).toMatchObject({ reportsToPosition: null, supervises: [], supervisedBy: [], directReports: [], employees: [], employeesCount: 0 });
   });
 
   it('el DTO acepta un UUID o null y rechaza otra cosa; «Supervisa a» ya no se acepta', async () => {

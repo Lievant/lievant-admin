@@ -665,20 +665,33 @@ export class IsobotIngestionService {
       throw new NotFoundException('El archivo ya no está disponible en el almacenamiento.');
     }
 
-    const url = await this.storage.getPresignedReadUrl(document.s3Key, {
-      disposition,
-      fileName: downloadFileName(document.fileName, fileType),
-      ...(fileType ? { contentType: MIME_BY_FILE_TYPE[fileType]! } : {}),
-    });
-    return { url };
+    return { url: await this.signedFileUrl(document.s3Key, document, disposition) };
   }
 
+  /**
+   * Descarga desde la biblioteca de Herramientas y desde las fuentes del chat. Igual que el panel de SGSI: URL de
+   * 60 s con el nombre y el tipo de contenido que corresponden al archivo (no a un `file_name` que se conservó al
+   * reemplazar el documento por uno de otro tipo).
+   */
   async getDownloadUrl(id: string): Promise<{ url: string }> {
     const document = await this.documentsRepo.findOne({ where: { id } });
     if (!document) throw new NotFoundException(`Documento ${id} no encontrado`);
     if (!document.s3Key) throw new BadRequestException('Este documento no tiene un archivo asociado en S3');
 
-    const url = await this.storage.getPresignedUrl(document.s3Key, document.fileName);
-    return { url };
+    return { url: await this.signedFileUrl(document.s3Key, document, 'attachment') };
+  }
+
+  /** URL prefirmada de lectura con nombre de descarga de extensión corregida y tipo de contenido del archivo. */
+  private signedFileUrl(
+    s3Key: string,
+    document: { fileType: string | null; fileName: string },
+    disposition: FileDisposition,
+  ): Promise<string> {
+    const fileType = fileTypeOf(document.fileType, document.fileName);
+    return this.storage.getPresignedReadUrl(s3Key, {
+      disposition,
+      fileName: downloadFileName(document.fileName, fileType),
+      ...(fileType ? { contentType: MIME_BY_FILE_TYPE[fileType]! } : {}),
+    });
   }
 }

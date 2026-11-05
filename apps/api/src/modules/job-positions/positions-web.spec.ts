@@ -16,6 +16,9 @@ import {
   seniorityLabel,
   groupOkrs,
   nextPeriod,
+  employeesCountLabel,
+  positionRefLabel,
+  relationsChanged,
   okrWeightError,
   weightSummary,
   okrCode,
@@ -192,5 +195,32 @@ describe('Matriz de Puestos (web) · obligatorios y «Reporta a»', () => {
     expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: 'Directora', active: true })).toBe('Ana Pérez (Directora)');
     expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: 'Directora', active: false })).toBe('Ana Pérez (Directora) (Baja)');
     expect(reportsToLabel({ id: '1', fullName: 'Ana Pérez', position: null })).toBe('Ana Pérez');
+  });
+});
+
+describe('Matriz de Puestos (web) · relaciones y colaboradores', () => {
+  const ref = (id: string, title = id) => ({ id, code: `JP-${id}`, title, area: 'TI', level: null });
+
+  it('el contador de colaboradores: singular, plural y «N de M plazas» solo si las plazas no son nulas', () => {
+    expect(employeesCountLabel(1, null)).toBe('1 colaborador');
+    expect(employeesCountLabel(3, null)).toBe('3 colaboradores');
+    expect(employeesCountLabel(0, null)).toBe('0 colaboradores');
+    expect(employeesCountLabel(3, 5)).toBe('3 colaboradores · 3 de 5 plazas');
+    expect(employeesCountLabel(1, 1)).toBe('1 colaborador · 1 de 1 plaza');
+    expect(employeesCountLabel(0, 0)).toBe('0 colaboradores · 0 de 0 plazas');
+  });
+
+  it('detecta cambios en «Reporta a» y «Supervisa a» (el orden de los supervisados no cuenta)', () => {
+    const saved = { reportsTo: ref('a'), supervises: [ref('b'), ref('c')] };
+    expect(relationsChanged({ reportsTo: ref('a'), supervises: [ref('c'), ref('b')] }, saved)).toBe(false);
+    expect(relationsChanged({ reportsTo: null, supervises: [ref('b'), ref('c')] }, saved)).toBe(true);
+    expect(relationsChanged({ reportsTo: ref('z'), supervises: [ref('b'), ref('c')] }, saved)).toBe(true);
+    expect(relationsChanged({ reportsTo: ref('a'), supervises: [ref('b')] }, saved)).toBe(true);
+    expect(relationsChanged({ reportsTo: ref('a'), supervises: [ref('b'), ref('d')] }, saved)).toBe(true);
+    expect(relationsChanged({ reportsTo: null, supervises: [] }, { reportsTo: null, supervises: [] })).toBe(false);
+  });
+
+  it('etiqueta de un puesto enlazado: código, título y área', () => {
+    expect(positionRefLabel(ref('1', 'Director'))).toBe('JP-1 · Director · TI');
   });
 });

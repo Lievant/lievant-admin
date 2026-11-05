@@ -293,6 +293,8 @@ export interface PositionRow {
   seniority: string | null;
   reports_to_text: string | null;
   reports_to_employee_id: string | null;
+  reports_to_position_id: string | null;
+  supervises_text: string | null;
   reports_to_name?: string | null;
   reports_to_position?: string | null;
   reports_to_active?: boolean | null;
@@ -473,7 +475,55 @@ export function applyValidationChange(current: ValidationState, next: Validation
   return { status: next, by: actorId, at: now };
 }
 
-export interface PositionDetail extends PositionListItem {
+/** Un puesto de la misma matriz, tal como se enlaza desde «Reporta a» y «Supervisa a». */
+export interface PositionRef {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+export interface PositionEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  status: string;
+}
+
+/** Relaciones del puesto y colaboradores que lo tienen asignado (solo datos básicos). */
+export interface PositionRelations {
+  reportsToPosition: PositionRef | null;
+  supervises: PositionRef[];
+  supervisedBy: PositionRef[];
+  directReports: PositionRef[];
+  employees: PositionEmployee[];
+  employeesCount: number;
+}
+
+export const EMPTY_RELATIONS: PositionRelations = {
+  reportsToPosition: null,
+  supervises: [],
+  supervisedBy: [],
+  directReports: [],
+  employees: [],
+  employeesCount: 0,
+};
+
+export interface PositionRefRow {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+export const toPositionRef = (r: PositionRefRow): PositionRef => ({ id: r.id, code: r.code, title: r.title, area: r.area, level: r.level });
+
+export interface PositionDetail extends PositionListItem, PositionRelations {
+  /** Texto original de la celda «Supervisa a» del Excel (solo lectura). */
+  supervisesText: string | null;
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura en la pantalla). */
@@ -496,9 +546,11 @@ export interface PositionDetail extends PositionListItem {
   activities: ActivityView[];
 }
 
-export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = []): PositionDetail {
+export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = [], relations: PositionRelations = EMPTY_RELATIONS): PositionDetail {
   return {
     ...toListItem(r),
+    ...relations,
+    supervisesText: r.supervises_text ?? null,
     levelOriginal: r.level_original,
     reportsTo: r.reports_to_text,
     reportsToEmployee: r.reports_to_employee_id

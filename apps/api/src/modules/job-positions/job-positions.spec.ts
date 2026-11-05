@@ -137,7 +137,7 @@ describe('Matriz de Puestos · filtros del listado', () => {
 });
 
 const EXTRA = {
-  level_original: null, seniority: null, division: null, reports_to_text: null, reports_to_employee_id: null, plazas: null, role_summary: 'TEST-Rol',
+  level_original: null, seniority: null, division: null, reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, plazas: null, role_summary: 'TEST-Rol',
   position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente' as const,
   validated_by: null, validator_name: null, validated_at: null,
 };
@@ -335,7 +335,8 @@ describe('Matriz de Puestos · servicio de puestos', () => {
     expect(sqls.some((s) => /UPDATE hr\.job_positions SET deleted_at = NOW\(\)/.test(s))).toBe(true);
     expect(sqls.some((s) => /UPDATE hr\.job_position_okrs SET deleted_at = NOW\(\)/.test(s))).toBe(true);
     expect(sqls.some((s) => /UPDATE hr\.job_position_kpis SET deleted_at = NOW\(\)/.test(s))).toBe(true);
-    expect(sqls.some((s) => /DELETE FROM/.test(s))).toBe(false);
+    // Ningún borrado físico de puestos, OKRs, KPIs ni actividades (solo las filas de relación entre puestos se quitan).
+    expect(sqls.some((s) => /DELETE FROM hr\.job_position(s|_okrs|_kpis|_activities)/.test(s))).toBe(false);
     expect(audit.logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'delete', entityType: 'job_position' }));
   });
 

@@ -17,6 +17,7 @@ import {
 import { canonicalDivision, divisionNotInCatalog, loadCatalogDivisions } from './job-positions-divisions';
 import { deduceDivision } from './job-positions-import.parser';
 import { findAreaExact, type CatalogArea } from './job-positions-catalog.util';
+import { resolveImportRelations, type RelFileRow, type RowRelations } from './job-positions-import.relations';
 import { applyValidationChange, assertPeriod, missingRequiredFields, nextPositionCode, splitWeights, MAX_WEIGHT_SUM, type ValidationStatus } from './job-positions.util';
 
 type Q = { query: DataSource['query'] };
@@ -42,6 +43,8 @@ export interface ImportPositionPreview {
   kpis: number;
   /** OKRs del semestre elegido con su peso (solo si el archivo trae la columna de OKRs). */
   okrs: ImportOkrPreview[];
+  /** «Reporta a» y «Supervisa a» resueltos (títulos de los puestos enlazados); null si el archivo no trae la columna. */
+  relations: { reportsTo: string | null; reportsToText: string | null; supervises: string[]; supervisesUnresolved: string[] } | null;
 }
 
 export interface ImportSummary {
@@ -90,6 +93,8 @@ interface ExistingPosition {
   seniority: string | null;
   description: string | null;
   reports_to_text: string | null;
+  reports_to_position_id: string | null;
+  supervises_text: string | null;
   plazas: number | null;
   role_summary: string | null;
   position_objective: string | null;
@@ -124,6 +129,8 @@ interface Plan {
   okrView: ImportOkrPreview[];
   /** El semestre no tiene peso suficiente para darle 1 a cada OKR nuevo (bloquea la importación). */
   weightError: string | null;
+  /** «Reporta a» y «Supervisa a» resueltos contra los puestos de la división (se llena después de planear todos). */
+  relations: RowRelations | null;
   kpiUpdates: { id: string; kpi: ParsedPosition['kpis'][number] }[];
   kpiInserts: ParsedPosition['kpis'];
   kpiDeletes: string[];
@@ -133,6 +140,7 @@ const same = (a: unknown, b: unknown): boolean => (a ?? null) === (b ?? null);
 
 const SIMPLE_MAP: { column: ColumnKey; field: keyof ParsedPosition; col: keyof ExistingPosition }[] = [
   { column: 'reportsTo', field: 'reportsTo', col: 'reports_to_text' },
+  { column: 'supervises', field: 'supervisesText', col: 'supervises_text' },
   { column: 'plazas', field: 'plazas', col: 'plazas' },
   { column: 'role', field: 'roleSummary', col: 'role_summary' },
   { column: 'objective', field: 'positionObjective', col: 'position_objective' },
@@ -205,10 +213,11 @@ export class JobPositionsImportService {
     // Lectura sin escribir: sirve de vista previa y de comprobación antes de aplicar (el peso del semestre puede no alcanzar).
     const pre = await this.resolveAreas(this.dataSource, parsed, div, false);
     const previewPlans = await this.plan(this.dataSource, pre.parsed, div, actor, period);
-    const weightErrors = this.weightErrors(pre.parsed, previewPlans);
-    if (mode === 'preview' || weightErrors.length > 0) {
-      const withWarnings = this.withMissingWarnings(pre.parsed, previewPlans);
-      const withErrors = { ...withWarnings, errors: [...withWarnings.errors, ...weightErrors] };
+    const preRel = await this.planRelations(this.dataSource, pre.parsed, previewPlans, div);
+    const blocking = [...this.weightErrors(pre.parsed, previewPlans), ...preRel.errors];
+    if (mode === 'preview' || blocking.length > 0) {
+      const withWarnings = this.withMissingWarnings({ ...pre.parsed, warnings: [...pre.parsed.warnings, ...preRel.warnings] }, previewPlans);
+      const withErrors = { ...withWarnings, errors: [...withWarnings.errors, ...blocking] };
       return this.result(mode, false, fileName, div, period, withErrors, withErrors.positions, previewPlans, pre.created);
     }
 
@@ -219,16 +228,25 @@ export class JobPositionsImportService {
       const areas = await this.resolveAreas(m, parsed, div, true);
       const plans = await this.plan(m, areas.parsed, div, actor, period);
       // Si entre la vista previa y la escritura cambió el peso del semestre, no se escribe nada.
-      const late = this.weightErrors(areas.parsed, plans);
+      const lateRel = await this.planRelations(m, areas.parsed, plans, div);
+      const late = [...this.weightErrors(areas.parsed, plans), ...lateRel.errors];
       if (late.length > 0) throw new BadRequestException(late.map((e) => `Fila ${e.row}: ${e.message}`).join(' '));
+      areas.parsed = { ...areas.parsed, warnings: [...areas.parsed.warnings, ...lateRel.warnings] };
+      const ids = new Map<number, string>();
       const codes = ((await m.query(`SELECT code FROM hr.job_positions`)) as { code: string }[]).map((c) => c.code);
       for (const p of areas.parsed.positions) {
         const plan = plans.get(p.row)!;
         if (plan.action === 'sin cambios') continue;
         const code = plan.action === 'crear' ? nextPositionCode(codes) : plan.existing!.code;
         if (plan.action === 'crear') codes.push(code);
-        await this.write(m, p, plan, div, code, areas.parsed.columns, actor, period);
+        ids.set(p.row, await this.write(m, p, plan, div, code, areas.parsed.columns, actor, period));
       }
+      // Segunda pasada: con todos los puestos ya creados o actualizados se enlazan «Reporta a» y «Supervisa a».
+      for (const p of areas.parsed.positions) {
+        const plan = plans.get(p.row)!;
+        if (plan.action === 'sin cambios' && !ids.has(p.row)) ids.set(p.row, plan.existing!.id);
+      }
+      await this.writeRelations(m, areas.parsed, plans, ids);
       return { plans, areas };
     });
     const applied = this.withMissingWarnings(areas.parsed, plans);
@@ -328,6 +346,85 @@ export class JobPositionsImportService {
 
   // ── Plan ───────────────────────────────────────────────────────────────────
 
+  private relationsPreview(p: ParsedPosition, rel: RowRelations | null): ImportPositionPreview['relations'] {
+    if (!rel || (rel.reportsTo === undefined && rel.supervises === undefined)) return null;
+    return {
+      reportsTo: rel.reportsTo?.title ?? null,
+      reportsToText: p.reportsTo,
+      supervises: rel.supervises?.titles ?? [],
+      supervisesUnresolved: rel.supervises?.unresolved ?? [],
+    };
+  }
+
+  /**
+   * Resuelve «Reporta a» y «Supervisa a» de TODOS los puestos del archivo contra los del propio archivo y los vivos de la
+   * misma división (por título normalizado). Un puesto cuya relación cambia pasa de «sin cambios» a «actualizar».
+   */
+  private async planRelations(m: Q, parsed: ParseResult, plans: Map<number, Plan>, division: string): Promise<{ errors: ImportIssue[]; warnings: ImportIssue[] }> {
+    const hasReports = parsed.columns.has('reportsTo');
+    const hasSupervises = parsed.columns.has('supervises');
+    if (!hasReports && !hasSupervises) return { errors: [], warnings: [] };
+    const live = (await m.query(`SELECT id, title, area, division, reports_to_position_id FROM hr.job_positions WHERE deleted_at IS NULL`)) as { id: string; title: string; area: string; division: string | null; reports_to_position_id: string | null }[];
+    const links = (await m.query(
+      `SELECT s.supervisor_position_id, s.supervised_position_id FROM hr.job_position_supervisions s
+       JOIN hr.job_positions a ON a.id = s.supervisor_position_id AND a.deleted_at IS NULL
+       JOIN hr.job_positions b ON b.id = s.supervised_position_id AND b.deleted_at IS NULL`,
+    )) as { supervisor_position_id: string; supervised_position_id: string }[];
+    const inFile = new Set<string>();
+    const fileRows: RelFileRow[] = parsed.positions.map((p) => {
+      const existing = plans.get(p.row)?.existing ?? null;
+      if (existing) inFile.add(existing.id);
+      return {
+        row: p.row,
+        title: p.title,
+        area: p.area,
+        existingId: existing?.id ?? null,
+        hasReportsTo: hasReports,
+        hasSupervises,
+        reportsTo: p.reportsTo,
+        supervises: p.supervises,
+        currentReportsTo: existing?.reports_to_position_id ?? null,
+        currentSupervises: existing ? links.filter((l) => l.supervisor_position_id === existing.id).map((l) => l.supervised_position_id) : [],
+      };
+    });
+    const others = live
+      .filter((e) => !inFile.has(e.id) && norm(e.division ?? '') === norm(division))
+      .map((e) => ({ ref: e.id, title: e.title, area: e.area, reportsTo: e.reports_to_position_id }));
+    const res = resolveImportRelations(fileRows, others);
+    for (const p of parsed.positions) {
+      const plan = plans.get(p.row)!;
+      const rel = res.rows.get(p.row)!;
+      plan.relations = rel;
+      if (plan.action === 'sin cambios' && rel.changed) plan.action = 'actualizar';
+    }
+    return { errors: res.errors, warnings: res.warnings };
+  }
+
+  /** Escribe las relaciones ya resueltas (después de crear/actualizar todos los puestos del archivo): reemplaza las del puesto. */
+  private async writeRelations(m: Q, parsed: ParseResult, plans: Map<number, Plan>, ids: Map<number, string>): Promise<void> {
+    const idOf = (ref: string): string | null => (ref.startsWith('row:') ? (ids.get(Number(ref.slice(4))) ?? null) : ref);
+    for (const p of parsed.positions) {
+      const plan = plans.get(p.row)!;
+      const rel = plan.relations;
+      const id = ids.get(p.row);
+      if (!rel || !id || !rel.changed) continue;
+      if (rel.reportsTo !== undefined) {
+        const target = rel.reportsTo.ref ? idOf(rel.reportsTo.ref) : null;
+        await m.query(`UPDATE hr.job_positions SET reports_to_position_id = $2, updated_at = NOW() WHERE id = $1`, [id, target]);
+      }
+      if (rel.supervises !== undefined) {
+        const wanted = rel.supervises.refs.map(idOf).filter((x): x is string => x !== null);
+        await m.query(`DELETE FROM hr.job_position_supervisions WHERE supervisor_position_id = $1 AND NOT (supervised_position_id = ANY($2::uuid[]))`, [id, wanted]);
+        if (wanted.length > 0) {
+          await m.query(
+            `INSERT INTO hr.job_position_supervisions (supervisor_position_id, supervised_position_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`,
+            [id, wanted],
+          );
+        }
+      }
+    }
+  }
+
   /** Un error por puesto cuyo semestre no tiene peso para darle al menos 1 a cada OKR nuevo. */
   private weightErrors(parsed: ParseResult, plans: Map<number, Plan>): ImportIssue[] {
     const out: ImportIssue[] = [];
@@ -366,6 +463,7 @@ export class JobPositionsImportService {
       okrDeletes: [],
       okrView: spread.view,
       weightError: spread.error,
+      relations: null,
       kpiUpdates: [],
       kpiInserts: p.kpis,
       kpiDeletes: [],
@@ -504,6 +602,7 @@ export class JobPositionsImportService {
       okrDeletes,
       okrView,
       weightError,
+      relations: null,
       kpiUpdates,
       kpiInserts,
       kpiDeletes,
@@ -512,21 +611,21 @@ export class JobPositionsImportService {
 
   // ── Escritura (dentro de la transacción de `apply`) ────────────────────────
 
-  private async write(m: Q, p: ParsedPosition, plan: Plan, division: string, code: string, columns: ReadonlySet<ColumnKey>, actor: Actor, period: string): Promise<void> {
+  private async write(m: Q, p: ParsedPosition, plan: Plan, division: string, code: string, columns: ReadonlySet<ColumnKey>, actor: Actor, period: string): Promise<string> {
     let positionId: string;
     if (plan.action === 'crear') {
       // `description` queda vacía y `status` activo: la descripción formal se redacta y aprueba aparte.
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, reports_to_text,
            plazas, role_summary, position_objective, validation_points, head_comments,
-           validation_status, validated_by, validated_at, level_original, seniority)
-         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+           validation_status, validated_by, validated_at, level_original, seniority, supervises_text)
+         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
         [
           // `reports_to_employee_id` NO se escribe: «Reporta a» como empleado se elige en la pantalla del puesto.
           code, p.title, p.area, p.level, actor.id ?? null, division, p.reportsTo, p.plazas,
           p.roleSummary, p.positionObjective, p.validationPoints, plan.headComments?.value ?? null,
           plan.validation?.status ?? 'pendiente', plan.validation?.by ?? null, plan.validation?.at ?? null,
-          p.levelOriginal, p.seniority,
+          p.levelOriginal, p.seniority, p.supervisesText,
         ],
       )) as { id: string }[];
       positionId = rows[0]!.id;
@@ -594,6 +693,7 @@ export class JobPositionsImportService {
         [positionId, k.name, k.description, k.targetValue, k.frequency],
       );
     }
+    return positionId;
   }
 
   // ── Respuesta ──────────────────────────────────────────────────────────────
@@ -619,6 +719,7 @@ export class JobPositionsImportService {
       objectives: new Set(p.okrs.map((o) => o.objectiveCode)).size,
       kpis: p.kpis.length,
       okrs: plans.get(p.row)?.okrView ?? [],
+      relations: this.relationsPreview(p, plans.get(p.row)?.relations ?? null),
     }));
     const count = (a: ImportAction) => rows.filter((r) => r.action === a).length;
     const groups = positions.reduce((n, p) => n + new Set(p.activities.map((a) => `${a.groupOrder}|${a.groupTitle}`)).size, 0);
