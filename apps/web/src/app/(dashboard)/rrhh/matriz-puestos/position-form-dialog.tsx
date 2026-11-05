@@ -261,7 +261,7 @@ export function PositionFormDialog({
               </select>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
-              <label htmlFor="jp-reports" className={LABEL}>Reporta a (Opcional)</label>
+              <label htmlFor="jp-reports" className={LABEL}>Reporta a (Persona, Opcional)</label>
               <ReportsToPicker id="jp-reports" value={reportsToEmployee} onChange={setReportsToEmployee} />
               {position?.reportsTo && !reportsToEmployee && <p className="text-xs text-slate-400">En el Excel venía: {position.reportsTo}</p>}
             </div>

@@ -58,7 +58,58 @@ export interface KpiItem {
   isActive: boolean;
 }
 
+/** Un puesto de la misma matriz, tal como se enlaza desde «Reporta a» y «Supervisa a». */
+export interface PositionRef {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+/** Colaborador activo que tiene el puesto asignado (solo datos básicos). */
+export interface PositionEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  status: string;
+}
+
+/** «JP-001 · Título · Área». */
+export const positionRefLabel = (p: PositionRef): string => [p.code, p.title, p.area].filter(Boolean).join(' · ');
+
+/** ¿Cambió el borrador de relaciones respecto de lo guardado? (el orden de «Supervisa a» no cuenta) */
+export function relationsChanged(
+  draft: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+  saved: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+): boolean {
+  if ((draft.reportsTo?.id ?? null) !== (saved.reportsTo?.id ?? null)) return true;
+  const a = draft.supervises.map((s) => s.id).sort();
+  const b = saved.supervises.map((s) => s.id).sort();
+  return a.length !== b.length || a.some((id, i) => id !== b[i]);
+}
+
+/** «3 colaboradores» o «1 colaborador»; con plazas definidas añade «· 3 de 5 plazas». */
+export function employeesCountLabel(count: number, plazas: number | null): string {
+  const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;
+  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza' : 'plazas'}`;
+}
+
 export interface PositionDetail extends PositionListItem {
+  /** Puesto al que reporta (de la misma matriz). */
+  reportsToPosition: PositionRef | null;
+  /** Puestos que supervisa. */
+  supervises: PositionRef[];
+  /** Puestos que lo supervisan (solo lectura). */
+  supervisedBy: PositionRef[];
+  /** Puestos que le reportan (solo lectura). */
+  directReports: PositionRef[];
+  /** Colaboradores activos con este puesto (máx. 200) y su total. */
+  employees: PositionEmployee[];
+  employeesCount: number;
+  /** Texto original de la celda «Supervisa a» del Excel (solo lectura). */
+  supervisesText: string | null;
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura). */

@@ -27,6 +27,8 @@ interface ImportResult {
     row: number; title: string; area: string; action: Action; activities: number; okrRows: number; objectives: number; kpis: number;
     /** OKRs del semestre con su peso: los nuevos con el reparto equitativo y los existentes con el suyo. */
     okrs: { objectiveCode: string; krCode: string; weight: number; isNew: boolean }[];
+    /** «Reporta a» y «Supervisa a» resueltos contra los puestos de la división (null si el archivo no trae esas columnas). */
+    relations: { reportsTo: string | null; reportsToText: string | null; supervises: string[]; supervisesUnresolved: string[] } | null;
   }[];
   summary: {
     positions: number; created: number; updated: number; unchanged: number; newAreas: number; plazas: number; areas: number; groups: number;
@@ -186,6 +188,9 @@ export function ImportScreen() {
         <p className="mt-1 text-sm text-slate-500">
           Sube el archivo de la división, revisa la vista previa y confirma. Reimportar el mismo archivo no duplica nada.
         </p>
+        <p className="mt-1 text-sm text-slate-500">
+          Las columnas «Reporta a» y «Supervisa a» (varios puestos separados por «;» o por salto de línea) se enlazan con los puestos de la misma división por su título. Los nombres que no coinciden con ningún puesto solo generan un aviso: «Reporta a» se conserva como texto y «Supervisa a» enlaza únicamente los que sí existen.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-3">
@@ -297,10 +302,10 @@ export function ImportScreen() {
 
           {preview.positions.length > 0 && (
             <div className="max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[720px] text-left text-sm">
+              <table className="w-full min-w-[960px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {['Fila', 'Puesto', 'Área', 'Acción', 'Actividades', 'OKRs', 'KPIs'].map((c) => <th key={c} className="whitespace-nowrap px-4 py-3">{c}</th>)}
+                    {['Fila', 'Puesto', 'Área', 'Acción', 'Actividades', 'OKRs', 'KPIs', 'Reporta a / Supervisa a'].map((c) => <th key={c} className="whitespace-nowrap px-4 py-3">{c}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -326,6 +331,17 @@ export function ImportScreen() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-slate-600">{p.kpis}</td>
+                      <td className="min-w-[14rem] px-4 py-2.5 text-xs text-slate-600">
+                        {p.relations ? (
+                          <>
+                            <p>Reporta a: <strong>{p.relations.reportsTo ?? '—'}</strong>{!p.relations.reportsTo && p.relations.reportsToText ? ` (solo texto: ${p.relations.reportsToText})` : ''}</p>
+                            <p>
+                              Supervisa a: {p.relations.supervises.length === 0 ? '—' : <strong>{p.relations.supervises.join('; ')}</strong>}
+                              {p.relations.supervisesUnresolved.length > 0 && <span className="text-amber-700"> · Sin coincidencia: {p.relations.supervisesUnresolved.join('; ')}</span>}
+                            </p>
+                          </>
+                        ) : '—'}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
