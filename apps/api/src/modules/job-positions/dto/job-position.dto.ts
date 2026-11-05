@@ -1,5 +1,8 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -84,6 +87,20 @@ export class CreatePositionDto {
   @IsUUID()
   reportsToEmployeeId?: string | null;
 
+  /** «Reporta a» como puesto de la misma matriz (null lo quita). */
+  @IsOptional()
+  @emptyToNull
+  @IsUUID()
+  reportsToPositionId?: string | null;
+
+  /** «Supervisa a»: puestos supervisados. Reemplaza el conjunto (`[]` lo vacía); sin repetidos, máximo 50. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  supervisesPositionIds?: string[];
+
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -166,6 +183,20 @@ export class UpdatePositionDto {
   @emptyToNull
   @IsUUID()
   reportsToEmployeeId?: string | null;
+
+  /** «Reporta a» como puesto de la misma matriz (null lo quita). */
+  @IsOptional()
+  @emptyToNull
+  @IsUUID()
+  reportsToPositionId?: string | null;
+
+  /** «Supervisa a»: puestos supervisados. Reemplaza el conjunto (`[]` lo vacía); sin repetidos, máximo 50. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(50)
+  @IsUUID('all', { each: true })
+  supervisesPositionIds?: string[];
 
   @IsOptional()
   @IsInt()
