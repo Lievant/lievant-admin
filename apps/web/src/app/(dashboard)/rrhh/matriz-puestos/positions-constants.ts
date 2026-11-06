@@ -96,6 +96,32 @@ export function relationsChanged(
   return a.length !== b.length || a.some((id, i) => id !== b[i]);
 }
 
+/** Máximo de puestos en «Supervisa a» (el mismo tope del API). */
+export const MAX_SUPERVISED = 50;
+
+/** Agrega un puesto a «Supervisa a»: ignora el propio puesto, los repetidos y lo que pase del máximo. */
+export function addSupervised(current: PositionRef[], picked: PositionRef, selfId: string | null): PositionRef[] {
+  if (picked.id === selfId || current.some((p) => p.id === picked.id) || current.length >= MAX_SUPERVISED) return current;
+  return [...current, picked];
+}
+
+/**
+ * Relaciones que el formulario manda al API. Al crear siempre van las dos (null / []); al editar solo la que el usuario
+ * modificó, para no pisar relaciones sin querer.
+ */
+export function relationsPayload(
+  mode: 'create' | 'edit',
+  draft: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+  initial: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+): { reportsToPositionId?: string | null; supervisesPositionIds?: string[] } {
+  const out: { reportsToPositionId?: string | null; supervisesPositionIds?: string[] } = {};
+  const reportsChanged = (draft.reportsTo?.id ?? null) !== (initial.reportsTo?.id ?? null);
+  const superChanged = relationsChanged({ reportsTo: null, supervises: draft.supervises }, { reportsTo: null, supervises: initial.supervises });
+  if (mode === 'create' || reportsChanged) out.reportsToPositionId = draft.reportsTo?.id ?? null;
+  if (mode === 'create' || superChanged) out.supervisesPositionIds = draft.supervises.map((s) => s.id);
+  return out;
+}
+
 /** «3 colaboradores» o «1 colaborador»; con plazas ocupadas definidas añade «· 3 de 5 plazas ocupadas». */
 export function employeesCountLabel(count: number, plazas: number | null): string {
   const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;

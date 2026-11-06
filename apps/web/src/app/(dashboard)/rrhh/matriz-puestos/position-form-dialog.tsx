@@ -4,7 +4,8 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
 import { ReportsToPicker } from './reports-to-picker';
-import { AI_LEVEL_OPTIONS, FIELD_GUIDES, areasForDivision, inList, levelOptionLabel, requiredErrors, type GuidedFieldKey, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
+import { PositionSearch } from './position-search';
+import { AI_LEVEL_OPTIONS, FIELD_GUIDES, MAX_SUPERVISED, addSupervised, positionRefLabel, relationsPayload, type PositionRef, areasForDivision, inList, levelOptionLabel, requiredErrors, type GuidedFieldKey, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -74,6 +75,8 @@ export function PositionFormDialog({
   const [areaBusy, setAreaBusy] = useState(false);
   const canAddArea = usePermission('rrhh', 'matriz-puestos', 'update');
   const [reportsToEmployee, setReportsToEmployee] = useState<ReportsToValue | null>(position?.reportsToEmployee ?? null);
+  const [reportsToPosition, setReportsToPosition] = useState<PositionRef | null>(position?.reportsToPosition ?? null);
+  const [supervises, setSupervises] = useState<PositionRef[]>(position?.supervises ?? []);
   const [submitted, setSubmitted] = useState(false);
   const [plazas, setPlazas] = useState(position?.plazas != null ? String(position.plazas) : '');
   const [vacancies, setVacancies] = useState(String(position?.vacancies ?? 0));
@@ -110,6 +113,11 @@ export function PositionFormDialog({
         level: level.trim() || null,
         seniority: seniority || null,
         reportsToEmployeeId: reportsToEmployee?.id ?? null,
+        ...relationsPayload(
+          position ? 'edit' : 'create',
+          { reportsTo: reportsToPosition, supervises },
+          { reportsTo: position?.reportsToPosition ?? null, supervises: position?.supervises ?? [] },
+        ),
         plazas: n,
         vacancies: v,
         aiCompetencyLevel: aiLevel || null,
@@ -267,9 +275,46 @@ export function PositionFormDialog({
               </select>
             </div>
             <div className="flex flex-col gap-1 sm:col-span-2">
+              <label htmlFor="jp-reports-position" className={LABEL}>Reporta a (Puesto, Opcional)</label>
+              {reportsToPosition ? (
+                <div className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-navy">
+                  <span className="min-w-0 truncate">{positionRefLabel(reportsToPosition)}</span>
+                  <button type="button" onClick={() => setReportsToPosition(null)} className="shrink-0 text-xs font-medium text-red-600 hover:underline">Quitar</button>
+                </div>
+              ) : (
+                <PositionSearch id="jp-reports-position" excludeIds={position ? [position.id] : []} onPick={setReportsToPosition} placeholder="Busca un puesto…" />
+              )}
+              {position?.reportsTo && !reportsToPosition && <p className="text-xs text-slate-400">Texto del Excel: {position.reportsTo}</p>}
+            </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label htmlFor="jp-supervises" className={LABEL}>Supervisa a (Opcional)</label>
+              {supervises.length < MAX_SUPERVISED ? (
+                <PositionSearch
+                  id="jp-supervises"
+                  excludeIds={[...(position ? [position.id] : []), ...supervises.map((s) => s.id)]}
+                  onPick={(p) => setSupervises((cur) => addSupervised(cur, p, position?.id ?? null))}
+                  placeholder="Busca un puesto para agregarlo…"
+                />
+              ) : (
+                <p className="text-xs text-slate-500">Llegaste al máximo de {MAX_SUPERVISED} puestos.</p>
+              )}
+              {supervises.length > 0 && (
+                <ul className="mt-2 flex flex-wrap gap-1.5" aria-label="Puestos que supervisa">
+                  {supervises.map((s) => (
+                    <li key={s.id} className="flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-navy">
+                      <span title={positionRefLabel(s)} className="break-words">{s.title}</span>
+                      <button type="button" onClick={() => setSupervises((cur) => cur.filter((x) => x.id !== s.id))} aria-label={`Quitar ${s.title}`} className="rounded-full px-1 text-slate-500 hover:bg-slate-200 hover:text-navy">×</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {position?.supervisesText && <p className="text-xs text-slate-400">Texto del Excel: {position.supervisesText}</p>}
+              <p className="text-xs text-slate-400">Elige puestos de la matriz, no personas. Quién ocupa el puesto se ve en su detalle.</p>
+            </div>
+            <div className="flex flex-col gap-1 sm:col-span-2">
               <label htmlFor="jp-reports" className={LABEL}>Reporta a (Persona, Opcional)</label>
               <ReportsToPicker id="jp-reports" value={reportsToEmployee} onChange={setReportsToEmployee} />
-              {position?.reportsTo && !reportsToEmployee && <p className="text-xs text-slate-400">En el Excel venía: {position.reportsTo}</p>}
+              <p className="text-xs text-slate-400">Jefe directo como empleado; es distinto del puesto al que reporta.</p>
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-plazas" className={LABEL}>Plazas Ocupadas (Opcional)</label>
