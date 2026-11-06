@@ -41,7 +41,7 @@ describe('Importación de la Matriz · actividades', () => {
     const acts = parseActivities(text, 5, warnings, errors);
     expect(acts[3]).toMatchObject({ description: 'Atender solicitudes (A veces)', frequency: null, note: null });
     expect(warnings.map((w) => w.message).join('|')).toMatch(/2\.2 no trae una frecuencia reconocida/);
-    expect(warnings.map((w) => w.message).join('|')).toMatch(/Línea de actividades no reconocida/);
+    expect(warnings.map((w) => w.message).join('|')).toMatch(/Línea de responsabilidades no reconocida/);
     expect(warnings.every((w) => w.row === 5)).toBe(true);
   });
 

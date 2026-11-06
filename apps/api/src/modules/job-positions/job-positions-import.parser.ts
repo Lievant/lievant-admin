@@ -204,14 +204,14 @@ export function parseActivities(text: string, row: number, warnings: ImportIssue
     if (g && !/^\s/.test(line)) {
       group = { order: Number(g[1]), title: g[2]!.trim() };
       sort = 0;
-      if (group.title.length > LIMITS.groupTitle) errors.push({ row, message: `El título del grupo de actividades «${group.title.slice(0, 40)}…» pasa de ${LIMITS.groupTitle} caracteres` });
+      if (group.title.length > LIMITS.groupTitle) errors.push({ row, message: `El título de la responsabilidad «${group.title.slice(0, 40)}…» pasa de ${LIMITS.groupTitle} caracteres` });
       continue;
     }
     if (a) {
       if (!group) {
         group = { order: Number(a[1]), title: 'Sin grupo' };
         sort = 0;
-        warnings.push({ row, message: `La actividad ${a[1]}.${a[2]} no tiene un grupo; se guardó en «Sin grupo»` });
+        warnings.push({ row, message: `La actividad ${a[1]}.${a[2]} no tiene una responsabilidad; se guardó en «Sin grupo»` });
       }
       const body = a[3]!.trim();
       const split = splitFrequency(body);
@@ -232,7 +232,7 @@ export function parseActivities(text: string, row: number, warnings: ImportIssue
       }
       continue;
     }
-    warnings.push({ row, message: `Línea de actividades no reconocida (se ignoró): «${line.trim().slice(0, 60)}»` });
+    warnings.push({ row, message: `Línea de responsabilidades no reconocida (se ignoró): «${line.trim().slice(0, 60)}»` });
   }
   return out;
 }
