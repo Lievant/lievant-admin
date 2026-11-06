@@ -22,6 +22,7 @@ import {
   MAX_DESCRIPTION,
   MAX_LIMIT,
   MAX_OKR_TEXT,
+  AI_LEVELS,
   MAX_OKR_WEIGHT,
   MIN_OKR_WEIGHT,
   OKR_WEIGHT_MESSAGE,
@@ -106,6 +107,19 @@ export class CreatePositionDto {
   @Min(0)
   @Max(100000)
   plazas?: number | null;
+
+  /** Vacantes (entero ≥ 0; por omisión 0). No puede ser null. */
+  @ValidateIf((o: { vacancies?: unknown }) => o.vacancies !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  vacancies?: number;
+
+  /** Competencia IA (nivel): básico, intermedio o avanzado; null la quita. */
+  @IsOptional()
+  @emptyToNull
+  @IsIn(AI_LEVELS, { message: 'La competencia IA debe ser básico, intermedio o avanzado' })
+  aiCompetencyLevel?: string | null;
 
   @IsOptional()
   @emptyToNull
@@ -203,6 +217,19 @@ export class UpdatePositionDto {
   @Min(0)
   @Max(100000)
   plazas?: number | null;
+
+  /** Vacantes (entero ≥ 0; por omisión 0). No puede ser null. */
+  @ValidateIf((o: { vacancies?: unknown }) => o.vacancies !== undefined)
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  vacancies?: number;
+
+  /** Competencia IA (nivel): básico, intermedio o avanzado; null la quita. */
+  @IsOptional()
+  @emptyToNull
+  @IsIn(AI_LEVELS, { message: 'La competencia IA debe ser básico, intermedio o avanzado' })
+  aiCompetencyLevel?: string | null;
 
   @IsOptional()
   @emptyToNull

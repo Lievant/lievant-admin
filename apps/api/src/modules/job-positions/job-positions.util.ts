@@ -14,6 +14,11 @@ export const VALIDATION_STATUSES = ['pendiente', 'validado', 'validado_con_ajust
 export type ValidationStatus = (typeof VALIDATION_STATUSES)[number];
 export const PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
 
+/** Competencia IA (nivel): se guarda sin acentos y en minúsculas; la pantalla muestra Básico / Intermedio / Avanzado. */
+export const AI_LEVELS = ['basico', 'intermedio', 'avanzado'] as const;
+export type AiLevel = (typeof AI_LEVELS)[number];
+export const AI_LEVEL_LABELS: Record<AiLevel, string> = { basico: 'Básico', intermedio: 'Intermedio', avanzado: 'Avanzado' };
+
 export const MAX_TITLE = 200;
 export const MAX_DESCRIPTION = 10000;
 export const MAX_OKR_TEXT = 2000;
@@ -196,7 +201,7 @@ export function escapeLike(text: string): string {
 // ── Orden de la lista (en el servidor, sobre todos los registros) ────────────
 
 /** Columnas por las que se puede ordenar la lista: lista cerrada (nunca se interpola texto del usuario en el SQL). */
-export const POSITION_SORT_COLUMNS = ['code', 'title', 'division', 'area', 'level', 'seniority', 'plazas', 'validationStatus', 'status'] as const;
+export const POSITION_SORT_COLUMNS = ['code', 'title', 'division', 'area', 'level', 'seniority', 'plazas', 'vacancies', 'aiCompetencyLevel', 'validationStatus', 'status'] as const;
 export type PositionSortColumn = (typeof POSITION_SORT_COLUMNS)[number];
 export const SORT_DIRECTIONS = ['asc', 'desc'] as const;
 
@@ -216,6 +221,8 @@ const SORT_EXPRESSIONS: Record<PositionSortColumn, string> = {
   level: `(SELECT l.sort_order FROM catalogs.org_levels l WHERE upper(btrim(l.code)) = upper(btrim(p.level)) LIMIT 1)`,
   seniority: `CASE p.seniority WHEN 'junior' THEN 1 WHEN 'semi_senior' THEN 2 WHEN 'senior' THEN 3 END`,
   plazas: 'p.plazas',
+  vacancies: 'p.vacancies',
+  aiCompetencyLevel: `CASE p.ai_competency_level WHEN 'basico' THEN 1 WHEN 'intermedio' THEN 2 WHEN 'avanzado' THEN 3 END`,
   // Mismo orden lógico que ya usan los filtros de la pantalla.
   validationStatus: `CASE p.validation_status WHEN 'pendiente' THEN 1 WHEN 'validado' THEN 2 WHEN 'validado_con_ajustes' THEN 3 WHEN 'rechazado' THEN 4 END`,
   status: `CASE p.status WHEN 'activo' THEN 1 WHEN 'pendiente_aprobacion' THEN 2 WHEN 'inactivo' THEN 3 END`,
@@ -299,6 +306,8 @@ export interface PositionRow {
   reports_to_position?: string | null;
   reports_to_active?: boolean | null;
   plazas: number | null;
+  vacancies: number;
+  ai_competency_level: string | null;
   role_summary: string | null;
   position_objective: string | null;
   validation_points: string | null;
@@ -324,9 +333,14 @@ export interface PositionListItem {
   descriptionApproved: boolean;
   division: string | null;
   seniority: string | null;
+  /** Plazas ocupadas. */
   plazas: number | null;
-  /** `plazas = 0`: se muestra como "Vacante". */
+  /** Vacantes (separadas de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
   vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: string | null;
   validationStatus: ValidationStatus;
 }
 
@@ -344,7 +358,9 @@ export function toListItem(r: PositionRow): PositionListItem {
     division: r.division,
     seniority: r.seniority,
     plazas: r.plazas,
-    vacant: r.plazas === 0,
+    vacancies: r.vacancies ?? 0,
+    vacant: (r.vacancies ?? 0) > 0,
+    aiCompetencyLevel: r.ai_competency_level ?? null,
     validationStatus: r.validation_status,
   };
 }

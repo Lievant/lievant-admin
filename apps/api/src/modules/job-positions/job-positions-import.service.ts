@@ -37,6 +37,10 @@ export interface ImportPositionPreview {
   title: string;
   area: string;
   action: ImportAction;
+  /** Plazas ocupadas, vacantes y Competencia IA que quedarán (según el archivo). */
+  plazas: number | null;
+  vacancies: number;
+  aiLevel: string | null;
   activities: number;
   okrRows: number;
   objectives: number;
@@ -55,6 +59,7 @@ export interface ImportSummary {
   /** Áreas que no estaban en el catálogo y se agregan al aplicar. */
   newAreas: number;
   plazas: number;
+  vacancies: number;
   areas: number;
   groups: number;
   activities: number;
@@ -96,6 +101,8 @@ interface ExistingPosition {
   reports_to_position_id: string | null;
   supervises_text: string | null;
   plazas: number | null;
+  vacancies: number;
+  ai_competency_level: string | null;
   role_summary: string | null;
   position_objective: string | null;
   validation_points: string | null;
@@ -142,6 +149,8 @@ const SIMPLE_MAP: { column: ColumnKey; field: keyof ParsedPosition; col: keyof E
   { column: 'reportsTo', field: 'reportsTo', col: 'reports_to_text' },
   { column: 'supervises', field: 'supervisesText', col: 'supervises_text' },
   { column: 'plazas', field: 'plazas', col: 'plazas' },
+  { column: 'vacancies', field: 'vacancies', col: 'vacancies' },
+  { column: 'aiLevel', field: 'aiLevel', col: 'ai_competency_level' },
   { column: 'role', field: 'roleSummary', col: 'role_summary' },
   { column: 'objective', field: 'positionObjective', col: 'position_objective' },
   { column: 'validationPoints', field: 'validationPoints', col: 'validation_points' },
@@ -618,14 +627,14 @@ export class JobPositionsImportService {
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, level, status, created_by, division, reports_to_text,
            plazas, role_summary, position_objective, validation_points, head_comments,
-           validation_status, validated_by, validated_at, level_original, seniority, supervises_text)
-         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+           validation_status, validated_by, validated_at, level_original, seniority, supervises_text, vacancies, ai_competency_level)
+         VALUES ($1,$2,$3,$4,'activo',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) RETURNING id`,
         [
           // `reports_to_employee_id` NO se escribe: «Reporta a» como empleado se elige en la pantalla del puesto.
           code, p.title, p.area, p.level, actor.id ?? null, division, p.reportsTo, p.plazas,
           p.roleSummary, p.positionObjective, p.validationPoints, plan.headComments?.value ?? null,
           plan.validation?.status ?? 'pendiente', plan.validation?.by ?? null, plan.validation?.at ?? null,
-          p.levelOriginal, p.seniority, p.supervisesText,
+          p.levelOriginal, p.seniority, p.supervisesText, p.vacancies, p.aiLevel,
         ],
       )) as { id: string }[];
       positionId = rows[0]!.id;
@@ -714,6 +723,9 @@ export class JobPositionsImportService {
       title: p.title,
       area: p.area,
       action: plans.get(p.row)?.action ?? 'sin cambios',
+      plazas: p.plazas,
+      vacancies: p.vacancies,
+      aiLevel: p.aiLevel,
       activities: p.activities.length,
       okrRows: p.okrs.length,
       objectives: new Set(p.okrs.map((o) => o.objectiveCode)).size,
@@ -730,6 +742,7 @@ export class JobPositionsImportService {
       unchanged: count('sin cambios'),
       newAreas: newAreas.length,
       plazas: positions.reduce((n, p) => n + (p.plazas ?? 0), 0),
+      vacancies: positions.reduce((n, p) => n + p.vacancies, 0),
       areas: new Set(positions.map((p) => norm(p.area))).size,
       groups,
       activities: positions.reduce((n, p) => n + p.activities.length, 0),

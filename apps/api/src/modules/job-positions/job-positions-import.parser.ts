@@ -5,6 +5,7 @@
  */
 import { resolveLevel, seniorityFromText, type Seniority } from './job-positions-catalog.util';
 import {
+  AI_LEVELS,
   ACTIVITY_FREQUENCIES,
   MEASUREMENT_FREQUENCIES,
   VALIDATION_STATUSES,
@@ -68,6 +69,10 @@ export interface ParsedPosition {
   /** Nombres de «Supervisa a» (separados por «;» o salto de línea, sin vacíos ni repetidos). */
   supervises: string[];
   plazas: number | null;
+  /** Vacantes (entero ≥ 0). Sin columna ni celda: 1 si el título traía «(VACANTE)», 0 si no. */
+  vacancies: number;
+  /** basico / intermedio / avanzado o null (vacío o no válido). */
+  aiLevel: string | null;
   roleSummary: string | null;
   positionObjective: string | null;
   validationPoints: string | null;
@@ -80,7 +85,7 @@ export interface ParsedPosition {
 
 /** Columnas del archivo que se encontraron (las que faltan no se tocan al actualizar). */
 export type ColumnKey =
-  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'supervises' | 'plazas' | 'role' | 'objective'
+  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'supervises' | 'plazas' | 'vacancies' | 'aiLevel' | 'role' | 'objective'
   | 'activities' | 'okrs' | 'kpis' | 'validationPoints' | 'status' | 'comments';
 
 export interface ParseResult {
@@ -133,6 +138,9 @@ const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; si
   // Opcional: los archivos que no la traen no avisan nada y no se tocan las supervisiones.
   { key: 'supervises', test: (h) => h.startsWith('supervisa a'), label: 'Supervisa a', silent: true },
   { key: 'plazas', test: (h) => h.startsWith('plazas'), label: 'Plazas ocupadas' },
+  // Opcionales: los archivos que no las traen no avisan y no se tocan esos campos.
+  { key: 'vacancies', test: (h) => h.startsWith('vacantes'), label: 'Vacantes', silent: true },
+  { key: 'aiLevel', test: (h) => h.startsWith('competencia ia'), label: 'Competencia IA (nivel)', silent: true },
   { key: 'role', test: (h) => h === 'rol', label: 'Rol' },
   { key: 'objective', test: (h) => h.startsWith('objetivo del puesto'), label: 'Objetivo del puesto' },
   { key: 'activities', test: (h) => h.startsWith('responsabilidades') || h.startsWith('actividades'), label: 'Responsabilidades y actividades' },
@@ -415,6 +423,27 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     }
     if (vacant && plazas === null) plazas = 0;
 
+    // Vacantes: entero ≥ 0. Con la columna, celda vacía = 1 si el título traía «(VACANTE)» y 0 si no; un valor no numérico,
+    // decimal o negativo avisa y se toma 0. Sin la columna: 1 si el título traía «(VACANTE)», 0 si no.
+    let vacancies = vacant ? 1 : 0;
+    const vacanciesText = cell(r, 'vacancies');
+    if (vacanciesText !== '') {
+      if (/^\d+$/.test(vacanciesText)) vacancies = Number(vacanciesText);
+      else {
+        vacancies = 0;
+        warnings.push({ row: rowNumber, message: `Las vacantes «${vacanciesText.slice(0, 20)}» no son un entero mayor o igual a 0; se tomó 0` });
+      }
+    }
+
+    // Competencia IA (nivel): sin acentos, mayúsculas ni espacios; vacío = sin nivel; otro texto avisa y queda vacío.
+    let aiLevel: string | null = null;
+    const aiText = cell(r, 'aiLevel');
+    if (aiText !== '') {
+      const level = norm(aiText);
+      if ((AI_LEVELS as readonly string[]).includes(level)) aiLevel = level;
+      else warnings.push({ row: rowNumber, message: `Competencia IA no válida «${aiText.slice(0, 30)}»: usa Básico, Intermedio o Avanzado; se dejó vacía` });
+    }
+
     const key = `${norm(area)}|${norm(title)}`;
     const first = seen.get(key);
     if (first !== undefined) errors.push({ row: rowNumber, message: `El puesto «${title.slice(0, 40)}» ya aparece en la fila ${first} (misma Sub-área)` });
@@ -432,6 +461,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       supervisesText,
       supervises: splitNames(supervisesText),
       plazas,
+      vacancies,
+      aiLevel,
       roleSummary: text(r, 'role'),
       positionObjective: text(r, 'objective'),
       validationPoints: text(r, 'validationPoints'),
