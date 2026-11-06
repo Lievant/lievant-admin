@@ -338,7 +338,7 @@ export function KpiDialog({
   );
 }
 
-/** Alta o edición de una actividad (responsabilidad) con su grupo, frecuencia y nota. */
+/** Alta o edición de una actividad dentro de una responsabilidad (el grupo), con su frecuencia y nota. */
 export function ActivityDialog({
   positionId,
   activity,
@@ -364,8 +364,8 @@ export function ActivityDialog({
     e.preventDefault();
     setError(null);
     const order = Number(groupOrder);
-    if (!Number.isInteger(order) || order < 1) return setError('El número de grupo debe ser un entero de 1 o más.');
-    if (!groupTitle.trim()) return setError('El título del grupo es obligatorio.');
+    if (!Number.isInteger(order) || order < 1) return setError('El número de la responsabilidad debe ser un entero de 1 o más.');
+    if (!groupTitle.trim()) return setError('El título de la responsabilidad es obligatorio.');
     if (!description.trim()) return setError('La descripción de la actividad es obligatoria.');
     setSaving(true);
     try {
@@ -384,15 +384,15 @@ export function ActivityDialog({
   };
 
   return (
-    <Shell title={activity ? 'Editar Actividad' : 'Nueva Actividad'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
+    <Shell title={activity ? 'Editar Actividad' : defaultGroup ? 'Nueva Actividad' : 'Nueva Responsabilidad'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="act-order" className={LABEL}>Grupo Núm.</label>
+            <label htmlFor="act-order" className={LABEL}>Responsabilidad Núm.</label>
             <input id="act-order" type="number" min={1} step={1} value={groupOrder} onChange={(e) => setGroupOrder(e.target.value)} className={INPUT} />
           </div>
           <div className="flex flex-col gap-1 sm:col-span-3">
-            <label htmlFor="act-group" className={LABEL}>Título del Grupo</label>
+            <label htmlFor="act-group" className={LABEL}>Título de la Responsabilidad</label>
             <input id="act-group" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={300} className={INPUT} />
           </div>
         </div>
@@ -402,7 +402,7 @@ export function ActivityDialog({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="act-freq" className={LABEL}>Frecuencia</label>
+            <label htmlFor="act-freq" className={LABEL}>Frecuencia de la Actividad</label>
             <select id="act-freq" value={frequency} onChange={(e) => setFrequency(e.target.value)} className={INPUT}>
               <option value="">Sin frecuencia</option>
               {ACTIVITY_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

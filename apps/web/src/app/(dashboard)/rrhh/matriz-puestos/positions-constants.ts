@@ -1,6 +1,7 @@
 export type PositionStatus = 'activo' | 'inactivo' | 'pendiente_aprobacion';
 export type Frequency = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual';
 export type ActivityFrequency = Frequency | 'eventual';
+export type AiLevel = 'basico' | 'intermedio' | 'avanzado';
 export type ValidationStatus = 'pendiente' | 'validado' | 'validado_con_ajustes' | 'rechazado';
 
 export interface PositionListItem {
@@ -16,9 +17,14 @@ export interface PositionListItem {
   division: string | null;
   /** Categoría: junior, semi_senior o senior. */
   seniority: string | null;
+  /** Plazas ocupadas. */
   plazas: number | null;
-  /** `plazas = 0`: se muestra como "Vacante". */
+  /** Vacantes (aparte de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
   vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: AiLevel | null;
   validationStatus: ValidationStatus;
 }
 
@@ -90,10 +96,10 @@ export function relationsChanged(
   return a.length !== b.length || a.some((id, i) => id !== b[i]);
 }
 
-/** «3 colaboradores» o «1 colaborador»; con plazas definidas añade «· 3 de 5 plazas». */
+/** «3 colaboradores» o «1 colaborador»; con plazas ocupadas definidas añade «· 3 de 5 plazas ocupadas». */
 export function employeesCountLabel(count: number, plazas: number | null): string {
   const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;
-  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza' : 'plazas'}`;
+  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza ocupada' : 'plazas ocupadas'}`;
 }
 
 export interface PositionDetail extends PositionListItem {
@@ -248,8 +254,19 @@ export const frequencyLabel = (f: ActivityFrequency | null): string => ACTIVITY_
 /** "Semestre 1 · 2026" para AAAA-S1. */
 export const okrPeriodLabel = (period: string): string => periodLabel(period);
 
-/** Etiqueta del número de plazas: "Vacante" cuando es 0. */
-export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : plazas === 0 ? 'Vacante' : String(plazas));
+/** Etiqueta del número de plazas ocupadas (o vacantes). */
+export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : String(plazas));
+
+/** Competencia IA (nivel): opciones del formulario y etiqueta. */
+export const AI_LEVEL_OPTIONS: { value: AiLevel; label: string }[] = [
+  { value: 'basico', label: 'Básico' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzado', label: 'Avanzado' },
+];
+export const aiLevelLabel = (l: string | null): string => AI_LEVEL_OPTIONS.find((o) => o.value === l)?.label ?? 'Sin Definir';
+
+/** «Con Vacantes (2)» cuando hay vacantes; null si no. */
+export const vacanciesBadgeLabel = (vacancies: number): string | null => (vacancies > 0 ? `Con Vacantes (${vacancies})` : null);
 
 /** Año actual en la oficina (America/Mexico_City). */
 export function currentYearMx(now: Date = new Date()): number {
@@ -399,7 +416,7 @@ export const FIELD_GUIDES: Record<GuidedFieldKey, { guide: string; placeholder: 
     placeholder: 'Ej.: Asegurar que cada seller asignado por Mercado Libre inicie su operación en tiempo y bien preparado para la siguiente etapa.',
   },
   description: {
-    guide: 'Actividades y su frecuencia (una por línea).',
+    guide: 'Responsabilidades y sus actividades (frecuencia).',
     placeholder: [
       '- Contactar a los sellers nuevos y explicarles el programa – Diario',
       '- Dar seguimiento al avance de cada seller – Diario',

@@ -4,7 +4,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { ModalShell } from './modal-shell';
 import { usePermission } from '@/hooks/use-permission';
 import { ReportsToPicker } from './reports-to-picker';
-import { FIELD_GUIDES, areasForDivision, inList, levelOptionLabel, requiredErrors, type GuidedFieldKey, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
+import { AI_LEVEL_OPTIONS, FIELD_GUIDES, areasForDivision, inList, levelOptionLabel, requiredErrors, type GuidedFieldKey, type PositionDetail, type PositionOptions, type ReportsToValue } from './positions-constants';
 
 const INPUT = 'w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none focus:ring-1 focus:ring-black';
 const LABEL = 'text-xs font-semibold uppercase tracking-wide text-slate-500';
@@ -76,6 +76,8 @@ export function PositionFormDialog({
   const [reportsToEmployee, setReportsToEmployee] = useState<ReportsToValue | null>(position?.reportsToEmployee ?? null);
   const [submitted, setSubmitted] = useState(false);
   const [plazas, setPlazas] = useState(position?.plazas != null ? String(position.plazas) : '');
+  const [vacancies, setVacancies] = useState(String(position?.vacancies ?? 0));
+  const [aiLevel, setAiLevel] = useState<string>(position?.aiCompetencyLevel ?? '');
   const [roleSummary, setRoleSummary] = useState(position?.roleSummary ?? '');
   const [objective, setObjective] = useState(position?.positionObjective ?? '');
   const [points, setPoints] = useState(position?.validationPoints ?? '');
@@ -92,7 +94,9 @@ export function PositionFormDialog({
     if (title.trim().length > 200) return setError('El puesto no puede pasar de 200 caracteres.');
     if (description.length > 10000) return setError('La descripción no puede pasar de 10,000 caracteres.');
     const n = plazas.trim() === '' ? null : Number(plazas);
-    if (n !== null && (!Number.isInteger(n) || n < 0)) return setError('Las plazas deben ser un número entero de 0 o más.');
+    if (n !== null && (!Number.isInteger(n) || n < 0)) return setError('Las plazas ocupadas deben ser un número entero de 0 o más.');
+    const v = vacancies.trim() === '' ? 0 : Number(vacancies);
+    if (!Number.isInteger(v) || v < 0) return setError('Las vacantes deben ser un número entero de 0 o más.');
     setSubmitted(true);
     const missing = requiredErrors({ roleSummary, positionObjective: objective, validationPoints: points, description });
     if (Object.keys(missing).length > 0) return setError('Completa los campos obligatorios (marcados con *).');
@@ -107,6 +111,8 @@ export function PositionFormDialog({
         seniority: seniority || null,
         reportsToEmployeeId: reportsToEmployee?.id ?? null,
         plazas: n,
+        vacancies: v,
+        aiCompetencyLevel: aiLevel || null,
         roleSummary: roleSummary.trim() || null,
         positionObjective: objective.trim() || null,
         validationPoints: points.trim() || null,
@@ -266,8 +272,19 @@ export function PositionFormDialog({
               {position?.reportsTo && !reportsToEmployee && <p className="text-xs text-slate-400">En el Excel venía: {position.reportsTo}</p>}
             </div>
             <div className="flex flex-col gap-1">
-              <label htmlFor="jp-plazas" className={LABEL}>Plazas (Opcional; 0 = Vacante)</label>
+              <label htmlFor="jp-plazas" className={LABEL}>Plazas Ocupadas (Opcional)</label>
               <input id="jp-plazas" type="number" min={0} step={1} inputMode="numeric" value={plazas} onChange={(e) => setPlazas(e.target.value)} className={INPUT} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="jp-vacancies" className={LABEL}>Vacantes</label>
+              <input id="jp-vacancies" type="number" min={0} step={1} inputMode="numeric" value={vacancies} onChange={(e) => setVacancies(e.target.value)} className={INPUT} />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="jp-ai" className={LABEL}>Competencia IA (Nivel)</label>
+              <select id="jp-ai" value={aiLevel} onChange={(e) => setAiLevel(e.target.value)} className={INPUT}>
+                <option value="">Sin Definir</option>
+                {AI_LEVEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
             </div>
             <div className="flex flex-col gap-1">
               <label htmlFor="jp-status" className={LABEL}>Estado</label>

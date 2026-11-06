@@ -7,7 +7,7 @@ describe('Matriz de Puestos (web) · guía de llenado de los campos', () => {
   it('cada campo lleva la guía corta de RRHH y un ejemplo como placeholder', () => {
     expect(FIELD_GUIDES.roleSummary.guide).toBe('Qué hace, en una frase.');
     expect(FIELD_GUIDES.positionObjective.guide).toBe('Para qué existe.');
-    expect(FIELD_GUIDES.description.guide).toBe('Actividades y su frecuencia (una por línea).');
+    expect(FIELD_GUIDES.description.guide).toBe('Responsabilidades y sus actividades (frecuencia).');
     expect(FIELD_GUIDES.validationPoints.guide).toBe('Cómo se mide (uno por línea).');
     expect(FIELD_GUIDES.roleSummary.placeholder).toMatch(/^Ej\.: /);
     expect(FIELD_GUIDES.positionObjective.placeholder).toMatch(/^Ej\.: /);
