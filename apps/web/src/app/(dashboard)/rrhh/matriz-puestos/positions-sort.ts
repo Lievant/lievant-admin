@@ -12,7 +12,9 @@ export const SORT_COLUMNS = [
   { key: 'area', label: 'Área' },
   { key: 'level', label: 'Nivel' },
   { key: 'seniority', label: 'Categoría' },
-  { key: 'plazas', label: 'Plazas' },
+  { key: 'plazas', label: 'Plazas Ocupadas' },
+  { key: 'vacancies', label: 'Vacantes' },
+  { key: 'aiCompetencyLevel', label: 'Competencia IA' },
   { key: 'validationStatus', label: 'Validación' },
   { key: 'status', label: 'Estado' },
 ] as const;

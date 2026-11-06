@@ -31,6 +31,8 @@ import {
   okrsOfPeriod,
   periodLabel,
   plazasLabel,
+  aiLevelLabel,
+  vacanciesBadgeLabel,
   reportsToLabel,
   seniorityLabel,
   parsePeriod,
@@ -49,7 +51,7 @@ import {
 
 const TABS = [
   { id: 'info', label: 'Información' },
-  { id: 'activities', label: 'Actividades' },
+  { id: 'activities', label: 'Responsabilidades' },
   { id: 'okrs', label: 'OKRs' },
   { id: 'kpis', label: 'KPIs' },
 ] as const;
@@ -58,7 +60,7 @@ type TabId = (typeof TABS)[number]['id'];
 const SELECT = 'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none';
 const CARD = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
@@ -200,7 +202,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
           <span className="rounded-full bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600">{position.code}</span>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_BADGE[position.status])}>{STATUS_LABELS[position.status]}</span>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', VALIDATION_BADGE[position.validationStatus])}>{VALIDATION_LABELS[position.validationStatus]}</span>
-          {position.vacant && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">Vacante</span>}
+          {vacanciesBadgeLabel(position.vacancies) && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{vacanciesBadgeLabel(position.vacancies)}</span>}
         </div>
         <p className="mt-1 text-sm text-slate-500">{[position.division, position.area, position.level].filter(Boolean).join(' · ')}</p>
       </div>
@@ -248,7 +250,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
               <Field label="Reporta a (Persona)" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
               {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
-              <Field label="Plazas" value={plazasLabel(position.plazas)} />
+              <Field label="Plazas Ocupadas" value={plazasLabel(position.plazas)} />
+              <Field label="Vacantes" value={String(position.vacancies)} />
+              <Field
+                label="Competencia IA"
+                value={position.aiCompetencyLevel
+                  ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{aiLevelLabel(position.aiCompetencyLevel)}</span>
+                  : 'Sin Definir'}
+              />
               <Field label="Estado" value={STATUS_LABELS[position.status]} />
             </div>
           </div>
@@ -270,7 +279,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
 
           <div className={CARD}>
             <h2 className="text-sm font-semibold text-navy">Validación</h2>
-            <p className="mt-1 text-xs text-slate-500">Validación del Head sobre la propuesta (rol, actividades, OKRs y KPIs); es independiente del estado del puesto y de la descripción.</p>
+            <p className="mt-1 text-xs text-slate-500">Validación del Head sobre la propuesta (rol, responsabilidades, OKRs y KPIs); es independiente del estado del puesto y de la descripción.</p>
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <label htmlFor="v-status" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estatus</label>
@@ -357,11 +366,11 @@ export function PositionDetailScreen({ id }: { id: string }) {
         <div className="space-y-4">
           {canUpdate && (
             <div className="flex justify-end">
-              <button type="button" onClick={() => setActivityDialog({ activity: null, group: null })} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nueva Actividad</button>
+              <button type="button" onClick={() => setActivityDialog({ activity: null, group: null })} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nueva Responsabilidad</button>
             </div>
           )}
           {activityGroups.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">Aún No Hay Actividades Para Este Puesto</div>
+            <div className="rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">Aún No Hay Responsabilidades Para Este Puesto</div>
           ) : (
             <div className="space-y-4">
               {activityGroups.map((g) => (
@@ -369,7 +378,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-navy">{g.order}. {g.title}</h3>
                     {canUpdate && (
-                      <button type="button" onClick={() => setActivityDialog({ activity: null, group: { order: g.order, title: g.title } })} className="text-xs font-medium text-slate-600 hover:text-navy">Agregar al Grupo</button>
+                      <button type="button" onClick={() => setActivityDialog({ activity: null, group: { order: g.order, title: g.title } })} className="text-xs font-medium text-slate-600 hover:text-navy">Agregar Actividad</button>
                     )}
                   </div>
                   <ul className="mt-3 divide-y divide-slate-100">
@@ -644,7 +653,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
       {deletingPosition && (
         <ConfirmDelete
           title="Eliminar Puesto"
-          message={<>¿Eliminar <strong>{position.code} · {position.title}</strong>? También se eliminarán sus actividades, OKRs y KPIs.</>}
+          message={<>¿Eliminar <strong>{position.code} · {position.title}</strong>? También se eliminarán sus responsabilidades, OKRs y KPIs.</>}
           busy={busy}
           error={actionError}
           onCancel={() => setDeletingPosition(false)}

@@ -130,7 +130,7 @@ describe('Matriz de Puestos (M6-B) · editar el puesto (validación y campos nue
   const base = {
     id: 'p1', code: 'JP-001', title: 'TEST-Analista', area: 'TI', business_unit: 'TEST-UN', level: 'II', description: 'TEST-Desc', description_approved: false,
     description_approved_by: null, description_approved_at: null, status: 'activo', division: 'E-Commerce', reports_to_text: null,
-    reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, plazas: 2, role_summary: 'Rol', position_objective: 'Obj', validation_points: 'Puntos', head_comments: null,
+    reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, vacancies: 0, ai_competency_level: null, plazas: 2, role_summary: 'Rol', position_objective: 'Obj', validation_points: 'Puntos', head_comments: null,
     validation_status: 'pendiente', validated_by: null, validator_name: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
   };
   const build = (cur: Record<string, unknown> = base) => {

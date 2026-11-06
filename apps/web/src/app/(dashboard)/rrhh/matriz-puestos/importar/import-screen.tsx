@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { ChevronLeftIcon } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { readError } from '../position-form-dialog';
-import { currentPeriod, currentYearMx, makePeriod, okrPeriodLabel, parsePeriod, yearOptions } from '../positions-constants';
+import { aiLevelLabel, currentPeriod, currentYearMx, makePeriod, okrPeriodLabel, parsePeriod, yearOptions } from '../positions-constants';
 
 type Action = 'crear' | 'actualizar' | 'sin cambios';
 interface Issue {
@@ -24,14 +24,14 @@ interface ImportResult {
   /** Semestre en el que se crean los OKRs nuevos. */
   period: string;
   positions: {
-    row: number; title: string; area: string; action: Action; activities: number; okrRows: number; objectives: number; kpis: number;
+    row: number; title: string; area: string; action: Action; plazas: number | null; vacancies: number; aiLevel: string | null; activities: number; okrRows: number; objectives: number; kpis: number;
     /** OKRs del semestre con su peso: los nuevos con el reparto equitativo y los existentes con el suyo. */
     okrs: { objectiveCode: string; krCode: string; weight: number; isNew: boolean }[];
     /** «Reporta a» y «Supervisa a» resueltos contra los puestos de la división (null si el archivo no trae esas columnas). */
     relations: { reportsTo: string | null; reportsToText: string | null; supervises: string[]; supervisesUnresolved: string[] } | null;
   }[];
   summary: {
-    positions: number; created: number; updated: number; unchanged: number; newAreas: number; plazas: number; areas: number; groups: number;
+    positions: number; created: number; updated: number; unchanged: number; newAreas: number; plazas: number; vacancies: number; areas: number; groups: number;
     activities: number; activitiesWithNote: number; objectives: number; okrRows: number; kpis: number;
   };
   warnings: Issue[];
@@ -170,10 +170,12 @@ export function ImportScreen() {
         ['A actualizar', preview.summary.updated],
         ['Sin cambios', preview.summary.unchanged],
         ['Áreas nuevas', preview.summary.newAreas],
+        ['Responsabilidades', preview.summary.groups],
         ['Actividades', preview.summary.activities],
         ['Filas de OKR', preview.summary.okrRows],
         ['KPIs', preview.summary.kpis],
-        ['Plazas', preview.summary.plazas],
+        ['Plazas Ocupadas', preview.summary.plazas],
+        ['Vacantes', preview.summary.vacancies],
       ]
     : [];
 
@@ -187,6 +189,9 @@ export function ImportScreen() {
         <h1 className="mt-2 text-2xl font-bold text-navy">Importar Matriz de Puestos desde Excel</h1>
         <p className="mt-1 text-sm text-slate-500">
           Sube el archivo de la división, revisa la vista previa y confirma. Reimportar el mismo archivo no duplica nada.
+        </p>
+        <p className="mt-1 text-sm text-slate-500">
+          Las columnas opcionales «Vacantes» (número entero de 0 o más; vacía = 0, o 1 si el puesto termina en «(VACANTE)») y «Competencia IA (nivel)» (Básico, Intermedio o Avanzado) reemplazan el valor del puesto solo si el archivo las trae; sin la columna no se tocan. «Plazas ocupadas» y «Vacantes» son datos distintos.
         </p>
         <p className="mt-1 text-sm text-slate-500">
           Las columnas «Reporta a» y «Supervisa a» (varios puestos separados por «;» o por salto de línea) se enlazan con los puestos de la misma división por su título. Los nombres que no coinciden con ningún puesto solo generan un aviso: «Reporta a» se conserva como texto y «Supervisa a» enlaza únicamente los que sí existen.
@@ -302,10 +307,10 @@ export function ImportScreen() {
 
           {preview.positions.length > 0 && (
             <div className="max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-              <table className="w-full min-w-[960px] text-left text-sm">
+              <table className="w-full min-w-[1180px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                    {['Fila', 'Puesto', 'Área', 'Acción', 'Actividades', 'OKRs', 'KPIs', 'Reporta a / Supervisa a'].map((c) => <th key={c} className="whitespace-nowrap px-4 py-3">{c}</th>)}
+                    {['Fila', 'Puesto', 'Área', 'Acción', 'Plazas Ocupadas', 'Vacantes', 'Competencia IA', 'Actividades', 'OKRs', 'KPIs', 'Reporta a / Supervisa a'].map((c) => <th key={c} className="whitespace-nowrap px-4 py-3">{c}</th>)}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -317,6 +322,9 @@ export function ImportScreen() {
                       <td className="whitespace-nowrap px-4 py-2.5">
                         <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', ACTION_BADGE[p.action])}>{ACTION_LABEL[p.action]}</span>
                       </td>
+                      <td className="px-4 py-2.5 text-slate-600">{p.plazas ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{p.vacancies}</td>
+                      <td className="whitespace-nowrap px-4 py-2.5 text-slate-600">{p.aiLevel ? aiLevelLabel(p.aiLevel) : '—'}</td>
                       <td className="px-4 py-2.5 text-slate-600">{p.activities}</td>
                       <td className="px-4 py-2.5 text-slate-600">
                         <span className="whitespace-nowrap">{p.okrRows} ({p.objectives} {p.objectives === 1 ? 'objetivo' : 'objetivos'})</span>

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { PositionFormDialog } from './position-form-dialog';
 import {
   EMPTY_OPTIONS,
+  aiLevelLabel,
   levelOptionLabel,
   seniorityLabel,
   STATUS_BADGE,
@@ -128,7 +129,7 @@ export function PositionsScreen({ initialSort = null }: { initialSort?: Position
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-black">RRHH</p>
           <h1 className="mt-1 text-2xl font-bold text-navy">Matriz de Puestos</h1>
-          <p className="mt-1 text-sm text-slate-500">Puestos de trabajo con sus actividades, OKRs y KPIs base</p>
+          <p className="mt-1 text-sm text-slate-500">Puestos de trabajo con sus responsabilidades, OKRs y KPIs base</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {canImport && (
@@ -212,7 +213,7 @@ export function PositionsScreen({ initialSort = null }: { initialSort?: Position
           <>
             {/* El scroll horizontal vive dentro del contenedor, no en la página. */}
             <div className={cn('max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm', loading && 'opacity-60')}>
-              <table className="w-full min-w-[1020px] text-left text-sm">
+              <table className="w-full min-w-[1180px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {SORT_COLUMNS.map((c) => (
@@ -232,9 +233,11 @@ export function PositionsScreen({ initialSort = null }: { initialSort?: Position
                       <td className="px-4 py-3 text-slate-600">{p.area}</td>
                       <td className="px-4 py-3 text-slate-600">{p.level ?? '—'}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">{seniorityLabel(p.seniority)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">{p.plazas ?? '—'}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-                        {p.vacant ? <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">Vacante</span> : (p.plazas ?? '—')}
+                        {p.vacant ? <span className="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">{p.vacancies}</span> : p.vacancies}
                       </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-slate-600">{aiLevelLabel(p.aiCompetencyLevel) === 'Sin Definir' ? '—' : aiLevelLabel(p.aiCompetencyLevel)}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', VALIDATION_BADGE[p.validationStatus])}>{VALIDATION_LABELS[p.validationStatus]}</span>
                       </td>

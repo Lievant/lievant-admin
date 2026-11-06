@@ -22,7 +22,7 @@ type Pos = { id: string; code: string; title: string; reports_to_position_id: st
 const baseRow = (p: Pos): PositionRow => ({
   id: p.id, code: p.code, title: p.title, area: 'TI', business_unit: null, level: null, description: 'TEST-Descripción', description_approved: false,
   description_approved_by: null, description_approved_at: null, status: 'pendiente_aprobacion', division: null, level_original: null, seniority: null,
-  reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: p.reports_to_position_id, supervises_text: null, plazas: 3, role_summary: 'TEST-Rol',
+  reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: p.reports_to_position_id, supervises_text: null, vacancies: 0, ai_competency_level: null, plazas: 3, role_summary: 'TEST-Rol',
   position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null,
   created_at: new Date(), updated_at: new Date(),
 });

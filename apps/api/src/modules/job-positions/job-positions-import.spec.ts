@@ -63,11 +63,11 @@ class FakeDb {
     if (/^SELECT id, name.* FROM hr\.job_position_kpis/.test(sql)) return live(this.kpis).filter((k) => k.job_position_id === params[0]);
 
     if (/^INSERT INTO hr\.job_positions/.test(sql)) {
-      const [code, title, area, level, createdBy, division, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority, supervisesText] = params;
+      const [code, title, area, level, createdBy, division, reports, plazas, role, objective, points, comments, vstatus, vby, vat, levelOriginal, seniority, supervisesText, vacancies, aiLevel] = params;
       const row: Row = {
         id: this.id('P'), code, title, area, level, status: 'activo', description: null, description_approved: false, business_unit: null, created_by: createdBy,
         division, reports_to_text: reports, plazas, role_summary: role, position_objective: objective,
-        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, supervises_text: supervisesText, reports_to_position_id: null, deleted_at: null,
+        validation_points: points, head_comments: comments, validation_status: vstatus, validated_by: vby, validated_at: vat, level_original: levelOriginal, seniority, supervises_text: supervisesText, vacancies, ai_competency_level: aiLevel, reports_to_position_id: null, deleted_at: null,
       };
       this.positions.push(row);
       return [{ id: row.id }];
@@ -960,10 +960,103 @@ describe('Importación de la Matriz · relaciones entre puestos', () => {
     await service.run('apply', 'TEST-Ecom', await xlsx([rel('A1', 'Director', '', 'Gerente'), rel('A1', 'Gerente', 'Director')]), ACTOR, PERIOD);
     const ins = db.calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
     expect(ins.sql).toContain('supervises_text');
-    expect(ins.params).toHaveLength(18);
+    expect(ins.params).toHaveLength(20);
     for (const c of db.calls.filter((x) => /job_position_supervisions|reports_to_position_id = \$2/.test(x.sql) && /^(INSERT|UPDATE|DELETE)/.test(x.sql))) {
       const max = Math.max(...[...c.sql.matchAll(/\$(\d+)/g)].map((m) => Number(m[1])));
       expect(c.params).toHaveLength(max);
     }
+  });
+});
+
+// ── Vacantes y Competencia IA ───────────────────────────────────────────────────────────────────────────────
+
+describe('Importación de la Matriz · Vacantes y Competencia IA', () => {
+  const HEAD = [...HEADER, 'Vacantes', 'Competencia IA (nivel)'];
+  const vrow = (title: string, vac: string, ai: string, over: Record<number, string> = {}): string[] => [...row('A1', title, { 7: '2', ...over }), vac, ai];
+  async function vfile(rows: string[][], header = HEAD) {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Matriz TEST');
+    ws.addRow(['Matriz de Puestos – División TEST-Ecom']);
+    ws.addRow([]);
+    ws.addRow(header);
+    rows.forEach((r) => ws.addRow(r));
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    return { buffer, originalname: 'TEST-vacantes.xlsx', size: buffer.length };
+  }
+  const find = (db: FakeDb, title: string) => db.positions.find((p) => p.title === title)!;
+
+  it('crea el puesto con sus vacantes y su Competencia IA, y la vista previa los muestra con el total de vacantes', async () => {
+    const { db, service } = setup();
+    const file = await vfile([vrow('P1', '3', 'Avanzado'), vrow('P2', '', 'básico')]);
+    const prev = await service.run('preview', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(prev.positions.map((p) => [p.plazas, p.vacancies, p.aiLevel])).toEqual([[2, 3, 'avanzado'], [2, 0, 'basico']]);
+    expect(prev.summary).toMatchObject({ plazas: 4, vacancies: 3 });
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect([find(db, 'P1').vacancies, find(db, 'P1').ai_competency_level]).toEqual([3, 'avanzado']);
+    expect([find(db, 'P2').vacancies, find(db, 'P2').ai_competency_level]).toEqual([0, 'basico']);
+  });
+
+  it('el sufijo «(VACANTE)» sin la columna crea el puesto con 1 vacante y 0 plazas ocupadas', async () => {
+    const { db, service } = setup();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Matriz TEST');
+    ws.addRow(['Matriz de Puestos – División TEST-Ecom']);
+    ws.addRow([]);
+    ws.addRow(HEADER);
+    ws.addRow(row('A1', 'P1 (VACANTE)', { 7: '' }));
+    const buffer = Buffer.from(await wb.xlsx.writeBuffer());
+    await service.run('apply', 'TEST-Ecom', { buffer, originalname: 'a.xlsx', size: buffer.length }, ACTOR, PERIOD);
+    expect(find(db, 'P1')).toMatchObject({ vacancies: 1, plazas: 0 });
+  });
+
+  it('reimportar el mismo archivo es «Sin Cambios»', async () => {
+    const { db, service } = setup();
+    const file = await vfile([vrow('P1', '3', 'Avanzado'), vrow('P2', '1', 'Intermedio')]);
+    await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    const writes = db.writes.length;
+    const again = await service.run('apply', 'TEST-Ecom', file, ACTOR, PERIOD);
+    expect(again.summary).toMatchObject({ created: 0, updated: 0, unchanged: 2 });
+    expect(db.writes.length).toBe(writes);
+  });
+
+  it('cambiar SOLO las vacantes, o SOLO la Competencia IA, de una fila es 1 «Actualizar»', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '3', 'Avanzado'), vrow('P2', '1', 'Intermedio')]), ACTOR, PERIOD);
+    const onlyVac = await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '5', 'Avanzado'), vrow('P2', '1', 'Intermedio')]), ACTOR, PERIOD);
+    expect(onlyVac.summary).toMatchObject({ updated: 1, unchanged: 1 });
+    expect(find(db, 'P1').vacancies).toBe(5);
+    const onlyAi = await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '5', 'Avanzado'), vrow('P2', '1', 'Básico')]), ACTOR, PERIOD);
+    expect(onlyAi.summary).toMatchObject({ updated: 1, unchanged: 1 });
+    expect(find(db, 'P2').ai_competency_level).toBe('basico');
+    // el UPDATE solo toca la columna que cambió
+    const last = db.writes.filter((c) => /^UPDATE hr\.job_positions SET/.test(c.sql)).pop()!;
+    expect(last.sql).toContain('ai_competency_level');
+    expect(last.sql).not.toContain('vacancies');
+  });
+
+  it('con la columna presente la celda vacía REEMPLAZA (vacantes 0, IA sin nivel); un valor no válido avisa y queda sin nivel', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '3', 'Avanzado')]), ACTOR, PERIOD);
+    const r = await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '', 'Experto')]), ACTOR, PERIOD);
+    expect(r.summary.updated).toBe(1);
+    expect(find(db, 'P1')).toMatchObject({ vacancies: 0, ai_competency_level: null });
+    expect(r.warnings.some((w) => /Competencia IA no válida «Experto»/.test(w.message))).toBe(true);
+  });
+
+  it('con la columna ausente NO se tocan las vacantes ni la Competencia IA de un puesto existente', async () => {
+    const { db, service } = setup();
+    await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '3', 'Avanzado')]), ACTOR, PERIOD);
+    const r = await service.run('apply', 'TEST-Ecom', await vfile([row('A1', 'P1', { 7: '9' })], HEADER), ACTOR, PERIOD);
+    expect(r.summary.updated).toBe(1); // cambió la plaza
+    expect(find(db, 'P1')).toMatchObject({ plazas: 9, vacancies: 3, ai_competency_level: 'avanzado' });
+  });
+
+  it('los avisos de valor inválido no bloquean la importación', async () => {
+    const { db, service } = setup();
+    const r = await service.run('apply', 'TEST-Ecom', await vfile([vrow('P1', '1.5', 'Experto')]), ACTOR, PERIOD);
+    expect(r.applied).toBe(true);
+    expect(r.errors).toEqual([]);
+    expect(find(db, 'P1')).toMatchObject({ vacancies: 0, ai_competency_level: null });
+    expect(r.warnings.filter((w) => /vacantes|Competencia IA/i.test(w.message))).toHaveLength(2);
   });
 });

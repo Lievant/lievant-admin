@@ -81,6 +81,8 @@ const SIMPLE_FIELDS = {
   division: 'division',
   reportsTo: 'reports_to_text',
   plazas: 'plazas',
+  vacancies: 'vacancies',
+  aiCompetencyLevel: 'ai_competency_level',
   roleSummary: 'role_summary',
   positionObjective: 'position_objective',
   validationPoints: 'validation_points',
@@ -369,13 +371,13 @@ export class JobPositionsService {
       const rows = (await m.query(
         `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
            division, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
-           reports_to_employee_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+           reports_to_employee_id, vacancies, ai_competency_level)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
         [
           code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
           lists.division, dto.reportsTo ?? null, dto.plazas ?? null,
           dto.roleSummary ?? null, dto.positionObjective ?? null, dto.validationPoints ?? null, dto.seniority ?? null,
-          dto.reportsToEmployeeId ?? null,
+          dto.reportsToEmployeeId ?? null, dto.vacancies ?? 0, dto.aiCompetencyLevel ?? null,
         ],
       )) as { id: string }[];
       const newId = rows[0]!.id;
@@ -454,13 +456,15 @@ export class JobPositionsService {
            description_approved=$7, description_approved_by=$8, description_approved_at=$9,
            status=$10, division=$11, reports_to_text=$12, plazas=$13,
            role_summary=$14, position_objective=$15, validation_points=$16, head_comments=$17,
-           validation_status=$18, validated_by=$19, validated_at=$20, seniority=$21, reports_to_employee_id=$22, updated_at=NOW()
+           validation_status=$18, validated_by=$19, validated_at=$20, seniority=$21, reports_to_employee_id=$22,
+           vacancies=$23, ai_competency_level=$24, updated_at=NOW()
          WHERE id=$1`,
         [
           id, next.title, next.area, next.business_unit, next.level, desc.description, desc.approved, desc.approvedBy, desc.approvedAt, status,
           simple.division, simple.reportsTo, simple.plazas,
           simple.roleSummary, simple.positionObjective, simple.validationPoints, simple.headComments,
           validation.status, validation.by, validation.at, seniority, reportsToEmployeeId ?? null,
+          simple.vacancies ?? 0, simple.aiCompetencyLevel ?? null,
         ],
       );
 

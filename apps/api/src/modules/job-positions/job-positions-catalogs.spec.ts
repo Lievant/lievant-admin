@@ -122,7 +122,7 @@ function build(opts: { areas?: { name: string; division_name: string | null }[];
   const current = opts.current ?? {
     id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'Marketplace', business_unit: null, level: 'II', description: 'TEST-Descripción', description_approved: false,
     description_approved_by: null, description_approved_at: null, status: 'activo', division: 'E-Commerce', level_original: null, seniority: null,
-    reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
+    reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, vacancies: 0, ai_competency_level: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
     head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
   };
   const query = jest.fn(async (rawSql: string, params: unknown[] = []) => {
@@ -169,7 +169,7 @@ describe('Matriz de Puestos · el API rechaza texto libre en nivel y área (400)
     const legacy = {
       id: 'p1', code: 'JP-001', title: 'TEST-Viejo', area: 'Área Vieja', business_unit: null, level: 'Gerencia', description: 'TEST-Descripción', description_approved: false,
       description_approved_by: null, description_approved_at: null, status: 'activo', division: null, level_original: null, seniority: null,
-      reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
+      reports_to_text: null, reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, vacancies: 0, ai_competency_level: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo', validation_points: 'TEST-Puntos',
       head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null, created_at: new Date(), updated_at: new Date(),
     };
     const { service, calls } = build({ current: legacy });

@@ -25,6 +25,11 @@ import {
   okrPeriodLabel,
   okrsOfPeriod,
   plazasLabel,
+  MAX_SUPERVISED,
+  addSupervised,
+  relationsPayload,
+  aiLevelLabel,
+  vacanciesBadgeLabel,
   type ActivityItem,
   makePeriod,
   parsePeriod,
@@ -133,9 +138,14 @@ describe('Matriz de Puestos (web) · semestres, grupos y etiquetas (M6-B)', () =
   });
   it('etiquetas: semestre, plazas, vacante, códigos y frecuencias nuevas', () => {
     expect(okrPeriodLabel('2026-S2')).toBe('Semestre 2 · 2026');
-    expect(plazasLabel(0)).toBe('Vacante');
+    expect(plazasLabel(0)).toBe('0');
     expect(plazasLabel(3)).toBe('3');
     expect(plazasLabel(null)).toBe('—');
+    expect(vacanciesBadgeLabel(2)).toBe('Con Vacantes (2)');
+    expect(vacanciesBadgeLabel(0)).toBeNull();
+    expect(aiLevelLabel('basico')).toBe('Básico');
+    expect(aiLevelLabel('avanzado')).toBe('Avanzado');
+    expect(aiLevelLabel(null)).toBe('Sin Definir');
     expect(okrCode({ objectiveCode: 'O1', krCode: 'KR2' })).toBe('O1 · KR2');
     expect(okrCode({ objectiveCode: 'O1', krCode: null })).toBe('O1');
     expect(okrCode({})).toBe('');
@@ -205,9 +215,9 @@ describe('Matriz de Puestos (web) · relaciones y colaboradores', () => {
     expect(employeesCountLabel(1, null)).toBe('1 colaborador');
     expect(employeesCountLabel(3, null)).toBe('3 colaboradores');
     expect(employeesCountLabel(0, null)).toBe('0 colaboradores');
-    expect(employeesCountLabel(3, 5)).toBe('3 colaboradores · 3 de 5 plazas');
-    expect(employeesCountLabel(1, 1)).toBe('1 colaborador · 1 de 1 plaza');
-    expect(employeesCountLabel(0, 0)).toBe('0 colaboradores · 0 de 0 plazas');
+    expect(employeesCountLabel(3, 5)).toBe('3 colaboradores · 3 de 5 plazas ocupadas');
+    expect(employeesCountLabel(1, 1)).toBe('1 colaborador · 1 de 1 plaza ocupada');
+    expect(employeesCountLabel(0, 0)).toBe('0 colaboradores · 0 de 0 plazas ocupadas');
   });
 
   it('detecta cambios en «Reporta a» y «Supervisa a» (el orden de los supervisados no cuenta)', () => {
@@ -222,5 +232,29 @@ describe('Matriz de Puestos (web) · relaciones y colaboradores', () => {
 
   it('etiqueta de un puesto enlazado: código, título y área', () => {
     expect(positionRefLabel(ref('1', 'Director'))).toBe('JP-1 · Director · TI');
+  });
+
+  describe('formulario del puesto: Reporta a (Puesto) y Supervisa a', () => {
+    const ref = (id: string) => ({ id, code: 'JP-' + id, title: 'Puesto ' + id, area: 'Área' }) as never;
+    const A = ref('a'), B = ref('b'), C = ref('c');
+    it('al crear siempre manda las dos relaciones (null y [] si no hay)', () => {
+      expect(relationsPayload('create', { reportsTo: null, supervises: [] }, { reportsTo: null, supervises: [] })).toEqual({ reportsToPositionId: null, supervisesPositionIds: [] });
+      expect(relationsPayload('create', { reportsTo: A, supervises: [B, C] }, { reportsTo: null, supervises: [] })).toEqual({ reportsToPositionId: 'a', supervisesPositionIds: ['b', 'c'] });
+    });
+    it('al editar sin tocarlas no manda nada (precarga intacta, el orden no cuenta)', () => {
+      expect(relationsPayload('edit', { reportsTo: A, supervises: [C, B] }, { reportsTo: A, supervises: [B, C] })).toEqual({});
+    });
+    it('al editar manda solo lo que se tocó: quitar «Reporta a» da null; agregar o quitar supervisados manda la lista completa', () => {
+      expect(relationsPayload('edit', { reportsTo: null, supervises: [B] }, { reportsTo: A, supervises: [B] })).toEqual({ reportsToPositionId: null });
+      expect(relationsPayload('edit', { reportsTo: A, supervises: [B, C] }, { reportsTo: A, supervises: [B] })).toEqual({ supervisesPositionIds: ['b', 'c'] });
+      expect(relationsPayload('edit', { reportsTo: A, supervises: [] }, { reportsTo: A, supervises: [B] })).toEqual({ supervisesPositionIds: [] });
+    });
+    it('«Supervisa a» excluye al propio puesto, repetidos y pasa de 50', () => {
+      expect(addSupervised([B], A, 'a')).toEqual([B]);
+      expect(addSupervised([B], B, null)).toEqual([B]);
+      expect(addSupervised([B], C, 'a')).toEqual([B, C]);
+      const full = Array.from({ length: MAX_SUPERVISED }, (_, i) => ref('x' + i));
+      expect(addSupervised(full, C, null)).toBe(full);
+    });
   });
 });

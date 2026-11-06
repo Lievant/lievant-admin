@@ -1,6 +1,7 @@
 export type PositionStatus = 'activo' | 'inactivo' | 'pendiente_aprobacion';
 export type Frequency = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual';
 export type ActivityFrequency = Frequency | 'eventual';
+export type AiLevel = 'basico' | 'intermedio' | 'avanzado';
 export type ValidationStatus = 'pendiente' | 'validado' | 'validado_con_ajustes' | 'rechazado';
 
 export interface PositionListItem {
@@ -16,9 +17,14 @@ export interface PositionListItem {
   division: string | null;
   /** Categoría: junior, semi_senior o senior. */
   seniority: string | null;
+  /** Plazas ocupadas. */
   plazas: number | null;
-  /** `plazas = 0`: se muestra como "Vacante". */
+  /** Vacantes (aparte de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
   vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: AiLevel | null;
   validationStatus: ValidationStatus;
 }
 
@@ -90,10 +96,36 @@ export function relationsChanged(
   return a.length !== b.length || a.some((id, i) => id !== b[i]);
 }
 
-/** «3 colaboradores» o «1 colaborador»; con plazas definidas añade «· 3 de 5 plazas». */
+/** Máximo de puestos en «Supervisa a» (el mismo tope del API). */
+export const MAX_SUPERVISED = 50;
+
+/** Agrega un puesto a «Supervisa a»: ignora el propio puesto, los repetidos y lo que pase del máximo. */
+export function addSupervised(current: PositionRef[], picked: PositionRef, selfId: string | null): PositionRef[] {
+  if (picked.id === selfId || current.some((p) => p.id === picked.id) || current.length >= MAX_SUPERVISED) return current;
+  return [...current, picked];
+}
+
+/**
+ * Relaciones que el formulario manda al API. Al crear siempre van las dos (null / []); al editar solo la que el usuario
+ * modificó, para no pisar relaciones sin querer.
+ */
+export function relationsPayload(
+  mode: 'create' | 'edit',
+  draft: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+  initial: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+): { reportsToPositionId?: string | null; supervisesPositionIds?: string[] } {
+  const out: { reportsToPositionId?: string | null; supervisesPositionIds?: string[] } = {};
+  const reportsChanged = (draft.reportsTo?.id ?? null) !== (initial.reportsTo?.id ?? null);
+  const superChanged = relationsChanged({ reportsTo: null, supervises: draft.supervises }, { reportsTo: null, supervises: initial.supervises });
+  if (mode === 'create' || reportsChanged) out.reportsToPositionId = draft.reportsTo?.id ?? null;
+  if (mode === 'create' || superChanged) out.supervisesPositionIds = draft.supervises.map((s) => s.id);
+  return out;
+}
+
+/** «3 colaboradores» o «1 colaborador»; con plazas ocupadas definidas añade «· 3 de 5 plazas ocupadas». */
 export function employeesCountLabel(count: number, plazas: number | null): string {
   const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;
-  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza' : 'plazas'}`;
+  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza ocupada' : 'plazas ocupadas'}`;
 }
 
 export interface PositionDetail extends PositionListItem {
@@ -248,8 +280,19 @@ export const frequencyLabel = (f: ActivityFrequency | null): string => ACTIVITY_
 /** "Semestre 1 · 2026" para AAAA-S1. */
 export const okrPeriodLabel = (period: string): string => periodLabel(period);
 
-/** Etiqueta del número de plazas: "Vacante" cuando es 0. */
-export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : plazas === 0 ? 'Vacante' : String(plazas));
+/** Etiqueta del número de plazas ocupadas (o vacantes). */
+export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : String(plazas));
+
+/** Competencia IA (nivel): opciones del formulario y etiqueta. */
+export const AI_LEVEL_OPTIONS: { value: AiLevel; label: string }[] = [
+  { value: 'basico', label: 'Básico' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzado', label: 'Avanzado' },
+];
+export const aiLevelLabel = (l: string | null): string => AI_LEVEL_OPTIONS.find((o) => o.value === l)?.label ?? 'Sin Definir';
+
+/** «Con Vacantes (2)» cuando hay vacantes; null si no. */
+export const vacanciesBadgeLabel = (vacancies: number): string | null => (vacancies > 0 ? `Con Vacantes (${vacancies})` : null);
 
 /** Año actual en la oficina (America/Mexico_City). */
 export function currentYearMx(now: Date = new Date()): number {
@@ -399,7 +442,7 @@ export const FIELD_GUIDES: Record<GuidedFieldKey, { guide: string; placeholder: 
     placeholder: 'Ej.: Asegurar que cada seller asignado por Mercado Libre inicie su operación en tiempo y bien preparado para la siguiente etapa.',
   },
   description: {
-    guide: 'Actividades y su frecuencia (una por línea).',
+    guide: 'Responsabilidades y sus actividades (frecuencia).',
     placeholder: [
       '- Contactar a los sellers nuevos y explicarles el programa – Diario',
       '- Dar seguimiento al avance de cada seller – Diario',
