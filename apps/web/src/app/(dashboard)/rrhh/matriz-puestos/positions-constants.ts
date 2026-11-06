@@ -1,0 +1,456 @@
+export type PositionStatus = 'activo' | 'inactivo' | 'pendiente_aprobacion';
+export type Frequency = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual';
+export type ActivityFrequency = Frequency | 'eventual';
+export type AiLevel = 'basico' | 'intermedio' | 'avanzado';
+export type ValidationStatus = 'pendiente' | 'validado' | 'validado_con_ajustes' | 'rechazado';
+
+export interface PositionListItem {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  businessUnit: string | null;
+  level: string | null;
+  status: PositionStatus;
+  hasDescription: boolean;
+  descriptionApproved: boolean;
+  division: string | null;
+  /** Categoría: junior, semi_senior o senior. */
+  seniority: string | null;
+  /** Plazas ocupadas. */
+  plazas: number | null;
+  /** Vacantes (aparte de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
+  vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: AiLevel | null;
+  validationStatus: ValidationStatus;
+}
+
+export interface ActivityItem {
+  id: string;
+  jobPositionId: string;
+  groupOrder: number;
+  groupTitle: string;
+  sortOrder: number;
+  description: string;
+  frequency: ActivityFrequency | null;
+  note: string | null;
+}
+
+export interface OkrItem {
+  id: string;
+  jobPositionId: string;
+  /** Semestre AAAA-S1 / AAAA-S2 (ya no existe la plantilla sin periodo). */
+  period: string;
+  objectiveCode: string | null;
+  krCode: string | null;
+  objective: string;
+  keyResult: string;
+  /** Entero de 1 a 100. */
+  weight: number;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+export interface KpiItem {
+  id: string;
+  jobPositionId: string;
+  name: string;
+  description: string | null;
+  targetValue: string | null;
+  measurementFrequency: Frequency | null;
+  isActive: boolean;
+}
+
+/** Un puesto de la misma matriz, tal como se enlaza desde «Reporta a» y «Supervisa a». */
+export interface PositionRef {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+/** Colaborador activo que tiene el puesto asignado (solo datos básicos). */
+export interface PositionEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  status: string;
+}
+
+/** «JP-001 · Título · Área». */
+export const positionRefLabel = (p: PositionRef): string => [p.code, p.title, p.area].filter(Boolean).join(' · ');
+
+/** ¿Cambió el borrador de relaciones respecto de lo guardado? (el orden de «Supervisa a» no cuenta) */
+export function relationsChanged(
+  draft: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+  saved: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+): boolean {
+  if ((draft.reportsTo?.id ?? null) !== (saved.reportsTo?.id ?? null)) return true;
+  const a = draft.supervises.map((s) => s.id).sort();
+  const b = saved.supervises.map((s) => s.id).sort();
+  return a.length !== b.length || a.some((id, i) => id !== b[i]);
+}
+
+/** «3 colaboradores» o «1 colaborador»; con plazas ocupadas definidas añade «· 3 de 5 plazas ocupadas». */
+export function employeesCountLabel(count: number, plazas: number | null): string {
+  const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;
+  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza ocupada' : 'plazas ocupadas'}`;
+}
+
+export interface PositionDetail extends PositionListItem {
+  /** Puesto al que reporta (de la misma matriz). */
+  reportsToPosition: PositionRef | null;
+  /** Puestos que supervisa. */
+  supervises: PositionRef[];
+  /** Puestos que lo supervisan (solo lectura). */
+  supervisedBy: PositionRef[];
+  /** Puestos que le reportan (solo lectura). */
+  directReports: PositionRef[];
+  /** Colaboradores activos con este puesto (máx. 200) y su total. */
+  employees: PositionEmployee[];
+  employeesCount: number;
+  /** Texto original de la celda «Supervisa a» del Excel (solo lectura). */
+  supervisesText: string | null;
+  /** Texto del nivel como venía en el Excel (solo lectura). */
+  levelOriginal: string | null;
+  /** Texto de «Reporta a» que venía del Excel (solo lectura). */
+  reportsTo: string | null;
+  /** «Reporta a» ligado a un empleado; `active: false` = ya no está activo. */
+  reportsToEmployee: { id: string; fullName: string; position: string | null; active: boolean } | null;
+  roleSummary: string | null;
+  positionObjective: string | null;
+  validationPoints: string | null;
+  headComments: string | null;
+  validatedBy: { id: string; name: string | null } | null;
+  validatedAt: string | null;
+  description: string | null;
+  approvedBy: { id: string; name: string | null } | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  okrs: OkrItem[];
+  kpis: KpiItem[];
+  activities: ActivityItem[];
+}
+
+export const STATUS_LABELS: Record<PositionStatus, string> = {
+  activo: 'Activo',
+  pendiente_aprobacion: 'Pendiente Aprobación',
+  inactivo: 'Inactivo',
+};
+
+export const STATUS_BADGE: Record<PositionStatus, string> = {
+  activo: 'bg-emerald-50 text-emerald-700',
+  pendiente_aprobacion: 'bg-amber-50 text-amber-700',
+  inactivo: 'bg-slate-100 text-slate-500',
+};
+
+/** Opciones de las listas de la Matriz (nivel y área salen de catálogos; categoría es una lista cerrada). */
+export interface PositionOptions {
+  /** Áreas para filtrar: las del catálogo más las que ya usan puestos. */
+  areas: string[];
+  catalogAreas: { name: string; division: string | null }[];
+  businessUnits: string[];
+  /** Divisiones activas del catálogo (desplegable del formulario). */
+  divisions: string[];
+  /** Para el filtro: catálogo más las divisiones antiguas que ya tiene algún puesto. */
+  filterDivisions: string[];
+  levels: { code: string; name: string }[];
+  seniorities: { value: string; label: string }[];
+  validationStatuses: ValidationStatus[];
+}
+
+export const EMPTY_OPTIONS: PositionOptions = { areas: [], catalogAreas: [], businessUnits: [], divisions: [], filterDivisions: [], levels: [], seniorities: [], validationStatuses: [] };
+
+/** Etiqueta del nivel en los desplegables: «I - Dirección General» (se guarda solo el número romano). */
+export const levelOptionLabel = (l: { code: string; name: string }): string => `${l.code} - ${l.name}`;
+
+/** Empleado elegido en «Reporta a». */
+export interface ReportsToValue {
+  id: string;
+  fullName: string;
+  position: string | null;
+  /** false = el empleado ya no está activo («Baja»). */
+  active?: boolean;
+}
+
+/** «Nombre (cargo)» y «(Baja)» cuando el empleado ya no está activo. */
+export function reportsToLabel(v: ReportsToValue): string {
+  return `${v.fullName}${v.position ? ` (${v.position})` : ''}${v.active === false ? ' (Baja)' : ''}`;
+}
+
+/** Campos obligatorios del formulario del puesto y su mensaje (el API valida lo mismo con un 400). */
+export const REQUIRED_FIELDS = [
+  { key: 'roleSummary', label: 'Rol', message: 'El rol es obligatorio' },
+  { key: 'positionObjective', label: 'Objetivo del puesto', message: 'El objetivo del puesto es obligatorio' },
+  { key: 'validationPoints', label: 'Puntos a validar', message: 'Los puntos a validar son obligatorios' },
+  { key: 'description', label: 'Descripción del puesto', message: 'La descripción del puesto es obligatoria' },
+] as const;
+export type RequiredFieldKey = (typeof REQUIRED_FIELDS)[number]['key'];
+
+/** Mensaje por cada campo obligatorio vacío (solo espacios cuenta como vacío). */
+export function requiredErrors(values: Record<RequiredFieldKey, string>): Partial<Record<RequiredFieldKey, string>> {
+  const out: Partial<Record<RequiredFieldKey, string>> = {};
+  for (const f of REQUIRED_FIELDS) if (values[f.key].trim() === '') out[f.key] = f.message;
+  return out;
+}
+
+export const SENIORITY_LABELS: Record<string, string> = { junior: 'Junior', semi_senior: 'Semi Senior', senior: 'Senior' };
+export const seniorityLabel = (s: string | null): string => (s ? (SENIORITY_LABELS[s] ?? s) : '—');
+
+const plain = (t: string | null | undefined): string => (t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Áreas del desplegable del formulario: las del catálogo de la división elegida (sin división, todas, sin repetir).
+ * Si el puesto ya tiene un área fuera del catálogo (dato antiguo) se ofrece aparte para no perderla al editar.
+ */
+export function areasForDivision(catalogAreas: PositionOptions['catalogAreas'], division: string): string[] {
+  const d = plain(division);
+  const names = catalogAreas.filter((a) => d === '' || plain(a.division) === d).map((a) => a.name);
+  const seen = new Set<string>();
+  return names.filter((n) => (seen.has(plain(n)) ? false : (seen.add(plain(n)), true))).sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+export const inList = (list: string[], value: string): boolean => list.some((x) => plain(x) === plain(value));
+
+export const VALIDATION_LABELS: Record<ValidationStatus, string> = {
+  pendiente: 'Pendiente',
+  validado: 'Validado',
+  validado_con_ajustes: 'Validado con Ajustes',
+  rechazado: 'Rechazado',
+};
+
+export const VALIDATION_BADGE: Record<ValidationStatus, string> = {
+  pendiente: 'bg-slate-100 text-slate-600',
+  validado: 'bg-emerald-50 text-emerald-700',
+  validado_con_ajustes: 'bg-amber-50 text-amber-700',
+  rechazado: 'bg-red-50 text-red-700',
+};
+
+export const VALIDATION_STATUSES = Object.keys(VALIDATION_LABELS) as ValidationStatus[];
+
+export const FREQUENCY_OPTIONS: { value: Frequency; label: string }[] = [
+  { value: 'diario', label: 'Diario' },
+  { value: 'semanal', label: 'Semanal' },
+  { value: 'quincenal', label: 'Quincenal' },
+  { value: 'mensual', label: 'Mensual' },
+  { value: 'trimestral', label: 'Trimestral' },
+  { value: 'semestral', label: 'Semestral' },
+  { value: 'anual', label: 'Anual' },
+];
+
+export const ACTIVITY_FREQUENCY_OPTIONS: { value: ActivityFrequency; label: string }[] = [
+  ...FREQUENCY_OPTIONS,
+  { value: 'eventual', label: 'Eventual' },
+];
+
+export const frequencyLabel = (f: ActivityFrequency | null): string => ACTIVITY_FREQUENCY_OPTIONS.find((o) => o.value === f)?.label ?? '—';
+
+/** "Semestre 1 · 2026" para AAAA-S1. */
+export const okrPeriodLabel = (period: string): string => periodLabel(period);
+
+/** Etiqueta del número de plazas ocupadas (o vacantes). */
+export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : String(plazas));
+
+/** Competencia IA (nivel): opciones del formulario y etiqueta. */
+export const AI_LEVEL_OPTIONS: { value: AiLevel; label: string }[] = [
+  { value: 'basico', label: 'Básico' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzado', label: 'Avanzado' },
+];
+export const aiLevelLabel = (l: string | null): string => AI_LEVEL_OPTIONS.find((o) => o.value === l)?.label ?? 'Sin Definir';
+
+/** «Con Vacantes (2)» cuando hay vacantes; null si no. */
+export const vacanciesBadgeLabel = (vacancies: number): string | null => (vacancies > 0 ? `Con Vacantes (${vacancies})` : null);
+
+/** Año actual en la oficina (America/Mexico_City). */
+export function currentYearMx(now: Date = new Date()): number {
+  const y = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric' }).format(now);
+  return Number(y);
+}
+
+/** Semestre actual (1 o 2) en la oficina. */
+export function currentSemesterMx(now: Date = new Date()): 1 | 2 {
+  const m = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', month: 'numeric' }).format(now);
+  return Number(m) <= 6 ? 1 : 2;
+}
+
+/** Periodo del semestre actual: 'AAAA-S1' / 'AAAA-S2'. */
+export function currentPeriod(now: Date = new Date()): string {
+  return makePeriod(currentYearMx(now), currentSemesterMx(now));
+}
+
+export const makePeriod = (year: number, semester: 1 | 2): string => `${year}-S${semester}`;
+
+export function parsePeriod(period: string): { year: number; semester: 1 | 2 } | null {
+  const m = /^(\d{4})-S([12])$/.exec(period);
+  return m ? { year: Number(m[1]), semester: Number(m[2]) as 1 | 2 } : null;
+}
+
+export function periodLabel(period: string): string {
+  const p = parsePeriod(period);
+  return p ? `Semestre ${p.semester} · ${p.year}` : period;
+}
+
+/** Años ofrecidos en el selector: dos antes y uno después del actual, más los que ya tengan datos. */
+export function yearOptions(currentYear: number, extra: number[] = []): number[] {
+  const set = new Set<number>([currentYear - 2, currentYear - 1, currentYear, currentYear + 1, ...extra]);
+  return [...set].sort((a, b) => b - a);
+}
+
+/** OKRs de un semestre. */
+export const okrsOfPeriod = (okrs: OkrItem[], period: string): OkrItem[] => okrs.filter((o) => o.period === period);
+
+/** Suma de pesos (enteros) de los OKRs ACTIVOS de un semestre. */
+export function sumPeriodWeights(okrs: OkrItem[], period: string): number {
+  return okrsOfPeriod(okrs, period)
+    .filter((o) => o.isActive)
+    .reduce((acc, o) => acc + o.weight, 0);
+}
+
+/** Semestre siguiente: 2026-S1 → 2026-S2, 2026-S2 → 2027-S1 (valor por omisión del destino al copiar). */
+export function nextPeriod(period: string): string {
+  const p = parsePeriod(period);
+  if (!p) return period;
+  return p.semester === 1 ? makePeriod(p.year, 2) : makePeriod(p.year + 1, 1);
+}
+
+/** Mensaje de error del peso de un OKR (entero de 1 a 100) o null si es válido. El servidor lo exige igual. */
+export function okrWeightError(text: string): string | null {
+  const t = text.trim();
+  if (t === '') return 'El peso es obligatorio (entero de 1 a 100).';
+  const n = Number(t);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 100) return 'El peso debe ser un número entero entre 1 y 100.';
+  return null;
+}
+
+export interface OkrGroup {
+  /** Código del objetivo (O1) o null si los OKRs no lo traen. */
+  code: string | null;
+  objective: string;
+  items: OkrItem[];
+}
+
+/** Agrupa por objetivo (mismo código y texto), conservando el orden de aparición. */
+export function groupOkrs(okrs: OkrItem[]): OkrGroup[] {
+  const groups = new Map<string, OkrGroup>();
+  for (const o of okrs) {
+    const key = `${o.objectiveCode ?? ''}|${o.objective}`;
+    const g = groups.get(key) ?? { code: o.objectiveCode, objective: o.objective, items: [] };
+    g.items.push(o);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
+
+export interface ActivityGroup {
+  order: number;
+  title: string;
+  items: ActivityItem[];
+}
+
+/** Agrupa las actividades por grupo (orden y título), en el orden del grupo y de cada actividad. */
+export function groupActivities(activities: ActivityItem[]): ActivityGroup[] {
+  const groups = new Map<string, ActivityGroup>();
+  for (const a of [...activities].sort((x, y) => x.groupOrder - y.groupOrder || x.sortOrder - y.sortOrder)) {
+    const key = `${a.groupOrder}|${a.groupTitle}`;
+    const g = groups.get(key) ?? { order: a.groupOrder, title: a.groupTitle, items: [] };
+    g.items.push(a);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
+
+/** "O1 · KR1", "O1" o '' (sin códigos). */
+export const okrCode = (o: { objectiveCode?: string | null; krCode?: string | null }): string => [o.objectiveCode, o.krCode].filter(Boolean).join(' · ');
+
+/** none = sin OKRs activos en el semestre; incomplete (menos de 100) es solo informativo: no bloquea. */
+export type WeightState = 'none' | 'complete' | 'incomplete' | 'over';
+
+export function weightState(sum: number, count: number): WeightState {
+  if (count === 0) return 'none';
+  if (sum > 100) return 'over';
+  return sum === 100 ? 'complete' : 'incomplete';
+}
+
+/** «Suma 80 %, faltan 20 % para llegar a 100 %» (menos de 100), «Suma 100 %» o «Suma 120 %: pasa de 100 %». */
+export function weightSummary(sum: number): string {
+  if (sum < 100) return `Suma ${sum} %, faltan ${100 - sum} % para llegar a 100 %`;
+  if (sum > 100) return `Suma ${sum} %: pasa de 100 %`;
+  return 'Suma 100 %';
+}
+
+/** 80 → '80 %', 33.5 → '33.5 %'. */
+export const formatPct = (n: number): string => `${Number.isInteger(n) ? n : n.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')} %`;
+
+/** ISO → 'dd/mm/aaaa hh:mm' en America/Mexico_City. */
+export function formatDateTimeMx(iso: string | null): string {
+  if (!iso) return '—';
+  const parts = new Intl.DateTimeFormat('es-MX', {
+    timeZone: 'America/Mexico_City',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(new Date(iso));
+  const g = (t: string) => parts.find((p) => p.type === t)?.value ?? '';
+  return `${g('day')}/${g('month')}/${g('year')} ${g('hour') === '24' ? '00' : g('hour')}:${g('minute')}`;
+}
+
+/** Guía de llenado (de RRHH) de los cuatro campos de texto del puesto: texto corto junto a la etiqueta y ejemplo como placeholder. */
+export type GuidedFieldKey = 'roleSummary' | 'positionObjective' | 'description' | 'validationPoints';
+export const FIELD_GUIDES: Record<GuidedFieldKey, { guide: string; placeholder: string }> = {
+  roleSummary: {
+    guide: 'Qué hace, en una frase.',
+    placeholder: 'Ej.: Acompañar a sellers internacionales en su arranque dentro de Mercado Libre.',
+  },
+  positionObjective: {
+    guide: 'Para qué existe.',
+    placeholder: 'Ej.: Asegurar que cada seller asignado por Mercado Libre inicie su operación en tiempo y bien preparado para la siguiente etapa.',
+  },
+  description: {
+    guide: 'Responsabilidades y sus actividades (frecuencia).',
+    placeholder: [
+      '- Contactar a los sellers nuevos y explicarles el programa – Diario',
+      '- Dar seguimiento al avance de cada seller – Diario',
+      '- Reportar avances a Mercado Libre – Semanal',
+    ].join('\n'),
+  },
+  validationPoints: {
+    guide: 'Cómo se mide (uno por línea).',
+    placeholder: ['- Sellers contactados en menos de 48 horas', '- Sellers que concluyen su arranque en tiempo', '- Reportes entregados en fecha'].join('\n'),
+  },
+};
+
+export type TextBlock = { kind: 'paragraph'; text: string } | { kind: 'list'; items: string[] };
+
+/**
+ * Presentación del texto guardado: las líneas que empiezan con «-», «*» o «•» forman listas con viñetas y el resto
+ * son párrafos (un salto de línea separa párrafos; las líneas vacías no generan bloques). No modifica el texto
+ * guardado y devuelve solo texto, nunca HTML.
+ */
+export function parseTextBlocks(text: string | null | undefined): TextBlock[] {
+  const blocks: TextBlock[] = [];
+  for (const raw of (text ?? '').split(/\r\n|\r|\n/)) {
+    const line = raw.trim();
+    if (line === '') continue;
+    const bullet = /^[-*•]\s*(.*)$/.exec(line);
+    if (bullet) {
+      const item = bullet[1]!.trim();
+      if (item === '') continue;
+      const last = blocks[blocks.length - 1];
+      if (last?.kind === 'list') last.items.push(item);
+      else blocks.push({ kind: 'list', items: [item] });
+    } else {
+      blocks.push({ kind: 'paragraph', text: line });
+    }
+  }
+  return blocks;
+}

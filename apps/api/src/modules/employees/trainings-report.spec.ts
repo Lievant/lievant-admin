@@ -10,6 +10,9 @@ import { RIAC_COLUMNS, RIAC_REPORT_TITLE, buildRiacWorkbook, formatGeneratedAtMx
 import { TrainingsReportService } from './trainings-report.service';
 import {
   RIAC_EXPORT_MAX_ROWS,
+  RIAC_LEVEL_LABELS,
+  RIAC_TYPES,
+  RIAC_TYPE_LABELS,
   buildRiacWhere,
   describeRiacFilters,
   formatRiacDuration,
@@ -32,7 +35,7 @@ const row = (over: Partial<RiacRow> = {}): RiacRow => ({
   end_date: '2026-04-15',
   duration_value: 40,
   duration_unit: 'horas',
-  is_company_recognition: false,
+  competencies: 'Liderazgo, Comunicación',
   total_count: 1,
   ...over,
 });
@@ -59,6 +62,8 @@ describe('RIAC · formato', () => {
     expect(formatRiacDuration(1, 'horas')).toBe('1 hora');
     expect(formatRiacDuration(6, 'meses')).toBe('6 meses');
     expect(formatRiacDuration(1, 'meses')).toBe('1 mes');
+    expect(formatRiacDuration(5, 'dias')).toBe('5 días');
+    expect(formatRiacDuration(1, 'dias')).toBe('1 día');
     expect(formatRiacDuration(null, null)).toBe('');
   });
 
@@ -90,11 +95,11 @@ describe('RIAC · cláusula de la consulta', () => {
     expect(params).toEqual(['2026-01-01', '2026-06-30']);
   });
 
-  it('Reconocimientos filtra por la casilla sin importar el tipo de desarrollo', () => {
-    const { where, params } = buildRiacWhere({ ...base, type: 'reconocimientos' });
-    expect(where).toContain('t.is_company_recognition = true');
-    expect(where).not.toContain('development_type');
-    expect(params).toHaveLength(2);
+  it('ya no existe el tipo «Reconocimientos»: los tipos del filtro son solo los de desarrollo', () => {
+    expect([...RIAC_TYPES]).toEqual(['tecnico', 'habilidades_blandas', 'academico', 'sgsi', 'bienestar_psicosocial']);
+    expect(Object.keys(RIAC_TYPE_LABELS)).not.toContain('reconocimientos');
+    const { where } = buildRiacWhere({ ...base, type: 'tecnico' });
+    expect(where).not.toMatch(/recognition/);
   });
 
   it('un tipo de desarrollo filtra por la columna; área, división y colaborador suman parámetros', () => {
@@ -109,9 +114,46 @@ describe('RIAC · cláusula de la consulta', () => {
 
   it('describe los filtros para el encabezado del Excel', () => {
     expect(describeRiacFilters(base)).toBe('Tipo: Todos · Área: Todas · División: Todas · Colaborador: Todos');
-    expect(describeRiacFilters({ ...base, type: 'reconocimientos', area: 'Ventas', employeeId: 'x' }, 'Ana Pérez')).toBe(
-      'Tipo: Reconocimientos · Área: Ventas · División: Todas · Colaborador: Ana Pérez',
+    expect(describeRiacFilters({ ...base, type: 'tecnico', area: 'Ventas', employeeId: 'x' }, 'Ana Pérez')).toBe(
+      'Tipo: Técnico · Área: Ventas · División: Todas · Colaborador: Ana Pérez',
     );
+  });
+});
+
+describe('RIAC · tipos, niveles y duración ampliados', () => {
+  const base = { from: '2026-01-01', to: '2026-06-30' };
+  it('el filtro por tipo acepta los dos nuevos (DTO) y rechaza uno inventado', async () => {
+    const errs = async (plain: object) => (await validate(plainToInstance(TrainingReportQueryDto, plain))).map((e) => e.property);
+    const ok = { from: '2026-01-01', to: '2026-02-01' };
+    expect(await errs({ ...ok, type: 'sgsi' })).toEqual([]);
+    expect(await errs({ ...ok, type: 'bienestar_psicosocial' })).toEqual([]);
+    expect(await errs({ ...ok, type: 'tecnico' })).toEqual([]);
+    expect(await errs({ ...ok, type: 'inventado' })).toContain('type');
+  });
+
+  it('el WHERE filtra por la columna con el tipo nuevo', () => {
+    for (const type of ['sgsi', 'bienestar_psicosocial'] as const) {
+      const { where, params } = buildRiacWhere({ ...base, type });
+      expect(where).toContain('t.development_type = $3');
+      expect(params).toEqual(['2026-01-01', '2026-06-30', type]);
+    }
+  });
+
+  it('etiquetas completas en el reporte y en el encabezado de filtros del Excel', () => {
+    expect(RIAC_TYPE_LABELS.sgsi).toBe('Sistema de Gestión de Seguridad de la Información');
+    expect(RIAC_TYPE_LABELS.bienestar_psicosocial).toBe('Bienestar y Factores Psicosociales');
+    expect(RIAC_LEVEL_LABELS.obligatoria).toBe('Obligatoria');
+    expect(describeRiacFilters({ ...base, type: 'sgsi' })).toContain('Tipo: Sistema de Gestión de Seguridad de la Información');
+  });
+
+  it('el Excel muestra el tipo y el nivel nuevos con su etiqueta y la duración en días', async () => {
+    const item = toRiacItem(row({ development_type: 'sgsi', level: 'obligatoria', duration_value: 5, duration_unit: 'dias' }));
+    expect(item.duration).toBe('5 días');
+    const out = riacExcelRow(item);
+    expect(out[6]).toBe('Sistema de Gestión de Seguridad de la Información');
+    expect(out[7]).toBe('Obligatoria');
+    expect(out[10]).toBe('5 días');
+    expect(riacExcelRow(toRiacItem(row({ development_type: 'bienestar_psicosocial' })))[6]).toBe('Bienestar y Factores Psicosociales');
   });
 });
 
@@ -124,7 +166,8 @@ describe('RIAC · DTO', () => {
   });
   it('tipo, colaborador y límite acotados', async () => {
     const ok = { from: '2026-01-01', to: '2026-02-01' };
-    expect(await errs({ ...ok, type: 'reconocimientos' })).toEqual([]);
+    expect(await errs({ ...ok, type: 'tecnico' })).toEqual([]);
+    expect(await errs({ ...ok, type: 'reconocimientos' })).toContain('type');
     expect(await errs({ ...ok, type: 'otro' })).toContain('type');
     expect(await errs({ ...ok, employeeId: 'no-uuid' })).toContain('employeeId');
     expect(await errs({ ...ok, limit: 101 })).toContain('limit');
@@ -161,6 +204,26 @@ describe('RIAC · servicio', () => {
     expect(calls[0]!.sql).toMatch(/ORDER BY e\.full_name ASC, t\.start_date DESC/);
     expect(calls[0]!.params.slice(-2)).toEqual([10, 10]);
     expect(res).toMatchObject({ total: 53, page: 2, limit: 10, totalPages: 6 });
+  });
+
+  it('la consulta trae las competencias de cada capacitación (por el orden del catálogo) y ya no el reconocimiento', async () => {
+    const { service, calls } = setup([row({ competencies: 'Liderazgo, Comunicación' }), row({ competencies: null })]);
+    const res = await service.getReport(dto());
+    expect(calls[0]!.sql).toMatch(/string_agg\(c\.name, ', ' ORDER BY c\.sort_order, c\.name\)/);
+    expect(calls[0]!.sql).toContain('employees.training_competencies');
+    expect(calls[0]!.sql).not.toMatch(/recognition/);
+    expect(res.data.map((i) => i.competencies)).toEqual(['Liderazgo, Comunicación', '']);
+    expect(res.data[0]).not.toHaveProperty('isCompanyRecognition');
+  });
+
+  it('el Excel exportado lleva las competencias de cada fila', async () => {
+    const { service } = setup([row({ competencies: 'Liderazgo, Comunicación' })]);
+    const out = await service.exportExcel(dto(), ACTOR);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(out.buffer as unknown as ArrayBuffer);
+    const ws = wb.getWorksheet('RIAC')!;
+    expect(ws.getCell(7, 12).value).toBe('Competencias');
+    expect(ws.getCell(8, 12).value).toBe('Liderazgo, Comunicación');
   });
 
   it('página fuera de rango: cuenta aparte; sin resultados en la primera: total 0 sin consulta extra', async () => {
@@ -203,7 +266,7 @@ describe('RIAC · servicio', () => {
     const { service, audit } = setup();
     await service.getReport(dto());
     expect(audit.logActivity).not.toHaveBeenCalled();
-    await service.exportExcel(dto({ type: 'reconocimientos', employeeId: '11111111-1111-4111-8111-111111111111' }), ACTOR);
+    await service.exportExcel(dto({ type: 'tecnico', employeeId: '11111111-1111-4111-8111-111111111111' }), ACTOR);
     expect(audit.logActivity).toHaveBeenCalledTimes(1);
     expect(audit.logActivity).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -214,7 +277,7 @@ describe('RIAC · servicio', () => {
         entityName: 'RIAC-2026-01-01-2026-06-30.xlsx',
         changes: expect.objectContaining({
           rows: 1,
-          filters: expect.objectContaining({ type: 'reconocimientos', from: '2026-01-01', to: '2026-06-30' }),
+          filters: expect.objectContaining({ type: 'tecnico', from: '2026-01-01', to: '2026-06-30' }),
         }),
       }),
     );
@@ -224,7 +287,7 @@ describe('RIAC · servicio', () => {
 // ── Excel ────────────────────────────────────────────────────────────────────
 
 describe('RIAC · Excel', () => {
-  async function load(items = [toRiacItem(row()), toRiacItem(row({ end_date: null, name: 'En curso', is_company_recognition: true, duration_value: null, duration_unit: null }))]) {
+  async function load(items = [toRiacItem(row()), toRiacItem(row({ end_date: null, name: 'En curso', competencies: '', duration_value: null, duration_unit: null }))]) {
     const wb = buildRiacWorkbook({ items, from: '2026-01-01', to: '2026-06-30', filtersText: 'Tipo: Todos', generatedAt: new Date('2026-10-23T18:00:00Z') });
     const buf = await wb.xlsx.writeBuffer();
     const re = new ExcelJS.Workbook();
@@ -249,16 +312,25 @@ describe('RIAC · Excel', () => {
     expect(ws.autoFilter).toBeTruthy();
   });
 
-  it('fechas con formato dd/mm/aaaa, "En Curso", duración y reconocimiento', async () => {
+  it('fechas con formato dd/mm/aaaa, "En Curso", duración y competencias', async () => {
     const ws = await load();
     const start = ws.getCell(8, 9);
     expect(start.numFmt).toBe('dd/mm/yyyy');
     expect((start.value as Date).toISOString().slice(0, 10)).toBe('2026-03-01');
     expect(ws.getCell(8, 10).value instanceof Date).toBe(true);
     expect(ws.getCell(8, 11).value).toBe('40 horas');
-    expect(ws.getCell(8, 12).value).toBe('No');
+    expect(ws.getCell(8, 12).value).toBe('Liderazgo, Comunicación');
     expect(ws.getCell(9, 10).value).toBe('En Curso');
-    expect(ws.getCell(9, 12).value).toBe('Sí');
+    expect(ws.getCell(9, 12).value ?? '').toBe('');
+  });
+
+  it('trae la columna «Competencias» y ya no «Reconocimiento»', async () => {
+    expect([...RIAC_COLUMNS]).toContain('Competencias');
+    expect([...RIAC_COLUMNS]).not.toContain('Reconocimiento');
+    const ws = await load();
+    expect(ws.getCell(7, 12).value).toBe('Competencias');
+    const all = RIAC_COLUMNS.map((_, i) => String(ws.getCell(7, i + 1).value));
+    expect(all.join('|')).not.toMatch(/Reconocimiento/);
   });
 
   it('anchos automáticos acotados', async () => {

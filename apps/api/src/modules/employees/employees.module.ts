@@ -14,11 +14,13 @@ import { EmployeesService } from './employees.service';
 import { EmployeeStorageService } from './employee-storage.service';
 import { HeadcountService } from './headcount.service';
 import { OrgChartService } from './org-chart.service';
+import { OrgChartExportService } from './org-chart-export.service';
 import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { Compensation } from './entities/compensation.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { TrainingsService } from './trainings.service';
+import { EmployeeDevelopmentModule } from '../employee-development/employee-development.module';
 import { TrainingsReportService } from './trainings-report.service';
 import { EmployeeDocument } from './entities/employee-document.entity';
 import { EmployeePhoto } from './entities/employee-photo.entity';
@@ -43,6 +45,7 @@ import { TerminationData } from './entities/termination-data.entity';
     // forwardRef en notificaciones porque ese módulo ya participa en ciclos con
     // vacaciones y gastos.
     HelpdeskModule,
+    EmployeeDevelopmentModule,
     forwardRef(() => NotificationsModule),
     // Corregir la fecha de antigüedad obliga a realinear el balance de
     // vacaciones. No necesita forwardRef: nadie importa EmployeesModule.
@@ -64,6 +67,7 @@ import { TerminationData } from './entities/termination-data.entity';
     EmployeePhotosService,
     HeadcountService,
     OrgChartService,
+    OrgChartExportService,
     MyProfileService,
     EmployeeUserLinkService,
     TrainingsService,

@@ -1,0 +1,705 @@
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { AuditService } from '../audit/audit.service';
+import { canonicalDivision, divisionNotInCatalog, loadCatalogDivisions, uniqueDivisionNames } from './job-positions-divisions';
+import { CreateAreaDto, CreatePositionDto, PositionQueryDto, UpdatePositionDto } from './dto/job-position.dto';
+import {
+  SENIORITIES,
+  SENIORITY_LABELS,
+  areaKey,
+  canonicalLevel,
+  findAreaExact,
+  findAreaNear,
+  normText,
+  type CatalogArea,
+} from './job-positions-catalog.util';
+import {
+  DEFAULT_LIMIT,
+  escapeLike,
+  POSITION_NOT_FOUND,
+  VALIDATION_STATUSES,
+  applyDescriptionChange,
+  applyValidationChange,
+  assertCanApprove,
+  missingRequiredFields,
+  buildPositionOrder,
+  buildPositionWhere,
+  nextPositionCode,
+  normalizeDescription,
+  resolveStatus,
+  statusAfterApproval,
+  toDetail,
+  toActivityView,
+  toKpiView,
+  toListItem,
+  toOkrView,
+  toPositionRef,
+  type ActivityRow,
+  type KpiRow,
+  type OkrRow,
+  type PositionDetail,
+  type PositionListItem,
+  type PositionRefRow,
+  type PositionRelations,
+  type PositionRow,
+  type PositionStatus,
+  type ValidationStatus,
+} from './job-positions.util';
+
+export interface Actor {
+  id?: string;
+  email?: string;
+  name?: string;
+}
+
+export interface PositionPage {
+  data: PositionListItem[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+/** Tope de colaboradores que devuelve el detalle del puesto y de niveles que se recorren al buscar ciclos. */
+const MAX_POSITION_EMPLOYEES = 200;
+const MAX_CHAIN_DEPTH = 100;
+
+const DETAIL_SQL = `
+  SELECT p.*, u.name AS approver_name, v.name AS validator_name,
+         r.full_name AS reports_to_name, r.position AS reports_to_position,
+         (r.status = 'active' AND r.deleted_at IS NULL) AS reports_to_active
+  FROM hr.job_positions p
+  LEFT JOIN auth.users u ON u.id = p.description_approved_by
+  LEFT JOIN auth.users v ON v.id = p.validated_by
+  LEFT JOIN employees.employee_records r ON r.id = p.reports_to_employee_id
+  WHERE p.id = $1 AND p.deleted_at IS NULL`;
+
+type Q = { query: DataSource['query'] };
+
+/** Campos de texto/número simples del puesto: clave del DTO → columna. */
+const SIMPLE_FIELDS = {
+  division: 'division',
+  reportsTo: 'reports_to_text',
+  plazas: 'plazas',
+  vacancies: 'vacancies',
+  aiCompetencyLevel: 'ai_competency_level',
+  roleSummary: 'role_summary',
+  positionObjective: 'position_objective',
+  validationPoints: 'validation_points',
+  headComments: 'head_comments',
+} as const;
+type SimpleKey = keyof typeof SIMPLE_FIELDS;
+/** Los textos largos no se guardan en la bitácora: solo que cambiaron. */
+const LONG_TEXT: ReadonlySet<SimpleKey> = new Set(['roleSummary', 'positionObjective', 'validationPoints', 'headComments']);
+
+/** El UPDATE ... RETURNING de TypeORM llega como [filas, afectadas]; esto lee la primera fila en ambos casos. */
+function firstRow<T>(result: unknown): T | undefined {
+  if (!Array.isArray(result)) return undefined;
+  const head = result[0];
+  return (Array.isArray(head) ? head[0] : head) as T | undefined;
+}
+
+/**
+ * Puestos de la Matriz de Puestos. SQL directo sobre el DataSource; las
+ * operaciones que escriben van en transacción. El interceptor global no cubre
+ * estas rutas (su segmento es `hr`), así que la auditoría es explícita.
+ */
+@Injectable()
+export class JobPositionsService {
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly audit: AuditService,
+  ) {}
+
+  async getOptions(): Promise<{
+    /** Áreas para el filtro: las del catálogo más las que ya usan puestos (para que ninguno quede sin poder filtrarse). */
+    areas: string[];
+    /** Catálogo de áreas con su división (alimenta el desplegable del formulario). */
+    catalogAreas: { name: string; division: string | null }[];
+    businessUnits: string[];
+    /** Divisiones activas del catálogo (desplegable del formulario), sin repetir. */
+    divisions: string[];
+    /** Para el filtro: las del catálogo más las que ya usan puestos (aunque estén fuera del catálogo). */
+    filterDivisions: string[];
+    levels: { code: string; name: string }[];
+    seniorities: { value: string; label: string }[];
+    validationStatuses: readonly ValidationStatus[];
+  }> {
+    const distinct = async (col: 'area' | 'business_unit' | 'level' | 'division'): Promise<string[]> => {
+      const rows = (await this.dataSource.query(
+        `SELECT DISTINCT ${col} AS v FROM hr.job_positions
+         WHERE deleted_at IS NULL AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col} ASC`,
+      )) as { v: string }[];
+      return rows.map((r) => r.v);
+    };
+    const [usedAreas, businessUnits, usedDivisions, catalogDivisions, levelRows, areaRows] = await Promise.all([
+      distinct('area'),
+      distinct('business_unit'),
+      distinct('division'),
+      loadCatalogDivisions(this.dataSource),
+      this.dataSource.query(`SELECT code, name FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`) as Promise<{ code: string; name: string }[]>,
+      this.dataSource.query(`SELECT name, division_name FROM catalogs.areas WHERE is_active IS NOT FALSE ORDER BY name`) as Promise<{ name: string; division_name: string | null }[]>,
+    ]);
+    const catalogAreas = areaRows.map((r) => ({ name: r.name, division: r.division_name }));
+    const seen = new Set<string>();
+    const areas = [...catalogAreas.map((a) => a.name), ...usedAreas]
+      .filter((a) => (seen.has(areaKey(a)) ? false : (seen.add(areaKey(a)), true)))
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    return {
+      areas,
+      catalogAreas,
+      businessUnits,
+      divisions: catalogDivisions,
+      filterDivisions: uniqueDivisionNames([...catalogDivisions, ...usedDivisions]),
+      levels: levelRows,
+      seniorities: SENIORITIES.map((s) => ({ value: s, label: SENIORITY_LABELS[s] })),
+      validationStatuses: VALIDATION_STATUSES,
+    };
+  }
+
+  async list(q: PositionQueryDto): Promise<PositionPage> {
+    const page = q.page ?? 1;
+    const limit = q.limit ?? DEFAULT_LIMIT;
+    const { where, params } = buildPositionWhere({
+      area: q.area,
+      businessUnit: q.businessUnit,
+      division: q.division,
+      level: q.level,
+      seniority: q.seniority,
+      status: q.status,
+      validationStatus: q.validationStatus,
+      search: q.search,
+    });
+    // Total en la misma consulta. El orden se aplica a todos los registros (no a la página); por omisión es el código
+    // numérico, que evita que JP-1000 quede antes que JP-200.
+    const rows = (await this.dataSource.query(
+      `SELECT p.*, COUNT(*) OVER() AS total_count FROM hr.job_positions p
+       WHERE ${where}
+       ORDER BY ${buildPositionOrder(q.sortBy, q.sortDir)}
+       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+      [...params, limit, (page - 1) * limit],
+    )) as PositionRow[];
+
+    let total = rows[0] ? Number(rows[0].total_count) : 0;
+    if (!rows[0] && page > 1) {
+      const counted = (await this.dataSource.query(
+        `SELECT COUNT(*) AS n FROM hr.job_positions p WHERE ${where}`,
+        params,
+      )) as { n: string }[];
+      total = Number(counted[0]?.n ?? 0);
+    }
+    return { data: rows.map(toListItem), total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) };
+  }
+
+  /** Puesto con sus OKRs y KPIs vivos; el nombre de quien aprobó sale del mismo JOIN (sin N+1). */
+  async getDetail(id: string, m: Q = this.dataSource): Promise<PositionDetail> {
+    const rows = (await m.query(DETAIL_SQL, [id])) as PositionRow[];
+    const row = rows[0];
+    if (!row) throw new NotFoundException(POSITION_NOT_FOUND);
+    const [okrs, kpis, activities, relations] = await Promise.all([
+      m.query(
+        `SELECT id, job_position_id, period, objective_code, kr_code, objective, key_result, weight, sort_order, is_active
+         FROM hr.job_position_okrs WHERE job_position_id = $1 AND deleted_at IS NULL
+         ORDER BY period DESC NULLS FIRST, sort_order ASC, created_at ASC`,
+        [id],
+      ) as Promise<OkrRow[]>,
+      m.query(
+        `SELECT id, job_position_id, name, description, target_value, measurement_frequency, is_active
+         FROM hr.job_position_kpis WHERE job_position_id = $1 AND deleted_at IS NULL
+         ORDER BY created_at ASC`,
+        [id],
+      ) as Promise<KpiRow[]>,
+      m.query(
+        `SELECT id, job_position_id, group_order, group_title, sort_order, description, frequency, note
+         FROM hr.job_position_activities WHERE job_position_id = $1 AND deleted_at IS NULL
+         ORDER BY group_order ASC, sort_order ASC, created_at ASC`,
+        [id],
+      ) as Promise<ActivityRow[]>,
+      this.loadRelations(m, row),
+    ]);
+    return toDetail(row, okrs.map(toOkrView), kpis.map(toKpiView), activities.map(toActivityView), relations);
+  }
+
+  /**
+   * «Reporta a» / «Supervisa a» entre puestos y colaboradores asignados. Todo se lee con `deleted_at IS NULL`: una
+   * relación con un puesto dado de baja no se ve. Los empleados: activos y no eliminados, solo datos básicos, por nombre.
+   */
+  private async loadRelations(m: Q, row: PositionRow): Promise<PositionRelations> {
+    const refs = (sql: string, params: unknown[]) => m.query(sql, params) as Promise<PositionRefRow[]>;
+    const COLS = 'p.id, p.code, p.title, p.area, p.level';
+    const [parent, supervises, supervisedBy, directReports, employees, count] = await Promise.all([
+      row.reports_to_position_id
+        ? refs(`SELECT ${COLS} FROM hr.job_positions p WHERE p.id = $1 AND p.deleted_at IS NULL`, [row.reports_to_position_id])
+        : Promise.resolve([] as PositionRefRow[]),
+      refs(
+        `SELECT ${COLS} FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervised_position_id
+         WHERE s.supervisor_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`,
+        [row.id],
+      ),
+      refs(
+        `SELECT ${COLS} FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervisor_position_id
+         WHERE s.supervised_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`,
+        [row.id],
+      ),
+      refs(`SELECT ${COLS} FROM hr.job_positions p WHERE p.reports_to_position_id = $1 AND p.deleted_at IS NULL ORDER BY p.title ASC`, [row.id]),
+      m.query(
+        `SELECT id, full_name, position, area, status FROM employees.employee_records
+         WHERE job_position_id = $1 AND status = 'active' AND deleted_at IS NULL
+         ORDER BY full_name ASC LIMIT ${MAX_POSITION_EMPLOYEES}`,
+        [row.id],
+      ) as Promise<{ id: string; full_name: string; position: string; area: string | null; status: string }[]>,
+      m.query(
+        `SELECT COUNT(*) AS n FROM employees.employee_records WHERE job_position_id = $1 AND status = 'active' AND deleted_at IS NULL`,
+        [row.id],
+      ) as Promise<{ n: string }[]>,
+    ]);
+    return {
+      reportsToPosition: parent[0] ? toPositionRef(parent[0]) : null,
+      supervises: supervises.map(toPositionRef),
+      supervisedBy: supervisedBy.map(toPositionRef),
+      directReports: directReports.map(toPositionRef),
+      employees: (employees ?? []).map((e) => ({ id: e.id, fullName: e.full_name, position: e.position, area: e.area, status: e.status })),
+      employeesCount: Number(count?.[0]?.n ?? 0),
+    };
+  }
+
+  /** Etiquetas «JP-001 · Título» de varios puestos (para la bitácora), en el orden pedido. */
+  private async positionLabels(m: Q, ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = (await m.query(`SELECT id, code, title FROM hr.job_positions WHERE id = ANY($1::uuid[])`, [ids])) as { id: string; code: string; title: string }[];
+    const byId = new Map(rows.map((r) => [r.id, `${r.code} · ${r.title}`]));
+    return ids.map((i) => byId.get(i) ?? i);
+  }
+
+  /** Los puestos elegidos deben existir y no estar eliminados. */
+  private async assertLivePositions(m: Q, ids: string[]): Promise<void> {
+    const rows = (await m.query(`SELECT id FROM hr.job_positions WHERE id = ANY($1::uuid[]) AND deleted_at IS NULL`, [ids])) as { id: string }[];
+    const found = new Set(rows.map((r) => r.id));
+    if (ids.some((i) => !found.has(i))) throw new BadRequestException('Alguno de los puestos elegidos no existe o fue eliminado');
+  }
+
+  /**
+   * «Reporta a» no puede cerrar un ciclo: se recorre la cadena hacia arriba desde el puesto elegido (con tope de
+   * profundidad) y no debe pasar por este puesto.
+   */
+  private async assertNoReportCycle(m: Q, positionId: string, target: string): Promise<void> {
+    if (target === positionId) throw new BadRequestException('Un puesto no puede reportarse a sí mismo');
+    let cur: string | null = target;
+    for (let depth = 0; cur && depth < MAX_CHAIN_DEPTH; depth++) {
+      if (cur === positionId) {
+        const label = (await this.positionLabels(m, [target]))[0] ?? target;
+        throw new BadRequestException(`«Reporta a» formaría un ciclo: ${label} ya reporta, directa o indirectamente, a este puesto`);
+      }
+      const rows = (await m.query(`SELECT reports_to_position_id FROM hr.job_positions WHERE id = $1 AND deleted_at IS NULL`, [cur])) as { reports_to_position_id: string | null }[];
+      cur = rows[0]?.reports_to_position_id ?? null;
+    }
+  }
+
+  /**
+   * Guarda «Reporta a» (puesto) y «Supervisa a» en la misma transacción que el resto del puesto. Valida existencia,
+   * autorreferencia, ciclos en «Reporta a» y pares mutuos directos en «Supervisa a» (400 con mensaje claro) y
+   * devuelve el antes/después en etiquetas de puesto para la bitácora. Lo que no viene (`undefined`) no se toca.
+   */
+  private async saveRelations(
+    m: Q,
+    positionId: string,
+    dto: { reportsToPositionId?: string | null | undefined; supervisesPositionIds?: string[] | undefined },
+  ): Promise<Record<string, { from: unknown; to: unknown }>> {
+    const diff: Record<string, { from: unknown; to: unknown }> = {};
+
+    if (dto.reportsToPositionId !== undefined) {
+      const target = dto.reportsToPositionId;
+      const cur = (await m.query(`SELECT reports_to_position_id FROM hr.job_positions WHERE id = $1`, [positionId])) as { reports_to_position_id: string | null }[];
+      const before = cur[0]?.reports_to_position_id ?? null;
+      if (target !== before) {
+        if (target) {
+          await this.assertLivePositions(m, [target]);
+          await this.assertNoReportCycle(m, positionId, target);
+        }
+        await m.query(`UPDATE hr.job_positions SET reports_to_position_id = $2, updated_at = NOW() WHERE id = $1`, [positionId, target]);
+        diff.reportsToPosition = {
+          from: before ? (await this.positionLabels(m, [before]))[0] : null,
+          to: target ? (await this.positionLabels(m, [target]))[0] : null,
+        };
+      }
+    }
+
+    if (dto.supervisesPositionIds !== undefined) {
+      const wanted = [...new Set(dto.supervisesPositionIds)];
+      if (wanted.includes(positionId)) throw new BadRequestException('Un puesto no puede supervisarse a sí mismo');
+      if (wanted.length > 0) {
+        await this.assertLivePositions(m, wanted);
+        const mutual = (await m.query(
+          `SELECT p.title FROM hr.job_position_supervisions s JOIN hr.job_positions p ON p.id = s.supervisor_position_id
+           WHERE s.supervised_position_id = $1 AND s.supervisor_position_id = ANY($2::uuid[]) AND p.deleted_at IS NULL`,
+          [positionId, wanted],
+        )) as { title: string }[];
+        if (mutual.length > 0) {
+          throw new BadRequestException(`«${mutual[0]!.title}» ya supervisa a este puesto: dos puestos no pueden supervisarse entre sí`);
+        }
+      }
+      const current = ((await m.query(`SELECT supervised_position_id FROM hr.job_position_supervisions WHERE supervisor_position_id = $1`, [positionId])) as { supervised_position_id: string }[]).map((r) => r.supervised_position_id);
+      const same = current.length === wanted.length && wanted.every((w) => current.includes(w));
+      if (!same) {
+        await m.query(`DELETE FROM hr.job_position_supervisions WHERE supervisor_position_id = $1 AND NOT (supervised_position_id = ANY($2::uuid[]))`, [positionId, wanted]);
+        if (wanted.length > 0) {
+          await m.query(
+            `INSERT INTO hr.job_position_supervisions (supervisor_position_id, supervised_position_id) SELECT $1, unnest($2::uuid[]) ON CONFLICT DO NOTHING`,
+            [positionId, wanted],
+          );
+        }
+        diff.supervises = { from: await this.positionLabels(m, current), to: await this.positionLabels(m, wanted) };
+      }
+    }
+    return diff;
+  }
+
+  async create(dto: CreatePositionDto, actor: Actor): Promise<PositionDetail> {
+    const created = await this.dataSource.transaction(async (m) => {
+      // El consecutivo se calcula bajo un candado para que dos altas simultáneas no choquen;
+      // lee también los códigos de puestos eliminados, así que nunca se reutilizan.
+      await m.query(`SELECT pg_advisory_xact_lock(hashtext('hr.job_positions.code'))`);
+      const codes = (await m.query(`SELECT code FROM hr.job_positions`)) as { code: string }[];
+      const code = nextPositionCode(codes.map((c) => c.code));
+
+      const description = normalizeDescription(dto.description);
+      this.assertRequired({ roleSummary: dto.roleSummary, positionObjective: dto.positionObjective, validationPoints: dto.validationPoints, description });
+      if (dto.reportsToEmployeeId) await this.assertActiveEmployee(m, dto.reportsToEmployeeId);
+      const status = resolveStatus((dto.status as PositionStatus | undefined) ?? 'activo', { description, approved: false });
+      // Nivel y Área son listas cerradas: se validan contra el catálogo y se guarda el nombre canónico.
+      const lists = await this.resolveCatalogs(m, { level: dto.level ?? null, area: dto.area.trim(), division: dto.division ?? null }, null);
+      const rows = (await m.query(
+        `INSERT INTO hr.job_positions (code, title, area, business_unit, level, description, status, created_by,
+           division, reports_to_text, plazas, role_summary, position_objective, validation_points, seniority,
+           reports_to_employee_id, vacancies, ai_competency_level)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+        [
+          code, dto.title.trim(), lists.area, dto.businessUnit ?? null, lists.level, description, status, actor.id ?? null,
+          lists.division, dto.reportsTo ?? null, dto.plazas ?? null,
+          dto.roleSummary ?? null, dto.positionObjective ?? null, dto.validationPoints ?? null, dto.seniority ?? null,
+          dto.reportsToEmployeeId ?? null, dto.vacancies ?? 0, dto.aiCompetencyLevel ?? null,
+        ],
+      )) as { id: string }[];
+      const newId = rows[0]!.id;
+      const relations = await this.saveRelations(m, newId, dto);
+      return { id: newId, relations };
+    });
+    const id = created.id;
+    const detail = await this.getDetail(id);
+    await this.log('create', actor, detail, { code: { from: null, to: detail.code }, status: { from: null, to: detail.status }, ...created.relations });
+    return detail;
+  }
+
+  async update(id: string, dto: UpdatePositionDto, actor: Actor): Promise<PositionDetail> {
+    const changes = await this.dataSource.transaction(async (m) => {
+      const rows = (await m.query(
+        `SELECT * FROM hr.job_positions WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        [id],
+      )) as PositionRow[];
+      const cur = rows[0];
+      if (!cur) throw new NotFoundException(POSITION_NOT_FOUND);
+
+      const desc = applyDescriptionChange(
+        {
+          description: cur.description,
+          approved: cur.description_approved,
+          approvedBy: cur.description_approved_by,
+          approvedAt: cur.description_approved_at,
+        },
+        dto.description,
+      );
+      const requested = ((dto.status as PositionStatus | undefined) ?? cur.status) as PositionStatus;
+      const status = resolveStatus(requested, desc);
+
+      const next = {
+        title: dto.title?.trim() ?? cur.title,
+        area: dto.area?.trim() ?? cur.area,
+        business_unit: dto.businessUnit !== undefined ? dto.businessUnit : cur.business_unit,
+        level: dto.level !== undefined ? dto.level : cur.level,
+      };
+      const simple = {} as Record<SimpleKey, unknown>;
+      for (const key of Object.keys(SIMPLE_FIELDS) as SimpleKey[]) {
+        const incoming = dto[key];
+        simple[key] = incoming !== undefined ? incoming : (cur as unknown as Record<string, unknown>)[SIMPLE_FIELDS[key]];
+      }
+      // Nivel y Área: solo se revalidan contra el catálogo si cambiaron (un puesto antiguo con un valor fuera de catálogo sigue editable).
+      const lists = await this.resolveCatalogs(
+        m,
+        { level: next.level ?? null, area: next.area, division: (simple.division as string | null) ?? null },
+        { level: cur.level, area: cur.area, division: cur.division },
+      );
+      next.level = lists.level;
+      next.area = lists.area;
+      simple.division = lists.division;
+      const seniority = dto.seniority !== undefined ? dto.seniority : cur.seniority;
+      // Los campos obligatorios se exigen al guardar el formulario; cambiar solo la validación del Head no se bloquea.
+      // (el DTO ya validado trae todas las propiedades; solo cuentan las que llegaron con valor)
+      const touchesForm = Object.entries(dto).some(([k, v]) => v !== undefined && k !== 'validationStatus' && k !== 'headComments' && k !== 'reportsToPositionId' && k !== 'supervisesPositionIds');
+      if (touchesForm) {
+        this.assertRequired({
+          roleSummary: simple.roleSummary as string | null,
+          positionObjective: simple.positionObjective as string | null,
+          validationPoints: simple.validationPoints as string | null,
+          description: desc.description,
+        });
+      }
+      const reportsToEmployeeId = dto.reportsToEmployeeId !== undefined ? dto.reportsToEmployeeId : cur.reports_to_employee_id;
+      if (reportsToEmployeeId && reportsToEmployeeId !== cur.reports_to_employee_id) await this.assertActiveEmployee(m, reportsToEmployeeId);
+      const validation = applyValidationChange(
+        { status: cur.validation_status, by: cur.validated_by, at: cur.validated_at },
+        dto.validationStatus,
+        actor.id ?? null,
+        new Date(),
+      );
+      await m.query(
+        `UPDATE hr.job_positions SET title=$2, area=$3, business_unit=$4, level=$5, description=$6,
+           description_approved=$7, description_approved_by=$8, description_approved_at=$9,
+           status=$10, division=$11, reports_to_text=$12, plazas=$13,
+           role_summary=$14, position_objective=$15, validation_points=$16, head_comments=$17,
+           validation_status=$18, validated_by=$19, validated_at=$20, seniority=$21, reports_to_employee_id=$22,
+           vacancies=$23, ai_competency_level=$24, updated_at=NOW()
+         WHERE id=$1`,
+        [
+          id, next.title, next.area, next.business_unit, next.level, desc.description, desc.approved, desc.approvedBy, desc.approvedAt, status,
+          simple.division, simple.reportsTo, simple.plazas,
+          simple.roleSummary, simple.positionObjective, simple.validationPoints, simple.headComments,
+          validation.status, validation.by, validation.at, seniority, reportsToEmployeeId ?? null,
+          simple.vacancies ?? 0, simple.aiCompetencyLevel ?? null,
+        ],
+      );
+
+      const diff: Record<string, { from: unknown; to: unknown }> = {};
+      if (cur.title !== next.title) diff.title = { from: cur.title, to: next.title };
+      if (cur.area !== next.area) diff.area = { from: cur.area, to: next.area };
+      if (cur.business_unit !== next.business_unit) diff.businessUnit = { from: cur.business_unit, to: next.business_unit };
+      if (cur.level !== next.level) diff.level = { from: cur.level, to: next.level };
+      if (cur.seniority !== seniority) diff.seniority = { from: cur.seniority, to: seniority };
+      if (cur.status !== status) diff.status = { from: cur.status, to: status };
+      for (const key of Object.keys(SIMPLE_FIELDS) as SimpleKey[]) {
+        const before = (cur as unknown as Record<string, unknown>)[SIMPLE_FIELDS[key]] ?? null;
+        const after = simple[key] ?? null;
+        if (before !== after) diff[key] = LONG_TEXT.has(key) ? { from: 'modificado', to: 'modificado' } : { from: before, to: after };
+      }
+      if (cur.validation_status !== validation.status) diff.validationStatus = { from: cur.validation_status, to: validation.status };
+      if ((cur.reports_to_employee_id ?? null) !== (reportsToEmployeeId ?? null)) {
+        diff.reportsToEmployee = { from: await this.employeeName(m, cur.reports_to_employee_id), to: await this.employeeName(m, reportsToEmployeeId ?? null) };
+      }
+      // El texto de la descripción no se guarda en la bitácora: solo que cambió y si se invalidó la aprobación.
+      if (cur.description !== desc.description) diff.description = { from: 'modificada', to: 'modificada' };
+      if (cur.description_approved && !desc.approved) diff.descriptionApproved = { from: true, to: false };
+      Object.assign(diff, await this.saveRelations(m, id, dto));
+      return diff;
+    });
+    const detail = await this.getDetail(id);
+    await this.log('update', actor, detail, changes);
+    return detail;
+  }
+
+  /** 400 con un mensaje por cada campo obligatorio vacío. */
+  private assertRequired(values: Parameters<typeof missingRequiredFields>[0]): void {
+    const missing = missingRequiredFields(values);
+    if (missing.length > 0) throw new BadRequestException(missing.map((f) => f.message));
+  }
+
+  /** «Reporta a» solo puede ser un empleado activo y no eliminado. */
+  private async assertActiveEmployee(m: Q, employeeId: string): Promise<void> {
+    const rows = (await m.query(
+      `SELECT 1 FROM employees.employee_records WHERE id = $1 AND status = 'active' AND deleted_at IS NULL`,
+      [employeeId],
+    )) as unknown[];
+    if (!rows[0]) throw new BadRequestException('El empleado de «Reporta a» no existe o no está activo');
+  }
+
+  private async employeeName(m: Q, employeeId: string | null): Promise<string | null> {
+    if (!employeeId) return null;
+    const rows = (await m.query(`SELECT full_name FROM employees.employee_records WHERE id = $1`, [employeeId])) as { full_name: string }[];
+    return rows[0]?.full_name ?? employeeId;
+  }
+
+  /**
+   * Buscador ligero para «Reporta a»: empleados activos por nombre, sin distinguir mayúsculas ni acentos (mínimo 2 letras, máximo 10 resultados) con
+   * solo id, nombre, cargo y área (nada de correo, nómina ni datos personales).
+   */
+  async searchEmployees(q: string, limit = 10): Promise<{ id: string; fullName: string; position: string; area: string | null }[]> {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const rows = (await this.dataSource.query(
+      `SELECT id, full_name, position, area FROM employees.employee_records
+       WHERE status = 'active' AND deleted_at IS NULL
+         AND translate(lower(full_name), 'áéíóúüñ', 'aeiouun') LIKE translate(lower($1), 'áéíóúüñ', 'aeiouun')
+       ORDER BY full_name ASC LIMIT $2`,
+      [`%${escapeLike(term)}%`, Math.min(Math.max(limit, 1), 10)],
+    )) as { id: string; full_name: string; position: string; area: string | null }[];
+    return rows.map((r) => ({ id: r.id, fullName: r.full_name, position: r.position, area: r.area }));
+  }
+
+  /**
+   * Nivel y Área son listas cerradas. El nivel debe estar en `catalogs.org_levels` y el área en
+   * `catalogs.areas` de la división (comparación sin mayúsculas, acentos ni espacios extra); se devuelve el
+   * valor canónico del catálogo. Solo se valida lo que cambió respecto del puesto actual (`cur`).
+   */
+  private async resolveCatalogs(
+    m: Q,
+    input: { level: string | null; area: string; division: string | null },
+    cur: { level: string | null; area: string; division: string | null } | null,
+  ): Promise<{ level: string | null; area: string; division: string | null }> {
+    // División: lista cerrada (`catalogs.divisions`); solo se valida si cambió (un puesto antiguo con una fuera de catálogo sigue editable).
+    let division = input.division && input.division.trim() !== '' ? input.division.trim() : null;
+    if (division !== null) {
+      const catalog = await loadCatalogDivisions(m);
+      const canonical = canonicalDivision(catalog, division);
+      if (canonical) division = canonical;
+      else if (!cur || normText(cur.division) !== normText(division)) throw divisionNotInCatalog(division, catalog);
+    }
+
+    let level = input.level && input.level.trim() !== '' ? input.level.trim() : null;
+    if (level !== null) {
+      const codes = ((await m.query(`SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`)) as { code: string }[]).map((r) => r.code);
+      const canonical = canonicalLevel(level, codes);
+      if (canonical) level = canonical;
+      else if (!cur || normText(cur.level) !== normText(level)) {
+        throw new BadRequestException(`El nivel debe ser uno de la lista: ${codes.join(', ')}`);
+      }
+    }
+
+    let area = input.area;
+    const areaChanged = !cur || areaKey(cur.area) !== areaKey(area) || normText(cur.division) !== normText(division);
+    if (areaChanged) {
+      const areas = await this.catalogAreas(m);
+      const hit = division
+        ? findAreaExact(areas, division, area)
+        : (areas.find((a) => areaKey(a.name) === areaKey(area)) ?? null);
+      if (!hit) {
+        throw new BadRequestException(
+          division
+            ? `El área «${area}» no está en el catálogo de la división «${division}». Elige una de la lista o agrega el área nueva.`
+            : `El área «${area}» no está en el catálogo de áreas. Elige una de la lista o agrega el área nueva.`,
+        );
+      }
+      area = hit.name;
+    }
+    return { level, area, division };
+  }
+
+  private async catalogAreas(m: Q): Promise<CatalogArea[]> {
+    const rows = (await m.query(`SELECT name, division_name FROM catalogs.areas WHERE is_active IS NOT FALSE`)) as { name: string; division_name: string | null }[];
+    return rows.map((r) => ({ name: r.name, divisionName: r.division_name }));
+  }
+
+  /**
+   * Agrega un área al catálogo (permiso `update` de la Matriz). Compara con las existentes de la división sin
+   * mayúsculas, acentos ni espacios extra: si ya hay una igual se devuelve esa (no se crea); si hay una casi
+   * igual se responde 409 con la sugerencia, salvo que `confirmSimilar` diga que es otra distinta.
+   */
+  async createArea(dto: CreateAreaDto, actor: Actor): Promise<{ created: boolean; area: { name: string; division: string } }> {
+    const name = dto.name.replace(/\s+/g, ' ').trim();
+    const division = dto.division.trim();
+    if (areaKey(name) === '') throw new BadRequestException('El nombre del área es obligatorio');
+    const result = await this.dataSource.transaction(async (m) => {
+      await m.query(`SELECT pg_advisory_xact_lock(hashtext('catalogs.areas'))`);
+      const areas = await this.catalogAreas(m);
+      const exact = findAreaExact(areas, division, name);
+      if (exact) return { created: false, area: { name: exact.name, division } };
+      const near = findAreaNear(areas, division, name);
+      if (near && !dto.confirmSimilar) {
+        throw new ConflictException({ message: `Ya existe un área parecida: «${near.name}». Usa esa o confirma que es otra distinta.`, suggestion: near.name });
+      }
+      await m.query(`INSERT INTO catalogs.areas (name, division_name, is_active) VALUES ($1, $2, true)`, [name, division]);
+      return { created: true, area: { name, division } };
+    });
+    if (result.created) {
+      await this.audit.logActivity({
+        userId: actor.id ?? null,
+        userEmail: actor.email ?? null,
+        userName: actor.name ?? null,
+        action: 'create',
+        module: 'matriz-puestos',
+        entityType: 'catalog_area',
+        entityName: `${division} · ${name}`,
+        changes: { name: { from: null, to: name }, division: { from: null, to: division } },
+      });
+    }
+    return result;
+  }
+
+  /** Aprobar la descripción (permiso `approve`): quién y cuándo salen de la sesión. */
+  async approveDescription(id: string, actor: Actor): Promise<PositionDetail> {
+    await this.dataSource.transaction(async (m) => {
+      const rows = (await m.query(
+        `SELECT * FROM hr.job_positions WHERE id = $1 AND deleted_at IS NULL FOR UPDATE`,
+        [id],
+      )) as PositionRow[];
+      const cur = rows[0];
+      if (!cur) throw new NotFoundException(POSITION_NOT_FOUND);
+      assertCanApprove({ description: cur.description, approved: cur.description_approved });
+      await m.query(
+        `UPDATE hr.job_positions SET description_approved = true, description_approved_by = $2,
+           description_approved_at = NOW(), status = $3, updated_at = NOW() WHERE id = $1`,
+        [id, actor.id ?? null, statusAfterApproval(cur.status)],
+      );
+    });
+    const detail = await this.getDetail(id);
+    await this.log('approve', actor, detail, { descriptionApproved: { from: false, to: true }, status: { from: null, to: detail.status } });
+    return detail;
+  }
+
+  /** Baja lógica del puesto y, en la misma transacción, de sus OKRs, KPIs y actividades. */
+  async remove(id: string, actor: Actor): Promise<void> {
+    const removed = await this.dataSource.transaction(async (m) => {
+      const hit = firstRow<{ id: string; code: string; title: string }>(
+        await m.query(
+          `UPDATE hr.job_positions SET deleted_at = NOW(), updated_at = NOW()
+           WHERE id = $1 AND deleted_at IS NULL RETURNING id, code, title`,
+          [id],
+        ),
+      );
+      if (!hit) throw new NotFoundException(POSITION_NOT_FOUND);
+      // Sus relaciones se limpian: los que reportaban a este puesto quedan sin «Reporta a» y se borran sus supervisiones.
+      await m.query(`UPDATE hr.job_positions SET reports_to_position_id = NULL, updated_at = NOW() WHERE reports_to_position_id = $1`, [id]);
+      await m.query(`DELETE FROM hr.job_position_supervisions WHERE supervisor_position_id = $1 OR supervised_position_id = $1`, [id]);
+      await m.query(
+        `UPDATE hr.job_position_okrs SET deleted_at = NOW(), updated_at = NOW() WHERE job_position_id = $1 AND deleted_at IS NULL`,
+        [id],
+      );
+      await m.query(
+        `UPDATE hr.job_position_kpis SET deleted_at = NOW(), updated_at = NOW() WHERE job_position_id = $1 AND deleted_at IS NULL`,
+        [id],
+      );
+      await m.query(
+        `UPDATE hr.job_position_activities SET deleted_at = NOW(), updated_at = NOW() WHERE job_position_id = $1 AND deleted_at IS NULL`,
+        [id],
+      );
+      return hit;
+    });
+    await this.audit.logActivity({
+      userId: actor.id ?? null,
+      userEmail: actor.email ?? null,
+      userName: actor.name ?? null,
+      action: 'delete',
+      module: 'matriz-puestos',
+      entityType: 'job_position',
+      entityId: removed.id,
+      entityName: `${removed.code} — ${removed.title}`,
+      changes: { deleted: { from: false, to: true } },
+    });
+  }
+
+  private async log(
+    action: 'create' | 'update' | 'approve',
+    actor: Actor,
+    p: PositionDetail,
+    changes: Record<string, unknown>,
+  ): Promise<void> {
+    await this.audit.logActivity({
+      userId: actor.id ?? null,
+      userEmail: actor.email ?? null,
+      userName: actor.name ?? null,
+      action,
+      module: 'matriz-puestos',
+      entityType: 'job_position',
+      entityId: p.id,
+      entityName: `${p.code} — ${p.title}`,
+      changes,
+    });
+  }
+}

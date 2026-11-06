@@ -44,10 +44,14 @@ import { EmployeesService } from './employees.service';
 import { EmployeePhotosService } from './employee-photos.service';
 import { HeadcountService } from './headcount.service';
 import { OrgChartService } from './org-chart.service';
+import { OrgChartExportService } from './org-chart-export.service';
+import { ExportOrgChartDto } from './dto/export-org-chart.dto';
 import { MyProfileService } from './my-profile.service';
 import { EmployeeUserLinkService } from './employee-user-link.service';
 import { LinkUserDto } from './dto/link-user.dto';
 import { TrainingsService } from './trainings.service';
+import { EmployeeDevelopmentService } from '../employee-development/employee-development.service';
+import { PeriodQueryDto } from '../employee-development/dto/employee-development.dto';
 import { TrainingsReportService } from './trainings-report.service';
 import { TrainingReportQueryDto } from './dto/trainings-report.dto';
 import {
@@ -77,10 +81,12 @@ export class EmployeesController {
     private readonly photosService: EmployeePhotosService,
     private readonly headcountService: HeadcountService,
     private readonly orgChartService: OrgChartService,
+    private readonly orgChartExportService: OrgChartExportService,
     private readonly myProfileService: MyProfileService,
     private readonly userLinkService: EmployeeUserLinkService,
     private readonly trainingsService: TrainingsService,
     private readonly trainingsReportService: TrainingsReportService,
+    private readonly developmentService: EmployeeDevelopmentService,
   ) {}
 
   // Accessible to any authenticated user — null overrides the class-level RequirePermission
@@ -106,7 +112,30 @@ export class EmployeesController {
   @Get('org-chart')
   @SetMetadata(PERMISSION_KEY, null)
   getOrgChart(@Query() query: OrgChartQueryDto) {
-    return this.orgChartService.getOrgChart(query.location);
+    return this.orgChartService.getOrgChart({
+      company: query.company,
+      division: query.division,
+      area: query.area,
+      level: query.level,
+      location: query.location,
+    });
+  }
+
+  /** Opciones de los filtros del organigrama con conteos y combinaciones reales (cascada). Solo sesión. */
+  @Get('org-chart/filters')
+  @SetMetadata(PERMISSION_KEY, null)
+  getOrgChartFilters() {
+    return this.orgChartService.getFilters();
+  }
+
+  /**
+   * Visto bueno para exportar el organigrama a PDF: exige `rrhh.organigrama.export` y audita la exportación
+   * (vista, filtros y papel). El PDF se dibuja en el navegador; ver `OrgChartExportService`.
+   */
+  @Post('org-chart/export')
+  @RequirePermission('rrhh', 'organigrama', 'export')
+  registerOrgChartExport(@Body() dto: ExportOrgChartDto, @CurrentUser() user: User) {
+    return this.orgChartExportService.register(dto, { id: user.id, email: user.email, name: user.name });
   }
 
   // Mi Información (RRHH 2.0, C2): cualquier usuario autenticado, SOLO su propio
@@ -134,6 +163,15 @@ export class EmployeesController {
   @SetMetadata(PERMISSION_KEY, null)
   getMyEquipment(@CurrentUser() user: User) {
     return this.myProfileService.getEquipment(user.id);
+  }
+
+  /** Desarrollo Organizacional propio (solo lectura): el empleado sale de la sesión; sin vínculo, el mismo 404 de Mi Información. */
+  @Get('my-profile/development')
+  @SetMetadata(PERMISSION_KEY, null)
+  async getMyDevelopment(@CurrentUser() user: User, @Query() query: PeriodQueryDto) {
+    const employee = await this.myProfileService.resolveEmployee(user.id);
+    // Siempre la vista del propio colaborador (restringida): sin comentarios y, con la bandera apagada, sin calificación.
+    return this.developmentService.getDevelopment(employee.id, query.period, 'self');
   }
 
   @Get('my-profile/trainings')

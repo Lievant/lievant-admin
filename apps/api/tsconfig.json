@@ -8,6 +8,9 @@
     "strictPropertyInitialization": false,
     "outDir": "./dist",
     "baseUrl": "./",
+    // Las pruebas importan componentes y utilidades del web (TSX con alias «@/»).
+    "jsx": "react-jsx",
+    "paths": { "@/*": ["../web/src/*"] },
     "incremental": true,
     "sourceMap": true
   }

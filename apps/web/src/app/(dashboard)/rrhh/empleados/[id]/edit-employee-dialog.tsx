@@ -1,5 +1,6 @@
 'use client';
 
+import { levelOptions, levelSelection } from '../level-options';
 import { useMemo, useState, useTransition } from 'react';
 import type { EmployeeDetail, EmployeeStatus, Modality, UpdateEmployeePayload } from '@/lib/api';
 import { CloseIcon } from '@/components/icons';
@@ -27,7 +28,9 @@ export function EditEmployeeDialog({
   const [division, setDivision] = useState(employee.division ?? '');
   const [area, setArea] = useState(employee.area ?? '');
   const [project, setProject] = useState(employee.project ?? '');
-  const [level, setLevel] = useState(employee.level ?? '');
+  // El nivel es una lista cerrada; si el empleado ya tiene uno fuera de catálogo se conserva y se marca.
+  const initialLevel = levelSelection(catalogs.orgLevels, employee.level);
+  const [level, setLevel] = useState(initialLevel.value);
   const [position, setPosition] = useState(employee.position);
   const [location, setLocation] = useState(employee.location ?? '');
   const [modality, setModality] = useState<Modality | ''>(employee.modality ?? '');
@@ -85,8 +88,9 @@ export function EditEmployeeDialog({
     [catalogs.contractTypes],
   );
   const orgLevelOptions = useMemo(
-    () => catalogs.orgLevels.map((l) => ({ value: l.code ?? '', label: `${l.code} - ${l.name}` })),
-    [catalogs.orgLevels],
+    () => levelOptions(catalogs.orgLevels, initialLevel.legacy),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalogs.orgLevels, initialLevel.legacy],
   );
 
   const handleCompanyChange = (code: string) => {

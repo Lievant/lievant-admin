@@ -6,8 +6,10 @@ import type { CatalogItem } from '@/lib/api';
 import { CloseIcon, PlusIcon } from '@/components/icons';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import type { CatalogConfig } from '../constants';
-import { deactivateCatalogItemAction, updateCatalogItemAction } from './actions';
+import { ConfirmDelete } from '@/app/(dashboard)/rrhh/matriz-puestos/item-dialogs';
+import { deactivateCatalogItemAction, removeCompetencyAction, updateCatalogItemAction } from './actions';
 import { CatalogItemDialog } from './catalog-item-dialog';
+import { CompetenciesImportDialog } from './competencies-import-dialog';
 
 interface CatalogDetailScreenProps {
   config: Omit<CatalogConfig, 'icon'>;
@@ -17,6 +19,9 @@ interface CatalogDetailScreenProps {
 export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps) {
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CatalogItem | null>(null);
+  const [isImportOpen, setImportOpen] = useState(false);
+  const [deleting, setDeleting] = useState<CatalogItem | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
@@ -48,6 +53,19 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
     });
   };
 
+  // Solo Competencias: eliminación lógica con confirmación.
+  const confirmDelete = () => {
+    if (!deleting) return;
+    setDeleteError(null);
+    setPendingId(deleting.id);
+    startTransition(async () => {
+      const result = await removeCompetencyAction(deleting.id);
+      if (result.success) setDeleting(null);
+      else setDeleteError(result.error ?? 'No se pudo eliminar la competencia.');
+      setPendingId(null);
+    });
+  };
+
   return (
     <div>
       <header className="mt-2 flex items-start justify-between gap-4">
@@ -55,14 +73,25 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
           <h1 className="text-2xl font-bold text-navy">{config.label}</h1>
           <p className="mt-1 text-sm text-slate-500">{items.length} ítems registrados</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
-        >
-          <PlusIcon className="h-4 w-4" />
-          Nuevo ítem
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {config.competencyTools && (
+            <button
+              type="button"
+              onClick={() => setImportOpen(true)}
+              className="rounded-md border border-black px-4 py-2 text-sm font-semibold text-black hover:bg-slate-50"
+            >
+              Importar Excel
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setCreateOpen(true)}
+            className="flex items-center gap-2 rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800"
+          >
+            <PlusIcon className="h-4 w-4" />
+            {config.competencyTools ? 'Nuevo Ítem' : 'Nuevo ítem'}
+          </button>
+        </div>
       </header>
 
       {actionError && (
@@ -161,6 +190,26 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
                           Desactivar
                         </button>
                       )}
+                      {config.competencyTools && !item.isActive && (
+                        <button
+                          type="button"
+                          disabled={isRowPending}
+                          onClick={() => toggleActive(item)}
+                          className="rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:border-slate-300 disabled:opacity-50"
+                        >
+                          Activar
+                        </button>
+                      )}
+                      {config.competencyTools && (
+                        <button
+                          type="button"
+                          disabled={isRowPending}
+                          onClick={() => { setDeleteError(null); setDeleting(item); }}
+                          className="rounded-md border border-red-200 px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                        >
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -174,6 +223,17 @@ export function CatalogDetailScreen({ config, items }: CatalogDetailScreenProps)
       {isCreateOpen && <CatalogItemDialog config={config} item={null} onClose={() => setCreateOpen(false)} />}
       {editingItem && (
         <CatalogItemDialog config={config} item={editingItem} onClose={() => setEditingItem(null)} />
+      )}
+      {isImportOpen && <CompetenciesImportDialog onClose={() => setImportOpen(false)} />}
+      {deleting && (
+        <ConfirmDelete
+          title="Eliminar Competencia"
+          message={`¿Eliminar la competencia «${deleting.name}»?`}
+          busy={pendingId === deleting.id}
+          error={deleteError}
+          onCancel={() => setDeleting(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </div>
   );

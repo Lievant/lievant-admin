@@ -10,6 +10,7 @@ import { In, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { CatalogDocumentType } from '../catalogs/entities/catalog-document-type.entity';
 import { HelpdeskService } from '../helpdesk/helpdesk.service';
+import { canonicalLevel, normText } from '../job-positions/job-positions-catalog.util';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { BookingsService } from '../rooms/bookings.service';
 import { VacationsService } from '../vacations/vacations.service';
@@ -218,6 +219,24 @@ export class EmployeesService {
     return { data, nextCursor, stats };
   }
 
+  /**
+   * Nivel del empleado: debe ser uno de `catalogs.org_levels` (activos). Devuelve el código del catálogo
+   * («ii» y «2» se guardan como II); vacío = sin nivel. Un valor fuera de catálogo que el empleado YA tenía
+   * (`current`) se acepta tal cual si no cambia, para poder editar otros campos sin tocar el nivel.
+   */
+  private async resolveEmployeeLevel(level: string | null | undefined, current: string | null): Promise<string | null> {
+    const text = (level ?? '').trim();
+    if (text === '') return null;
+    const rows = (await this.employeesRepository.query(
+      `SELECT code FROM catalogs.org_levels WHERE is_active IS NOT FALSE ORDER BY sort_order`,
+    )) as { code: string }[];
+    const codes = rows.map((r) => r.code);
+    const canonical = canonicalLevel(text, codes);
+    if (canonical) return canonical;
+    if (current !== null && normText(current) === normText(text)) return current;
+    throw new BadRequestException(`El nivel debe ser uno de la lista: ${codes.join(', ')}`);
+  }
+
   async create(dto: CreateEmployeeDto): Promise<EmployeeRecord> {
     if (dto.corporateEmail) {
       await this.assertCorporateEmailAvailable(dto.corporateEmail);
@@ -232,6 +251,7 @@ export class EmployeesService {
     const record = await this.employeesRepository.save(
       this.employeesRepository.create({
         ...dto,
+        level: await this.resolveEmployeeLevel(dto.level, null),
         displayId,
         fullName: dto.fullName.trim(),
         position: dto.position.trim(),
@@ -290,7 +310,7 @@ export class EmployeesService {
     if (dto.division !== undefined) record.division = dto.division?.trim() ?? null;
     if (dto.area !== undefined) record.area = dto.area?.trim() ?? null;
     if (dto.project !== undefined) record.project = dto.project ?? null;
-    if (dto.level !== undefined) record.level = dto.level ?? null;
+    if (dto.level !== undefined) record.level = await this.resolveEmployeeLevel(dto.level, record.level);
     if (dto.position !== undefined) record.position = dto.position.trim();
     if (dto.emailSignature !== undefined) record.emailSignature = dto.emailSignature ?? null;
     if (dto.location !== undefined) record.location = dto.location?.trim() ?? null;
