@@ -1,8 +1,10 @@
 import 'reflect-metadata';
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ExecutionContext, ForbiddenException, HttpStatus } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
 import { PasswordsController } from './passwords.controller';
-import { PasswordsService } from './passwords.service';
+import { APPLICATION_CREATE_LIMIT_PER_HOUR, PasswordsService } from './passwords.service';
 import { evaluatePasswordStrength, reusedPasswordWarning, WEAK_PASSWORD_WARNING } from './password-strength';
 import { ArgumentMetadata, ValidationPipe } from '@nestjs/common';
 // Lógica pura del formulario "Nueva cuenta" (frontend): se prueba aquí con el API real.
@@ -419,11 +421,12 @@ describe('PasswordsController (permisos y exportación)', () => {
     'isManager',
     'getTeamEmployees',
     'listApplications',
+    'createApplication',
   ] as const)('%s no exige permiso: el alcance lo fija el servicio', (m) => {
     expect(required(m)).toBeUndefined();
   });
 
-  it.each(['createApplication', 'updateApplication', 'deactivateApplication'] as const)(
+  it.each(['updateApplication', 'deactivateApplication'] as const)(
     '%s (catálogo) conserva herramientas.passwords.write',
     (m) => {
       expect(required(m)).toEqual({ section: 'herramientas', module: 'passwords', action: 'write' });
@@ -585,15 +588,79 @@ describe('evaluatePasswordStrength', () => {
   });
 });
 
+describe('Catálogo de aplicaciones: guard con un usuario sin herramientas.passwords.write', () => {
+  const guard = new PermissionsGuard(new Reflector());
+  // Usuario común: rol COLABORADOR sin permisos del módulo y sin overrides.
+  const colaborador = { id: 'u-colab', roles: [{ name: 'COLABORADOR', permissions: [] }], userPermissions: [] };
+  const ctx = (handler: keyof PasswordsController) =>
+    ({
+      getHandler: () => PasswordsController.prototype[handler],
+      getClass: () => PasswordsController,
+      switchToHttp: () => ({ getRequest: () => ({ user: colaborador }) }),
+    }) as unknown as ExecutionContext;
+
+  it('POST /passwords/applications pasa el guard', () => {
+    expect(guard.canActivate(ctx('createApplication'))).toBe(true);
+  });
+
+  it.each(['updateApplication', 'deactivateApplication'] as const)('%s (PATCH/DELETE) responde 403', (m) => {
+    expect(() => guard.canActivate(ctx(m))).toThrow(ForbiddenException);
+  });
+});
+
 describe('PasswordsService.createApplication', () => {
-  it('normaliza el nombre: recorta y capitaliza solo la primera letra', async () => {
+  function appService(existing: { name: string; isActive: boolean } | null = null) {
     const repo = {
-      createQueryBuilder: () => ({ where: () => ({ getOne: async () => null }) }),
+      createQueryBuilder: () => {
+        const qb: any = { where: () => qb, andWhere: () => qb, getOne: async () => existing };
+        return qb;
+      },
       create: (x: unknown) => x,
       save: jest.fn(async (x: unknown) => ({ id: 'nueva', ...(x as object) })),
     };
     const service = new PasswordsService({} as any, repo as any, {} as any, {} as any, {} as any, {} as any, {} as any);
-    const app = await service.createApplication({ name: '  draw.io ' });
+    return { service, repo };
+  }
+
+  it('normaliza el nombre: recorta y capitaliza solo la primera letra', async () => {
+    const { service } = appService();
+    const app = await service.createApplication({ name: '  draw.io ' }, 'u-1');
     expect(app.name).toBe('Draw.io');
+  });
+
+  it('un duplicado con distinta capitalización devuelve 409 con el nombre existente', async () => {
+    const { service, repo } = appService({ name: 'Canva', isActive: true });
+    const err = await service.createApplication({ name: 'CANVA' }, 'u-1').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ConflictException);
+    expect((err as ConflictException).getStatus()).toBe(HttpStatus.CONFLICT);
+    expect((err as ConflictException).message).toContain('"Canva"');
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('rechaza nombres de más de 100 caracteres', async () => {
+    const { service, repo } = appService();
+    await expect(service.createApplication({ name: 'x'.repeat(101) }, 'u-1')).rejects.toMatchObject({
+      status: HttpStatus.BAD_REQUEST,
+    });
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it(`topa a ${APPLICATION_CREATE_LIMIT_PER_HOUR} altas por usuario por hora (429) sin afectar a otros`, async () => {
+    const { service, repo } = appService();
+    for (let i = 0; i < APPLICATION_CREATE_LIMIT_PER_HOUR; i++) {
+      await service.createApplication({ name: `App ${i}` }, 'u-spam');
+    }
+    await expect(service.createApplication({ name: 'Una más' }, 'u-spam')).rejects.toMatchObject({
+      status: HttpStatus.TOO_MANY_REQUESTS,
+    });
+    expect(repo.save).toHaveBeenCalledTimes(APPLICATION_CREATE_LIMIT_PER_HOUR);
+    await expect(service.createApplication({ name: 'De otra persona' }, 'u-otro')).resolves.toBeTruthy();
+  });
+
+  it('los duplicados rechazados no consumen el tope', async () => {
+    const { service } = appService({ name: 'Canva', isActive: true });
+    for (let i = 0; i < APPLICATION_CREATE_LIMIT_PER_HOUR + 2; i++) {
+      await expect(service.createApplication({ name: 'canva' }, 'u-1')).rejects.toBeInstanceOf(ConflictException);
+    }
   });
 });

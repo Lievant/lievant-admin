@@ -7,7 +7,6 @@ import type {
   PasswordVisiblePerson,
 } from '@/lib/api';
 import { AlertIcon, CopyIcon, EyeIcon, EyeOffIcon, PlusIcon } from '@/components/icons';
-import { useCurrentUser } from '@/components/user-provider';
 import { StatCard } from '@/components/stat-card';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { SortColumnHeader } from '@/components/ui/sort-column-header';
@@ -56,22 +55,12 @@ interface PasswordsScreenProps {
   apiUnavailable: boolean;
 }
 
-/** Alta de aplicaciones nuevas en el catálogo: sigue exigiendo el permiso de escritura. */
-function canEditCatalog(user: ReturnType<typeof useCurrentUser>): boolean {
-  if (!user) return false;
-  if (user.roles.some((r) => r.name === 'SUPER_ADMIN')) return true;
-  return user.permissions.some(
-    (p) => p.section === 'herramientas' && p.module === 'passwords' && p.action === 'write',
-  );
-}
-
 export function PasswordsScreen({
   accounts: initialAccounts,
   applications,
   people,
   apiUnavailable,
 }: PasswordsScreenProps) {
-  const user = useCurrentUser();
   const me = people.find((p) => p.isMe) ?? null;
   const [personId, setPersonId] = useState(me?.id ?? '');
   const [accounts, setAccounts] = useState(initialAccounts);
@@ -414,7 +403,6 @@ export function PasswordsScreen({
           applications={applications}
           people={people}
           defaultEmployeeId={selectedPerson?.id ?? ''}
-          canAddApplication={canEditCatalog(user)}
           onClose={() => setEditing(null)}
           onSaved={(text, warnings) => {
             setEditing(null);

@@ -33,6 +33,12 @@ import {
   WEAK_PASSWORD_WARNING,
 } from './password-strength';
 
+/** Máximo de aplicaciones que un usuario puede dar de alta en el catálogo por hora. */
+export const APPLICATION_CREATE_LIMIT_PER_HOUR = 10;
+
+/** Largo máximo del nombre en un alta (el modal usa el mismo tope). */
+export const APPLICATION_NAME_MAX = 100;
+
 /** Máximo de contraseñas que un usuario puede ver o copiar por hora. */
 const REVEAL_LIMIT_PER_HOUR = 10;
 
@@ -99,6 +105,8 @@ interface ExpiringRow {
 @Injectable()
 export class PasswordsService {
   private readonly logger = new Logger(PasswordsService.name);
+  /** userId → marcas de tiempo de sus altas recientes de aplicaciones. */
+  private readonly applicationCreations = new Map<string, number[]>();
 
   constructor(
     @InjectDataSource() private readonly db: DataSource,
@@ -122,12 +130,17 @@ export class PasswordsService {
     });
   }
 
-  async createApplication(dto: CreatePasswordApplicationDto) {
+  async createApplication(dto: CreatePasswordApplicationDto, userId: string) {
     const trimmed = dto.name.trim();
+    if (!trimmed) throw new BadRequestException('Escribe el nombre de la aplicación');
+    if (trimmed.length > APPLICATION_NAME_MAX) {
+      throw new BadRequestException(`El nombre no puede pasar de ${APPLICATION_NAME_MAX} caracteres`);
+    }
     // Solo la primera letra: "draw.io" → "Draw.io", sin tocar "LinkedIn" ni "SAP".
     const name = trimmed.charAt(0).toLocaleUpperCase('es-MX') + trimmed.slice(1);
+    const recent = this.assertApplicationCreateQuota(userId);
     await this.assertApplicationNameFree(name);
-    return this.applicationsRepo.save(
+    const saved = await this.applicationsRepo.save(
       this.applicationsRepo.create({
         name,
         category: dto.category?.trim() || null,
@@ -136,6 +149,29 @@ export class PasswordsService {
         sortOrder: dto.sortOrder ?? 50,
       }),
     );
+    // Solo cuentan las altas que sí entraron al catálogo.
+    recent.push(Date.now());
+    this.applicationCreations.set(userId, recent);
+    return saved;
+  }
+
+  /**
+   * Tope de altas por usuario en una ventana deslizante de una hora. Vive en
+   * memoria de cada tarea del API: con N tareas el tope efectivo es hasta N
+   * veces el valor, suficiente para frenar a quien llene el catálogo con basura.
+   * Devuelve las marcas vigentes del usuario.
+   */
+  private assertApplicationCreateQuota(userId: string): number[] {
+    const since = Date.now() - 60 * 60 * 1000;
+    const recent = (this.applicationCreations.get(userId) ?? []).filter((t) => t > since);
+    this.applicationCreations.set(userId, recent);
+    if (recent.length >= APPLICATION_CREATE_LIMIT_PER_HOUR) {
+      throw new HttpException(
+        `Alcanzaste el límite de ${APPLICATION_CREATE_LIMIT_PER_HOUR} aplicaciones nuevas por hora. Intenta más tarde.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return recent;
   }
 
   async updateApplication(id: string, dto: UpdatePasswordApplicationDto) {
