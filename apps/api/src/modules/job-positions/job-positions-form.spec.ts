@@ -18,7 +18,7 @@ const E2 = '22222222-2222-4222-8222-222222222222';
 const baseRow = (over: Partial<PositionRow> = {}): PositionRow => ({
   id: 'p1', code: 'JP-001', title: 'TEST-Puesto', area: 'TI', business_unit: null, level: null, description: 'TEST-Descripción', description_approved: false,
   description_approved_by: null, description_approved_at: null, status: 'pendiente_aprobacion', division: null, level_original: null, seniority: null,
-  reports_to_text: 'Texto del Excel', reports_to_employee_id: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
+  reports_to_text: 'Texto del Excel', reports_to_employee_id: null, reports_to_position_id: null, supervises_text: null, vacancies: 0, ai_competency_level: null, plazas: 1, role_summary: 'TEST-Rol', position_objective: 'TEST-Objetivo',
   validation_points: 'TEST-Puntos', head_comments: null, validation_status: 'pendiente', validated_by: null, validated_at: null,
   created_at: new Date(), updated_at: new Date(), ...over,
 });
@@ -162,7 +162,7 @@ describe('Matriz de Puestos · «Reporta a» como empleado', () => {
     const gone = toDetail(baseRow({ reports_to_employee_id: E1, reports_to_name: 'TEST-Ana', reports_to_position: 'Analista', reports_to_active: false }), [], []);
     expect(gone.reportsToEmployee!.active).toBe(false);
     expect(toDetail(baseRow(), [], []).reportsToEmployee).toBeNull();
-    expect(toDetail(baseRow(), [], [])).not.toHaveProperty('supervises');
+    expect(toDetail(baseRow(), [], [])).toMatchObject({ reportsToPosition: null, supervises: [], supervisedBy: [], directReports: [], employees: [], employeesCount: 0 });
   });
 
   it('el DTO acepta un UUID o null y rechaza otra cosa; «Supervisa a» ya no se acepta', async () => {
@@ -284,7 +284,7 @@ describe('Matriz de Puestos · forma de los INSERT/UPDATE (regresión del alta c
       await service.create(dto as never, ACTOR);
       const insert = calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
       const shape = insertShape(insert.sql);
-      expect(shape.columns).toBe(16);
+      expect(shape.columns).toBe(18);
       expect(shape.values).toBe(shape.columns);
       expect(shape.max).toBe(shape.columns);
       expect(insert.params).toHaveLength(shape.max);
@@ -328,5 +328,53 @@ describe('Matriz de Puestos · forma de los INSERT/UPDATE (regresión del alta c
       }
     }
     expect(checked.length).toBeGreaterThanOrEqual(4); // si el patrón dejara de encontrar INSERT, la prueba no pasaría en silencio
+  });
+});
+
+describe('Matriz de Puestos · Vacantes y Competencia IA (DTO y servicio)', () => {
+  const strict = { whitelist: true, forbidNonWhitelisted: true };
+  const errs = async (cls: new () => object, plain: object) => (await validate(plainToInstance(cls, plain) as object, strict)).map((e) => e.property);
+
+  it('vacancies: entero ≥ 0 y opcional; negativo, decimal, texto o null se rechazan', async () => {
+    expect(await errs(CreatePositionDto, { title: 'T', area: 'TI', ...FULL })).toEqual([]);
+    for (const vacancies of [0, 1, 25]) expect(await errs(CreatePositionDto, { title: 'T', area: 'TI', ...FULL, vacancies })).toEqual([]);
+    for (const vacancies of [-1, 1.5, 'dos', null]) expect(await errs(CreatePositionDto, { title: 'T', area: 'TI', ...FULL, vacancies })).toContain('vacancies');
+    expect(await errs(UpdatePositionDto, { vacancies: -3 })).toEqual(['vacancies']);
+    expect(await errs(UpdatePositionDto, { vacancies: 2 })).toEqual([]);
+  });
+
+  it('aiCompetencyLevel: basico, intermedio, avanzado o null; otro valor (incluido «Experto» o con acento) se rechaza', async () => {
+    for (const aiCompetencyLevel of ['basico', 'intermedio', 'avanzado', null]) expect(await errs(UpdatePositionDto, { aiCompetencyLevel })).toEqual([]);
+    for (const aiCompetencyLevel of ['Experto', 'básico', 'AVANZADO', 'x']) expect(await errs(UpdatePositionDto, { aiCompetencyLevel })).toEqual(['aiCompetencyLevel']);
+  });
+
+  it('crear guarda las vacantes (por omisión 0) y la Competencia IA', async () => {
+    const full = build();
+    await full.service.create(createDto({ vacancies: 3, aiCompetencyLevel: 'intermedio' }), ACTOR);
+    const ins = full.calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
+    expect(ins.params.slice(16)).toEqual([3, 'intermedio']);
+    const bare = build();
+    await bare.service.create(createDto(), ACTOR);
+    const ins2 = bare.calls.find((c) => /^INSERT INTO hr\.job_positions/.test(c.sql))!;
+    expect(ins2.params.slice(16)).toEqual([0, null]);
+  });
+
+  it('editar cambia las vacantes y la IA, conserva lo que no se manda y deja el antes/después en la bitácora', async () => {
+    const t = build({ current: baseRow({ vacancies: 2, ai_competency_level: 'basico' }) });
+    await t.service.update('p1', { ...FULL, vacancies: 5 } as never, ACTOR);
+    const up = updateCalls(t.calls)[0]!;
+    expect(up.params.slice(22)).toEqual([5, 'basico']);
+    const changes = (t.audit.logActivity.mock.calls[0] as unknown[])[0] as { changes: Record<string, { from: unknown; to: unknown }> };
+    expect(changes.changes.vacancies).toEqual({ from: 2, to: 5 });
+    expect(changes.changes).not.toHaveProperty('aiCompetencyLevel');
+    const t2 = build({ current: baseRow({ vacancies: 2, ai_competency_level: 'basico' }) });
+    await t2.service.update('p1', { ...FULL, aiCompetencyLevel: null } as never, ACTOR);
+    expect(updateCalls(t2.calls)[0]!.params.slice(22)).toEqual([2, null]);
+  });
+
+  it('la lista y el detalle devuelven vacantes y Competencia IA; «con vacantes» es vacancies > 0 (ya no plazas = 0)', () => {
+    expect(toListItem(baseRow({ vacancies: 4, ai_competency_level: 'avanzado', plazas: 3 }))).toMatchObject({ vacancies: 4, vacant: true, aiCompetencyLevel: 'avanzado', plazas: 3 });
+    expect(toListItem(baseRow({ vacancies: 0, plazas: 0 }))).toMatchObject({ vacancies: 0, vacant: false, aiCompetencyLevel: null });
+    expect(toDetail(baseRow({ vacancies: 2 }), [], [])).toMatchObject({ vacancies: 2, vacant: true });
   });
 });

@@ -5,6 +5,7 @@
  */
 import { resolveLevel, seniorityFromText, type Seniority } from './job-positions-catalog.util';
 import {
+  AI_LEVELS,
   ACTIVITY_FREQUENCIES,
   MEASUREMENT_FREQUENCIES,
   VALIDATION_STATUSES,
@@ -18,7 +19,7 @@ export const MAX_KPI_TARGET = 100;
 export const NO_KEY_RESULT = 'Por definir';
 
 // Límites de las columnas de la base (los textos más largos bloquean la importación).
-const LIMITS = { title: 200, area: 100, level: 50, reportsTo: 500, groupTitle: 300, kpiName: 200, code: 10 } as const;
+const LIMITS = { title: 200, area: 100, level: 50, reportsTo: 500, supervises: 5000, groupTitle: 300, kpiName: 200, code: 10 } as const;
 
 export interface ImportIssue {
   /** Fila del Excel (null = del archivo en general). */
@@ -63,7 +64,15 @@ export interface ParsedPosition {
   /** Categoría Junior / Semi Senior / Senior deducida de la columna de jerarquía del Excel; null si no trae. */
   seniority: Seniority | null;
   reportsTo: string | null;
+  /** Texto original de la celda «Supervisa a». */
+  supervisesText: string | null;
+  /** Nombres de «Supervisa a» (separados por «;» o salto de línea, sin vacíos ni repetidos). */
+  supervises: string[];
   plazas: number | null;
+  /** Vacantes (entero ≥ 0). Sin columna ni celda: 1 si el título traía «(VACANTE)», 0 si no. */
+  vacancies: number;
+  /** basico / intermedio / avanzado o null (vacío o no válido). */
+  aiLevel: string | null;
   roleSummary: string | null;
   positionObjective: string | null;
   validationPoints: string | null;
@@ -76,7 +85,7 @@ export interface ParsedPosition {
 
 /** Columnas del archivo que se encontraron (las que faltan no se tocan al actualizar). */
 export type ColumnKey =
-  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'plazas' | 'role' | 'objective'
+  | 'area' | 'title' | 'level' | 'hierarchy' | 'reportsTo' | 'supervises' | 'plazas' | 'vacancies' | 'aiLevel' | 'role' | 'objective'
   | 'activities' | 'okrs' | 'kpis' | 'validationPoints' | 'status' | 'comments';
 
 export interface ParseResult {
@@ -106,6 +115,19 @@ export function norm(text: string | null | undefined): string {
     .trim();
 }
 
+/** «A; B\nC» → ['A', 'B', 'C']: separado por «;» o salto de línea, sin vacíos ni repetidos (sin acentos ni mayúsculas). */
+export function splitNames(text: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of (text ?? '').split(/[;\n\r]+/)) {
+    const name = part.replace(/\s+/g, ' ').trim();
+    if (name === '' || seen.has(norm(name))) continue;
+    seen.add(norm(name));
+    out.push(name);
+  }
+  return out;
+}
+
 const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; silent?: boolean }[] = [
   { key: 'area', test: (h) => /^sub[- ]?area\b/.test(h) || h === 'area', label: 'Sub-área' },
   { key: 'title', test: (h) => h === 'puesto', label: 'Puesto' },
@@ -113,7 +135,12 @@ const HEADERS: { key: ColumnKey; test: (h: string) => boolean; label: string; si
   // Solo sirve para deducir la Categoría: ya no es un campo del sistema, así que su ausencia no avisa y el texto no se guarda.
   { key: 'hierarchy', test: (h) => h.startsWith('jerarquia'), label: 'Jerarquía', silent: true },
   { key: 'reportsTo', test: (h) => h.startsWith('reporta a'), label: 'Reporta a' },
+  // Opcional: los archivos que no la traen no avisan nada y no se tocan las supervisiones.
+  { key: 'supervises', test: (h) => h.startsWith('supervisa a'), label: 'Supervisa a', silent: true },
   { key: 'plazas', test: (h) => h.startsWith('plazas'), label: 'Plazas ocupadas' },
+  // Opcionales: los archivos que no las traen no avisan y no se tocan esos campos.
+  { key: 'vacancies', test: (h) => h.startsWith('vacantes'), label: 'Vacantes', silent: true },
+  { key: 'aiLevel', test: (h) => h.startsWith('competencia ia'), label: 'Competencia IA (nivel)', silent: true },
   { key: 'role', test: (h) => h === 'rol', label: 'Rol' },
   { key: 'objective', test: (h) => h.startsWith('objetivo del puesto'), label: 'Objetivo del puesto' },
   { key: 'activities', test: (h) => h.startsWith('responsabilidades') || h.startsWith('actividades'), label: 'Responsabilidades y actividades' },
@@ -177,14 +204,14 @@ export function parseActivities(text: string, row: number, warnings: ImportIssue
     if (g && !/^\s/.test(line)) {
       group = { order: Number(g[1]), title: g[2]!.trim() };
       sort = 0;
-      if (group.title.length > LIMITS.groupTitle) errors.push({ row, message: `El título del grupo de actividades «${group.title.slice(0, 40)}…» pasa de ${LIMITS.groupTitle} caracteres` });
+      if (group.title.length > LIMITS.groupTitle) errors.push({ row, message: `El título de la responsabilidad «${group.title.slice(0, 40)}…» pasa de ${LIMITS.groupTitle} caracteres` });
       continue;
     }
     if (a) {
       if (!group) {
         group = { order: Number(a[1]), title: 'Sin grupo' };
         sort = 0;
-        warnings.push({ row, message: `La actividad ${a[1]}.${a[2]} no tiene un grupo; se guardó en «Sin grupo»` });
+        warnings.push({ row, message: `La actividad ${a[1]}.${a[2]} no tiene una responsabilidad; se guardó en «Sin grupo»` });
       }
       const body = a[3]!.trim();
       const split = splitFrequency(body);
@@ -205,7 +232,7 @@ export function parseActivities(text: string, row: number, warnings: ImportIssue
       }
       continue;
     }
-    warnings.push({ row, message: `Línea de actividades no reconocida (se ignoró): «${line.trim().slice(0, 60)}»` });
+    warnings.push({ row, message: `Línea de responsabilidades no reconocida (se ignoró): «${line.trim().slice(0, 60)}»` });
   }
   return out;
 }
@@ -350,6 +377,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     // Una fila sin Puesto, sin Sub-área y sin nada más es una fila vacía; el "#" suelto no cuenta.
     const hasContent = [...map.entries()].some(([k, idx]) => k !== 'title' && k !== 'area' && (r[idx] ?? '').toString().trim() !== '');
     if (titleRaw === '' && area === '' && !hasContent) continue;
+    // Fila de totales (sin Puesto ni Sub-área y con «Total» en alguna celda): no es un puesto, se omite sin error.
+    if (titleRaw === '' && area === '' && r.some((c) => norm((c ?? '').toString()) === 'total')) continue;
     dataRows += 1;
     if (titleRaw === '') {
       errors.push({ row: rowNumber, message: 'Falta el Puesto' });
@@ -382,6 +411,8 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
     const reportsTo = text(r, 'reportsTo');
     checkLen(levelRaw, 100, 'El Nivel');
     checkLen(reportsTo, LIMITS.reportsTo, '«Reporta a»');
+    const supervisesText = text(r, 'supervises');
+    checkLen(supervisesText, LIMITS.supervises, '«Supervisa a»');
 
     let plazas: number | null = null;
     const plazasText = cell(r, 'plazas');
@@ -391,6 +422,27 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       else warnings.push({ row: rowNumber, message: `Las plazas «${plazasText.slice(0, 20)}» no son un entero; se dejaron vacías` });
     }
     if (vacant && plazas === null) plazas = 0;
+
+    // Vacantes: entero ≥ 0. Con la columna, celda vacía = 1 si el título traía «(VACANTE)» y 0 si no; un valor no numérico,
+    // decimal o negativo avisa y se toma 0. Sin la columna: 1 si el título traía «(VACANTE)», 0 si no.
+    let vacancies = vacant ? 1 : 0;
+    const vacanciesText = cell(r, 'vacancies');
+    if (vacanciesText !== '') {
+      if (/^\d+$/.test(vacanciesText)) vacancies = Number(vacanciesText);
+      else {
+        vacancies = 0;
+        warnings.push({ row: rowNumber, message: `Las vacantes «${vacanciesText.slice(0, 20)}» no son un entero mayor o igual a 0; se tomó 0` });
+      }
+    }
+
+    // Competencia IA (nivel): sin acentos, mayúsculas ni espacios; vacío = sin nivel; otro texto avisa y queda vacío.
+    let aiLevel: string | null = null;
+    const aiText = cell(r, 'aiLevel');
+    if (aiText !== '') {
+      const level = norm(aiText);
+      if ((AI_LEVELS as readonly string[]).includes(level)) aiLevel = level;
+      else warnings.push({ row: rowNumber, message: `Competencia IA no válida «${aiText.slice(0, 30)}»: usa Básico, Intermedio o Avanzado; se dejó vacía` });
+    }
 
     const key = `${norm(area)}|${norm(title)}`;
     const first = seen.get(key);
@@ -406,7 +458,11 @@ export function parseMatrixSheets(sheets: RawSheet[], options: { levelCodes: rea
       levelAmbiguous: resolved.kind === 'ambiguous',
       seniority: seniorityFromText(hierarchy),
       reportsTo,
+      supervisesText,
+      supervises: splitNames(supervisesText),
       plazas,
+      vacancies,
+      aiLevel,
       roleSummary: text(r, 'role'),
       positionObjective: text(r, 'objective'),
       validationPoints: text(r, 'validationPoints'),

@@ -6,12 +6,12 @@ import { useRouter } from 'next/navigation';
 import { ChevronLeftIcon } from '@/components/icons';
 import { usePermission } from '@/hooks/use-permission';
 import { cn } from '@/lib/utils';
-import { ActivityDialog, ConfirmDelete, KpiDialog, OkrDialog } from '../item-dialogs';
+import { ActivityDialog, ConfirmDelete, CopyOkrsDialog, KpiDialog, OkrDialog } from '../item-dialogs';
 import { FormattedText } from '../formatted-text';
 import { ModalShell } from '../modal-shell';
 import { PositionFormDialog, readError } from '../position-form-dialog';
+import { EmployeesSection, RelationsSection } from '../position-relations';
 import {
-  BASE_PERIOD,
   EMPTY_OPTIONS,
   FIELD_GUIDES,
   STATUS_BADGE,
@@ -26,17 +26,19 @@ import {
   frequencyLabel,
   groupActivities,
   groupOkrs,
-  hasAnyWeight,
   makePeriod,
   okrPeriodLabel,
   okrsOfPeriod,
   periodLabel,
   plazasLabel,
+  aiLevelLabel,
+  vacanciesBadgeLabel,
   reportsToLabel,
   seniorityLabel,
   parsePeriod,
   sumPeriodWeights,
   weightState,
+  weightSummary,
   yearOptions,
   type ActivityItem,
   type GuidedFieldKey,
@@ -49,7 +51,7 @@ import {
 
 const TABS = [
   { id: 'info', label: 'Información' },
-  { id: 'activities', label: 'Actividades' },
+  { id: 'activities', label: 'Responsabilidades' },
   { id: 'okrs', label: 'OKRs' },
   { id: 'kpis', label: 'KPIs' },
 ] as const;
@@ -58,7 +60,7 @@ type TabId = (typeof TABS)[number]['id'];
 const SELECT = 'rounded-md border border-slate-200 px-3 py-2 text-sm text-navy focus:border-black focus:outline-none';
 const CARD = 'rounded-xl border border-slate-200 bg-white p-5 shadow-sm';
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="min-w-0">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
@@ -82,10 +84,10 @@ function GuidedField({ label, guide, text, bullets }: { label: string; guide: Gu
   );
 }
 
-/** Opciones del selector de periodo: la plantilla y los semestres de los años cercanos (y los que ya tengan datos). */
+/** Opciones del selector de periodo: los semestres de los años cercanos (y los que ya tengan datos). Ya no hay plantilla. */
 function periodOptions(okrs: OkrItem[]): string[] {
-  const years = yearOptions(currentYearMx(), okrs.map((o) => parsePeriod(o.period ?? '')?.year ?? 0).filter(Boolean));
-  return [BASE_PERIOD, ...years.flatMap((y) => [makePeriod(y, 2), makePeriod(y, 1)])];
+  const years = yearOptions(currentYearMx(), okrs.map((o) => parsePeriod(o.period)?.year ?? 0).filter(Boolean));
+  return years.flatMap((y) => [makePeriod(y, 2), makePeriod(y, 1)]);
 }
 
 export function PositionDetailScreen({ id }: { id: string }) {
@@ -93,6 +95,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const canUpdate = usePermission('rrhh', 'matriz-puestos', 'update');
   const canDelete = usePermission('rrhh', 'matriz-puestos', 'delete');
   const canApprove = usePermission('rrhh', 'matriz-puestos', 'approve');
+  const canViewEmployees = usePermission('rrhh', 'empleados', 'read');
   // La asignación masiva exige ambos permisos: editar la Matriz y escribir en Desarrollo Organizacional.
   const canWriteDevelopment = usePermission('rrhh', 'desarrollo-organizacional', 'write');
   const canAssignBulk = canUpdate && canWriteDevelopment;
@@ -112,8 +115,9 @@ export function PositionDetailScreen({ id }: { id: string }) {
   const [vComments, setVComments] = useState('');
   const [vSaved, setVSaved] = useState(false);
 
-  // null = todavía sin elegir: la plantilla si el puesto la tiene, si no el semestre actual.
+  // null = todavía sin elegir: arranca en el semestre actual.
   const [periodChoice, setPeriodChoice] = useState<string | null>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   const [okrDialog, setOkrDialog] = useState<OkrItem | 'new' | null>(null);
   const [okrToDelete, setOkrToDelete] = useState<OkrItem | null>(null);
   const [kpiDialog, setKpiDialog] = useState<KpiItem | 'new' | null>(null);
@@ -177,13 +181,12 @@ export function PositionDetailScreen({ id }: { id: string }) {
   }
 
   const approveVisible = canApprove && position.hasDescription && !position.descriptionApproved;
-  const period = periodChoice ?? (position.okrs.some((o) => o.period === null) ? BASE_PERIOD : currentPeriod());
+  const period = periodChoice ?? currentPeriod();
   const okrsInPeriod = okrsOfPeriod(position.okrs, period);
   const activeInPeriod = okrsInPeriod.filter((o) => o.isActive);
   const sum = sumPeriodWeights(position.okrs, period);
-  const anyWeight = hasAnyWeight(position.okrs, period);
-  const wState = anyWeight ? weightState(sum, activeInPeriod.length) : 'empty';
-  const otherPeriods = [...new Set(position.okrs.map((o) => o.period ?? BASE_PERIOD))].filter((p) => p !== period);
+  const wState = weightState(sum, activeInPeriod.length);
+  const otherPeriods = [...new Set(position.okrs.map((o) => o.period))].filter((p) => p !== period);
   const activityGroups = groupActivities(position.activities);
   const validationChanged = vStatus !== position.validationStatus || vComments.trim() !== (position.headComments ?? '');
 
@@ -199,7 +202,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
           <span className="rounded-full bg-slate-100 px-2 py-1 font-mono text-xs text-slate-600">{position.code}</span>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', STATUS_BADGE[position.status])}>{STATUS_LABELS[position.status]}</span>
           <span className={cn('rounded-full px-2.5 py-1 text-xs font-semibold', VALIDATION_BADGE[position.validationStatus])}>{VALIDATION_LABELS[position.validationStatus]}</span>
-          {position.vacant && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">Vacante</span>}
+          {vacanciesBadgeLabel(position.vacancies) && <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">{vacanciesBadgeLabel(position.vacancies)}</span>}
         </div>
         <p className="mt-1 text-sm text-slate-500">{[position.division, position.area, position.level].filter(Boolean).join(' · ')}</p>
       </div>
@@ -245,12 +248,23 @@ export function PositionDetailScreen({ id }: { id: string }) {
                 <Field label="Nivel Original (Excel)" value={position.levelOriginal} />
               )}
               <Field label="Categoría" value={seniorityLabel(position.seniority)} />
-              <Field label="Reporta a" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
+              <Field label="Reporta a (Persona)" value={position.reportsToEmployee ? reportsToLabel(position.reportsToEmployee) : '—'} />
               {position.reportsTo && <Field label="Reporta a (Excel)" value={position.reportsTo} />}
-              <Field label="Plazas" value={plazasLabel(position.plazas)} />
+              <Field label="Plazas Ocupadas" value={plazasLabel(position.plazas)} />
+              <Field label="Vacantes" value={String(position.vacancies)} />
+              <Field
+                label="Competencia IA"
+                value={position.aiCompetencyLevel
+                  ? <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{aiLevelLabel(position.aiCompetencyLevel)}</span>
+                  : 'Sin Definir'}
+              />
               <Field label="Estado" value={STATUS_LABELS[position.status]} />
             </div>
           </div>
+
+          <RelationsSection position={position} canUpdate={canUpdate} onSaved={() => void load()} />
+
+          <EmployeesSection position={position} canViewEmployees={canViewEmployees} />
 
           <div className={CARD}>
             <h2 className="text-sm font-semibold text-navy">Rol y Objetivo</h2>
@@ -265,7 +279,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
 
           <div className={CARD}>
             <h2 className="text-sm font-semibold text-navy">Validación</h2>
-            <p className="mt-1 text-xs text-slate-500">Validación del Head sobre la propuesta (rol, actividades, OKRs y KPIs); es independiente del estado del puesto y de la descripción.</p>
+            <p className="mt-1 text-xs text-slate-500">Validación del Head sobre la propuesta (rol, responsabilidades, OKRs y KPIs); es independiente del estado del puesto y de la descripción.</p>
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1">
                 <label htmlFor="v-status" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estatus</label>
@@ -352,11 +366,11 @@ export function PositionDetailScreen({ id }: { id: string }) {
         <div className="space-y-4">
           {canUpdate && (
             <div className="flex justify-end">
-              <button type="button" onClick={() => setActivityDialog({ activity: null, group: null })} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nueva Actividad</button>
+              <button type="button" onClick={() => setActivityDialog({ activity: null, group: null })} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nueva Responsabilidad</button>
             </div>
           )}
           {activityGroups.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">Aún No Hay Actividades Para Este Puesto</div>
+            <div className="rounded-xl border border-dashed border-slate-200 px-6 py-10 text-center text-sm text-slate-500">Aún No Hay Responsabilidades Para Este Puesto</div>
           ) : (
             <div className="space-y-4">
               {activityGroups.map((g) => (
@@ -364,7 +378,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-semibold text-navy">{g.order}. {g.title}</h3>
                     {canUpdate && (
-                      <button type="button" onClick={() => setActivityDialog({ activity: null, group: { order: g.order, title: g.title } })} className="text-xs font-medium text-slate-600 hover:text-navy">Agregar al Grupo</button>
+                      <button type="button" onClick={() => setActivityDialog({ activity: null, group: { order: g.order, title: g.title } })} className="text-xs font-medium text-slate-600 hover:text-navy">Agregar Actividad</button>
                     )}
                   </div>
                   <ul className="mt-3 divide-y divide-slate-100">
@@ -406,11 +420,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
               {canAssignBulk && (
                 <button
                   type="button"
-                  onClick={() => { setActionError(null); setBulkResult(null); setBulkPeriod(period === BASE_PERIOD ? currentPeriod() : period); setBulkConfirm(true); }}
+                  onClick={() => { setActionError(null); setBulkResult(null); setBulkPeriod(period); setBulkConfirm(true); }}
                   className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50"
                 >
                   Asignar a Colaboradores del Puesto
                 </button>
+              )}
+              {canUpdate && (
+                <button type="button" onClick={() => { setActionError(null); setCopyOpen(true); }} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-navy hover:bg-slate-50">Copiar a Otro Semestre</button>
               )}
               {canUpdate && (
                 <button type="button" onClick={() => setOkrDialog('new')} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Nuevo OKR</button>
@@ -424,19 +441,14 @@ export function PositionDetailScreen({ id }: { id: string }) {
               wState === 'complete' && 'bg-emerald-50 text-emerald-800',
               wState === 'incomplete' && 'bg-amber-50 text-amber-800',
               wState === 'over' && 'bg-red-50 text-red-700',
-              wState === 'empty' && 'bg-slate-50 text-slate-500',
+              wState === 'none' && 'bg-slate-50 text-slate-500',
             )}
           >
-            <strong>{okrPeriodLabel(period)}</strong> · Suma: {anyWeight ? formatPct(sum) : '—'}
-            {wState === 'incomplete' && ` · Falta ${formatPct(Math.round((100 - sum) * 100) / 100)} para llegar a 100 %`}
+            <strong>{okrPeriodLabel(period)}</strong>
+            {wState === 'none' ? ' · Sin OKRs activos en este periodo' : ` · ${weightSummary(sum)}`}
+            {wState === 'incomplete' && ' (aviso: no impide guardar)'}
             {wState === 'complete' && ' · Completo'}
-            {wState === 'over' && ' · Pasa de 100 %'}
-            {activeInPeriod.length === 0 && ' · Sin OKRs activos en este periodo'}
-            {activeInPeriod.length > 0 && !anyWeight && ' · Sin pesos asignados'}
           </div>
-          {period === BASE_PERIOD && okrsInPeriod.length > 0 && (
-            <p className="text-xs text-slate-500">La plantilla vale para cualquier semestre: al asignar OKRs a un colaborador se copia junto con los OKRs de ese semestre.</p>
-          )}
           {otherPeriods.length > 0 && (
             <p className="text-xs text-slate-400">Otros periodos con OKRs: {otherPeriods.map(okrPeriodLabel).join(', ')}</p>
           )}
@@ -457,7 +469,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
                           <p className="whitespace-pre-line text-sm text-slate-700">{o.keyResult}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{o.weight !== null ? formatPct(o.weight) : 'Sin peso'}</span>
+                          <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{formatPct(o.weight)}</span>
                           <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', o.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>{o.isActive ? 'Activo' : 'Inactivo'}</span>
                         </div>
                         {canUpdate && (
@@ -544,6 +556,19 @@ export function PositionDetailScreen({ id }: { id: string }) {
         />
       )}
 
+      {copyOpen && (
+        <CopyOkrsDialog
+          positionId={id}
+          fromPeriod={period}
+          activeCount={activeInPeriod.length}
+          onClose={() => setCopyOpen(false)}
+          onDone={() => {
+            setCopyOpen(false);
+            void load();
+          }}
+        />
+      )}
+
       {kpiDialog && (
         <KpiDialog
           positionId={id}
@@ -613,11 +638,11 @@ export function PositionDetailScreen({ id }: { id: string }) {
               <div className="flex flex-col gap-1">
                 <label htmlFor="bulk-period" className="text-xs font-semibold uppercase tracking-wide text-slate-500">Semestre a Asignar</label>
                 <select id="bulk-period" value={bulkPeriod} onChange={(e) => setBulkPeriod(e.target.value)} className={SELECT}>
-                  {periodOptions(position.okrs).filter((p) => p !== BASE_PERIOD).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
+                  {periodOptions(position.okrs).map((p) => <option key={p} value={p}>{periodLabel(p)}</option>)}
                 </select>
               </div>
               <p className="mt-3 text-sm text-slate-600">
-                Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> (más los de la plantilla, sin periodo) y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
+                Se copiarán los OKRs activos de <strong>{periodLabel(bulkPeriod)}</strong> y los KPIs activos de <strong>{position.code} · {position.title}</strong> a todos los colaboradores activos con este puesto. Lo que ya tengan asignado se omite.
               </p>
             </>
           )}
@@ -628,7 +653,7 @@ export function PositionDetailScreen({ id }: { id: string }) {
       {deletingPosition && (
         <ConfirmDelete
           title="Eliminar Puesto"
-          message={<>¿Eliminar <strong>{position.code} · {position.title}</strong>? También se eliminarán sus actividades, OKRs y KPIs.</>}
+          message={<>¿Eliminar <strong>{position.code} · {position.title}</strong>? También se eliminarán sus responsabilidades, OKRs y KPIs.</>}
           busy={busy}
           error={actionError}
           onCancel={() => setDeletingPosition(false)}

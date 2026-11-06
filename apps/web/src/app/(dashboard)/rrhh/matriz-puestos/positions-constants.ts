@@ -1,10 +1,8 @@
 export type PositionStatus = 'activo' | 'inactivo' | 'pendiente_aprobacion';
 export type Frequency = 'diario' | 'semanal' | 'quincenal' | 'mensual' | 'trimestral' | 'semestral' | 'anual';
 export type ActivityFrequency = Frequency | 'eventual';
+export type AiLevel = 'basico' | 'intermedio' | 'avanzado';
 export type ValidationStatus = 'pendiente' | 'validado' | 'validado_con_ajustes' | 'rechazado';
-
-/** Valor del selector/parámetro que designa los OKRs de plantilla (sin periodo). */
-export const BASE_PERIOD = 'base';
 
 export interface PositionListItem {
   id: string;
@@ -19,9 +17,14 @@ export interface PositionListItem {
   division: string | null;
   /** Categoría: junior, semi_senior o senior. */
   seniority: string | null;
+  /** Plazas ocupadas. */
   plazas: number | null;
-  /** `plazas = 0`: se muestra como "Vacante". */
+  /** Vacantes (aparte de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
   vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: AiLevel | null;
   validationStatus: ValidationStatus;
 }
 
@@ -39,13 +42,14 @@ export interface ActivityItem {
 export interface OkrItem {
   id: string;
   jobPositionId: string;
-  /** null = plantilla (vale para cualquier semestre). */
-  period: string | null;
+  /** Semestre AAAA-S1 / AAAA-S2 (ya no existe la plantilla sin periodo). */
+  period: string;
   objectiveCode: string | null;
   krCode: string | null;
   objective: string;
   keyResult: string;
-  weight: number | null;
+  /** Entero de 1 a 100. */
+  weight: number;
   sortOrder: number;
   isActive: boolean;
 }
@@ -60,7 +64,58 @@ export interface KpiItem {
   isActive: boolean;
 }
 
+/** Un puesto de la misma matriz, tal como se enlaza desde «Reporta a» y «Supervisa a». */
+export interface PositionRef {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+/** Colaborador activo que tiene el puesto asignado (solo datos básicos). */
+export interface PositionEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  status: string;
+}
+
+/** «JP-001 · Título · Área». */
+export const positionRefLabel = (p: PositionRef): string => [p.code, p.title, p.area].filter(Boolean).join(' · ');
+
+/** ¿Cambió el borrador de relaciones respecto de lo guardado? (el orden de «Supervisa a» no cuenta) */
+export function relationsChanged(
+  draft: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+  saved: { reportsTo: PositionRef | null; supervises: PositionRef[] },
+): boolean {
+  if ((draft.reportsTo?.id ?? null) !== (saved.reportsTo?.id ?? null)) return true;
+  const a = draft.supervises.map((s) => s.id).sort();
+  const b = saved.supervises.map((s) => s.id).sort();
+  return a.length !== b.length || a.some((id, i) => id !== b[i]);
+}
+
+/** «3 colaboradores» o «1 colaborador»; con plazas ocupadas definidas añade «· 3 de 5 plazas ocupadas». */
+export function employeesCountLabel(count: number, plazas: number | null): string {
+  const base = `${count} ${count === 1 ? 'colaborador' : 'colaboradores'}`;
+  return plazas === null ? base : `${base} · ${count} de ${plazas} ${plazas === 1 ? 'plaza ocupada' : 'plazas ocupadas'}`;
+}
+
 export interface PositionDetail extends PositionListItem {
+  /** Puesto al que reporta (de la misma matriz). */
+  reportsToPosition: PositionRef | null;
+  /** Puestos que supervisa. */
+  supervises: PositionRef[];
+  /** Puestos que lo supervisan (solo lectura). */
+  supervisedBy: PositionRef[];
+  /** Puestos que le reportan (solo lectura). */
+  directReports: PositionRef[];
+  /** Colaboradores activos con este puesto (máx. 200) y su total. */
+  employees: PositionEmployee[];
+  employeesCount: number;
+  /** Texto original de la celda «Supervisa a» del Excel (solo lectura). */
+  supervisesText: string | null;
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura). */
@@ -196,11 +251,22 @@ export const ACTIVITY_FREQUENCY_OPTIONS: { value: ActivityFrequency; label: stri
 
 export const frequencyLabel = (f: ActivityFrequency | null): string => ACTIVITY_FREQUENCY_OPTIONS.find((o) => o.value === f)?.label ?? '—';
 
-/** "Plantilla (Sin Periodo)" o "Semestre 1 · 2026" según el valor del selector. */
-export const okrPeriodLabel = (period: string | null): string => (period === null || period === BASE_PERIOD ? 'Plantilla (Sin Periodo)' : periodLabel(period));
+/** "Semestre 1 · 2026" para AAAA-S1. */
+export const okrPeriodLabel = (period: string): string => periodLabel(period);
 
-/** Etiqueta del número de plazas: "Vacante" cuando es 0. */
-export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : plazas === 0 ? 'Vacante' : String(plazas));
+/** Etiqueta del número de plazas ocupadas (o vacantes). */
+export const plazasLabel = (plazas: number | null): string => (plazas === null ? '—' : String(plazas));
+
+/** Competencia IA (nivel): opciones del formulario y etiqueta. */
+export const AI_LEVEL_OPTIONS: { value: AiLevel; label: string }[] = [
+  { value: 'basico', label: 'Básico' },
+  { value: 'intermedio', label: 'Intermedio' },
+  { value: 'avanzado', label: 'Avanzado' },
+];
+export const aiLevelLabel = (l: string | null): string => AI_LEVEL_OPTIONS.find((o) => o.value === l)?.label ?? 'Sin Definir';
+
+/** «Con Vacantes (2)» cuando hay vacantes; null si no. */
+export const vacanciesBadgeLabel = (vacancies: number): string | null => (vacancies > 0 ? `Con Vacantes (${vacancies})` : null);
 
 /** Año actual en la oficina (America/Mexico_City). */
 export function currentYearMx(now: Date = new Date()): number {
@@ -237,24 +303,31 @@ export function yearOptions(currentYear: number, extra: number[] = []): number[]
   return [...set].sort((a, b) => b - a);
 }
 
-/** Periodo del selector ('base' = plantilla) → valor del OKR (null = plantilla). */
-export const selectorToPeriod = (value: string): string | null => (value === BASE_PERIOD ? null : value);
+/** OKRs de un semestre. */
+export const okrsOfPeriod = (okrs: OkrItem[], period: string): OkrItem[] => okrs.filter((o) => o.period === period);
 
-/** OKRs de un grupo de periodo (la plantilla, sin periodo, es su propio grupo). */
-export const okrsOfPeriod = (okrs: OkrItem[], selector: string): OkrItem[] => okrs.filter((o) => o.period === selectorToPeriod(selector));
-
-/** Suma de pesos de los OKRs ACTIVOS de un grupo de periodo (en centésimas, sin errores de coma flotante). */
-export function sumPeriodWeights(okrs: OkrItem[], selector: string): number {
-  return (
-    okrsOfPeriod(okrs, selector)
-      .filter((o) => o.isActive)
-      .reduce((acc, o) => acc + Math.round((o.weight ?? 0) * 100), 0) / 100
-  );
+/** Suma de pesos (enteros) de los OKRs ACTIVOS de un semestre. */
+export function sumPeriodWeights(okrs: OkrItem[], period: string): number {
+  return okrsOfPeriod(okrs, period)
+    .filter((o) => o.isActive)
+    .reduce((acc, o) => acc + o.weight, 0);
 }
 
-/** ¿Algún OKR activo del grupo trae peso? Sin pesos la suma se muestra como "—". */
-export const hasAnyWeight = (okrs: OkrItem[], selector: string): boolean =>
-  okrsOfPeriod(okrs, selector).some((o) => o.isActive && o.weight !== null);
+/** Semestre siguiente: 2026-S1 → 2026-S2, 2026-S2 → 2027-S1 (valor por omisión del destino al copiar). */
+export function nextPeriod(period: string): string {
+  const p = parsePeriod(period);
+  if (!p) return period;
+  return p.semester === 1 ? makePeriod(p.year, 2) : makePeriod(p.year + 1, 1);
+}
+
+/** Mensaje de error del peso de un OKR (entero de 1 a 100) o null si es válido. El servidor lo exige igual. */
+export function okrWeightError(text: string): string | null {
+  const t = text.trim();
+  if (t === '') return 'El peso es obligatorio (entero de 1 a 100).';
+  const n = Number(t);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 1 || n > 100) return 'El peso debe ser un número entero entre 1 y 100.';
+  return null;
+}
 
 export interface OkrGroup {
   /** Código del objetivo (O1) o null si los OKRs no lo traen. */
@@ -296,12 +369,20 @@ export function groupActivities(activities: ActivityItem[]): ActivityGroup[] {
 /** "O1 · KR1", "O1" o '' (sin códigos). */
 export const okrCode = (o: { objectiveCode?: string | null; krCode?: string | null }): string => [o.objectiveCode, o.krCode].filter(Boolean).join(' · ');
 
-export type WeightState = 'empty' | 'complete' | 'incomplete' | 'over';
+/** none = sin OKRs activos en el semestre; incomplete (menos de 100) es solo informativo: no bloquea. */
+export type WeightState = 'none' | 'complete' | 'incomplete' | 'over';
 
 export function weightState(sum: number, count: number): WeightState {
-  if (count === 0) return 'empty';
+  if (count === 0) return 'none';
   if (sum > 100) return 'over';
   return sum === 100 ? 'complete' : 'incomplete';
+}
+
+/** «Suma 80 %, faltan 20 % para llegar a 100 %» (menos de 100), «Suma 100 %» o «Suma 120 %: pasa de 100 %». */
+export function weightSummary(sum: number): string {
+  if (sum < 100) return `Suma ${sum} %, faltan ${100 - sum} % para llegar a 100 %`;
+  if (sum > 100) return `Suma ${sum} %: pasa de 100 %`;
+  return 'Suma 100 %';
 }
 
 /** 80 → '80 %', 33.5 → '33.5 %'. */
@@ -335,7 +416,7 @@ export const FIELD_GUIDES: Record<GuidedFieldKey, { guide: string; placeholder: 
     placeholder: 'Ej.: Asegurar que cada seller asignado por Mercado Libre inicie su operación en tiempo y bien preparado para la siguiente etapa.',
   },
   description: {
-    guide: 'Actividades y su frecuencia (una por línea).',
+    guide: 'Responsabilidades y sus actividades (frecuencia).',
     placeholder: [
       '- Contactar a los sellers nuevos y explicarles el programa – Diario',
       '- Dar seguimiento al avance de cada seller – Diario',

@@ -41,7 +41,7 @@ describe('Importación de la Matriz · actividades', () => {
     const acts = parseActivities(text, 5, warnings, errors);
     expect(acts[3]).toMatchObject({ description: 'Atender solicitudes (A veces)', frequency: null, note: null });
     expect(warnings.map((w) => w.message).join('|')).toMatch(/2\.2 no trae una frecuencia reconocida/);
-    expect(warnings.map((w) => w.message).join('|')).toMatch(/Línea de actividades no reconocida/);
+    expect(warnings.map((w) => w.message).join('|')).toMatch(/Línea de responsabilidades no reconocida/);
     expect(warnings.every((w) => w.row === 5)).toBe(true);
   });
 
@@ -254,5 +254,131 @@ describe('Importación de la Matriz · hoja completa', () => {
     expect(r.positions[0]!.plazas).toBeNull();
     expect(r.positions[1]!.plazas).toBe(0);
     expect(r.warnings.some((w) => /Las plazas «dos»/.test(w.message))).toBe(true);
+  });
+});
+
+describe('Importación de la Matriz · «Supervisa a»', () => {
+  it('lee la columna por su encabezado: texto original y nombres', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: 'Gerente; Analista' })])]);
+    expect(r.columns.has('supervises')).toBe(true);
+    expect(r.positions[0]!.supervisesText).toBe('Gerente; Analista');
+    expect(r.positions[0]!.supervises).toEqual(['Gerente', 'Analista']);
+    expect(r.positions[0]!.reportsTo).toBe('TEST-Jefe'); // «Reporta a» se sigue leyendo
+  });
+
+  it('separa por «;» y por salto de línea, recorta espacios, ignora vacíos y duplicados (sin acentos ni mayúsculas)', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: ' Gerente ;; Analista\n\nauxiliar  ;  AUXILIAR ; Dirección;direccion;  ' })])]);
+    expect(r.positions[0]!.supervises).toEqual(['Gerente', 'Analista', 'auxiliar', 'Dirección']);
+  });
+
+  it('celda vacía: sin nombres y sin texto', () => {
+    const r = parseMatrixSheets([sheet([dataRow({ 6: '' })])]);
+    expect(r.positions[0]!.supervisesText).toBeNull();
+    expect(r.positions[0]!.supervises).toEqual([]);
+  });
+
+  it('admite hasta 5,000 caracteres y más es un error con el número de fila', () => {
+    expect(parseMatrixSheets([sheet([dataRow({ 6: 'x'.repeat(5000) })])]).errors).toEqual([]);
+    const bad = parseMatrixSheets([sheet([dataRow({ 6: 'x'.repeat(5001) })])]);
+    expect(bad.errors.map((e) => [e.row, /Supervisa a/.test(e.message)])).toEqual([[4, true]]);
+  });
+
+  it('«Reporta a» mantiene su límite de 500 caracteres', () => {
+    expect(parseMatrixSheets([sheet([dataRow({ 5: 'x'.repeat(501) })])]).errors.length).toBe(1);
+  });
+
+  it('un archivo sin la columna no avisa nada y no la marca como encontrada', () => {
+    const noCol: RawSheet = { name: 'Matriz TEST', rows: [['Matriz de Puestos – División TEST-Ecom'], [], ['Sub-área', 'Puesto', 'Plazas ocupadas'], ['A1', 'P1', '2']] };
+    const r = parseMatrixSheets([noCol]);
+    expect(r.columns.has('supervises')).toBe(false);
+    expect(r.warnings.some((w) => /Supervisa/i.test(w.message))).toBe(false);
+  });
+});
+
+describe('Importación de la Matriz · fila de totales', () => {
+  it('una fila sin Puesto ni Sub-área con «Total» (y sumas) se omite sin error y no cuenta como fila de datos', () => {
+    const total = ['', '', '', '', '', '', 'Total', '64', '', '', '', '', '', '', '', ''];
+    const r = parseMatrixSheets([sheet([dataRow(), total])]);
+    expect(r.errors).toEqual([]);
+    expect(r.positions).toHaveLength(1);
+    expect(r.dataRows).toBe(1);
+  });
+
+  it('una fila con contenido pero sin Puesto y sin «Total» sigue siendo error', () => {
+    const r = parseMatrixSheets([sheet([['', '', '', '', '', '', 'algo', '5', '', '', '', '', '', '', '', '']])]);
+    expect(r.errors.map((e) => e.message)).toEqual(['Falta el Puesto']);
+  });
+});
+
+describe('Importación de la Matriz · Vacantes y Competencia IA', () => {
+  const HEADER_VAC = [...HEADER, 'Vacantes', 'Competencia IA (nivel)'];
+  const vrow = (over: Record<number, string> = {}): string[] => [...dataRow({ 2: 'TEST-Analista', 7: '2', ...over }), over[16] ?? '', over[17] ?? ''];
+  const vsheet = (rows: string[][]): RawSheet => ({ name: 'Matriz TEST', rows: [['Matriz de Puestos – División TEST-Ecom'], [], HEADER_VAC, ...rows] });
+  const one = (over: Record<number, string>) => parseMatrixSheets([vsheet([vrow(over)])]);
+
+  it('mapea las columnas por su encabezado y no avisa si faltan en un archivo viejo', () => {
+    const r = one({ 16: '3', 17: 'Avanzado' });
+    expect(r.columns.has('vacancies')).toBe(true);
+    expect(r.columns.has('aiLevel')).toBe(true);
+    const old = parseMatrixSheets([sheet([dataRow()])]);
+    expect(old.columns.has('vacancies')).toBe(false);
+    expect(old.columns.has('aiLevel')).toBe(false);
+    expect(old.warnings.some((w) => /Vacantes|Competencia IA/i.test(w.message))).toBe(false);
+  });
+
+  it('Vacantes: un entero se toma tal cual (incluido 0); vacío es 0', () => {
+    expect(one({ 16: '3' }).positions[0]!.vacancies).toBe(3);
+    expect(one({ 16: '0' }).positions[0]!.vacancies).toBe(0);
+    expect(one({ 16: '' }).positions[0]!.vacancies).toBe(0);
+    expect(one({ 16: '' }).warnings.some((w) => /vacantes/i.test(w.message))).toBe(false);
+  });
+
+  it('Vacantes: decimal, negativo o texto avisan y se toma 0', () => {
+    for (const bad of ['1.5', '-2', 'dos', '1,5']) {
+      const r = one({ 16: bad });
+      expect(r.positions[0]!.vacancies).toBe(0);
+      expect(r.warnings.some((w) => /Las vacantes «.*» no son un entero/.test(w.message))).toBe(true);
+    }
+  });
+
+  it('el sufijo «(VACANTE)» se quita del nombre; sin la columna Vacantes (o con la celda vacía) vale 1 vacante y las plazas ocupadas quedan en 0', () => {
+    const withCol = one({ 2: 'TEST-Gerente (VACANTE)', 7: '', 16: '' }).positions[0]!;
+    expect(withCol.title).toBe('TEST-Gerente');
+    expect(withCol.vacancies).toBe(1);
+    expect(withCol.plazas).toBe(0);
+    const noCol = parseMatrixSheets([sheet([dataRow({ 2: 'TEST-Gerente (VACANTE)', 7: '' })])]).positions[0]!;
+    expect(noCol.title).toBe('TEST-Gerente');
+    expect(noCol.vacancies).toBe(1);
+    expect(noCol.plazas).toBe(0);
+    // sin sufijo y sin la columna: 0
+    expect(parseMatrixSheets([sheet([dataRow({ 2: 'TEST-Normal' })])]).positions[0]!.vacancies).toBe(0);
+  });
+
+  it('con «(VACANTE)» y un número en la columna Vacantes manda ese número', () => {
+    expect(one({ 2: 'TEST-Gerente (VACANTE)', 16: '4' }).positions[0]!.vacancies).toBe(4);
+    expect(one({ 2: 'TEST-Gerente (VACANTE)', 16: '0' }).positions[0]!.vacancies).toBe(0);
+  });
+
+  it('Competencia IA: Básico, intermedio con espacios y AVANZADO se normalizan', () => {
+    expect(one({ 17: 'Básico' }).positions[0]!.aiLevel).toBe('basico');
+    expect(one({ 17: '  intermedio ' }).positions[0]!.aiLevel).toBe('intermedio');
+    expect(one({ 17: 'AVANZADO' }).positions[0]!.aiLevel).toBe('avanzado');
+    expect(one({ 17: 'Avanzado' }).warnings.some((w) => /Competencia IA/.test(w.message))).toBe(false);
+  });
+
+  it('Competencia IA: vacío es null sin aviso; «Experto» avisa y queda null', () => {
+    const empty = one({ 17: '' });
+    expect(empty.positions[0]!.aiLevel).toBeNull();
+    expect(empty.warnings.some((w) => /Competencia IA/.test(w.message))).toBe(false);
+    const bad = one({ 17: 'Experto' });
+    expect(bad.positions[0]!.aiLevel).toBeNull();
+    expect(bad.warnings.some((w) => /Competencia IA no válida «Experto»/.test(w.message))).toBe(true);
+    expect(bad.errors).toEqual([]);
+  });
+
+  it('«Responsabilidades y actividades (frecuencia)» sigue mapeando la columna de actividades', () => {
+    const r = parseMatrixSheets([sheet([dataRow()])]);
+    expect(r.columns.has('activities')).toBe(true);
+    expect(r.positions[0]!.activities.length).toBeGreaterThan(0);
   });
 });

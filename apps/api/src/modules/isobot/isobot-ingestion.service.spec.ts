@@ -109,3 +109,62 @@ describe('RegisterAdminDocumentDto (validación)', () => {
     expect(errores.map((e) => e.property)).toContain(campo);
   });
 });
+
+describe('IsobotIngestionService.getDownloadUrl (biblioteca y fuentes del chat)', () => {
+  function setup(doc: Record<string, unknown> | null) {
+    const getPresignedReadUrl = jest.fn(async () => 'https://s3/firmada');
+    const documentsRepo = { findOne: jest.fn(async () => doc) };
+    const storage = { getPresignedReadUrl, getPresignedUrl: jest.fn() };
+    const service = new IsobotIngestionService(documentsRepo as any, {} as any, storage as any);
+    return { service, getPresignedReadUrl, storage };
+  }
+  const PDF_MIME = 'application/pdf';
+  const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+  it('«X.docx» con file_type pdf (reemplazado): baja como .pdf y con tipo application/pdf', async () => {
+    const t = setup({ id: 'd', fileName: 'X.docx', fileType: 'pdf', s3Key: 'isobot/k' });
+    expect(await t.service.getDownloadUrl('d')).toEqual({ url: 'https://s3/firmada' });
+    expect(t.getPresignedReadUrl).toHaveBeenCalledWith('isobot/k', { disposition: 'attachment', fileName: 'X.pdf', contentType: PDF_MIME });
+  });
+
+  it('un .docx real conserva .docx y su tipo', async () => {
+    const t = setup({ id: 'd', fileName: 'X.docx', fileType: 'docx', s3Key: 'isobot/k' });
+    await t.service.getDownloadUrl('d');
+    expect(t.getPresignedReadUrl).toHaveBeenCalledWith('isobot/k', { disposition: 'attachment', fileName: 'X.docx', contentType: DOCX_MIME });
+  });
+
+  it('file_type nulo con file_name «X.pdf» se toma de la extensión', async () => {
+    const t = setup({ id: 'd', fileName: 'X.pdf', fileType: null, s3Key: 'isobot/k' });
+    await t.service.getDownloadUrl('d');
+    expect(t.getPresignedReadUrl).toHaveBeenCalledWith('isobot/k', { disposition: 'attachment', fileName: 'X.pdf', contentType: PDF_MIME });
+  });
+
+  it('sin tipo reconocible no manda contentType y deja el nombre tal cual', async () => {
+    const t = setup({ id: 'd', fileName: 'notas', fileType: null, s3Key: 'isobot/k' });
+    await t.service.getDownloadUrl('d');
+    expect(t.getPresignedReadUrl).toHaveBeenCalledWith('isobot/k', { disposition: 'attachment', fileName: 'notas' });
+  });
+
+  it('el nombre con acentos y espacios se pasa completo (la codificación UTF-8 la hace buildContentDisposition)', async () => {
+    const name = 'TIC-PO-02 Ver.00 Politica_Seguridad de la Información.docx';
+    const t = setup({ id: 'd', fileName: name, fileType: 'pdf', s3Key: 'isobot/k' });
+    await t.service.getDownloadUrl('d');
+    const opts = (t.getPresignedReadUrl.mock.calls[0] as unknown as [string, { fileName: string }])[1];
+    expect(opts.fileName).toBe('TIC-PO-02 Ver.00 Politica_Seguridad de la Información.pdf');
+  });
+
+  it('sin s3Key: 400; documento inexistente: 404; no usa el método viejo sin tipo de contenido', async () => {
+    await expect(setup({ id: 'd', fileName: 'X.pdf', fileType: 'pdf', s3Key: null }).service.getDownloadUrl('d')).rejects.toMatchObject({ status: 400 });
+    await expect(setup(null).service.getDownloadUrl('d')).rejects.toMatchObject({ status: 404 });
+    const t = setup({ id: 'd', fileName: 'X.pdf', fileType: 'pdf', s3Key: 'k' });
+    await t.service.getDownloadUrl('d');
+    expect(t.storage.getPresignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('getAdminFileUrl sigue igual: inline solo PDF y la misma corrección de nombre', async () => {
+    const t = setup({ id: 'd', fileName: 'X.docx', fileType: 'pdf', s3Key: 'k' });
+    (t.storage as any).getObjectSize = jest.fn(async () => 10);
+    await t.service.getAdminFileUrl('d', 'inline');
+    expect(t.getPresignedReadUrl).toHaveBeenCalledWith('k', { disposition: 'inline', fileName: 'X.pdf', contentType: PDF_MIME });
+  });
+});

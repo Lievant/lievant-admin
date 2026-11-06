@@ -5,10 +5,12 @@ import { ModalShell } from './modal-shell';
 import { readError } from './position-form-dialog';
 import {
   ACTIVITY_FREQUENCY_OPTIONS,
-  BASE_PERIOD,
   FREQUENCY_OPTIONS,
   currentYearMx,
   makePeriod,
+  nextPeriod,
+  okrPeriodLabel,
+  okrWeightError,
   parsePeriod,
   yearOptions,
   type ActivityItem,
@@ -39,8 +41,8 @@ function Actions({ onClose, saving }: { onClose: () => void; saving: boolean }) 
 }
 
 /**
- * Alta o edición de un OKR. El periodo es un selector: «Plantilla (Sin Periodo)» o año y semestre, nunca texto libre.
- * `defaultPeriod` es el valor del selector de la pantalla ('base' = plantilla).
+ * Alta o edición de un OKR. El semestre es obligatorio (año y semestre, nunca texto libre) y el peso es un entero de
+ * 1 a 100. `defaultPeriod` es el semestre seleccionado en la pestaña.
  */
 export function OkrDialog({
   positionId,
@@ -55,16 +57,14 @@ export function OkrDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const startPeriod = okr ? (okr.period ?? BASE_PERIOD) : defaultPeriod;
-  const initial = parsePeriod(startPeriod) ?? { year: currentYearMx(), semester: 1 as const };
-  const [isTemplate, setIsTemplate] = useState(startPeriod === BASE_PERIOD);
+  const initial = parsePeriod(okr ? okr.period : defaultPeriod) ?? { year: currentYearMx(), semester: 1 as const };
   const [objectiveCode, setObjectiveCode] = useState(okr?.objectiveCode ?? '');
   const [krCode, setKrCode] = useState(okr?.krCode ?? '');
   const [year, setYear] = useState(initial.year);
   const [semester, setSemester] = useState<1 | 2>(initial.semester);
   const [objective, setObjective] = useState(okr?.objective ?? '');
   const [keyResult, setKeyResult] = useState(okr?.keyResult ?? '');
-  const [weight, setWeight] = useState(okr?.weight != null ? String(okr.weight) : '');
+  const [weight, setWeight] = useState(okr ? String(okr.weight) : '');
   const [isActive, setIsActive] = useState(okr?.isActive ?? true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -75,18 +75,18 @@ export function OkrDialog({
     if (!objective.trim()) return setError('El objetivo es obligatorio.');
     if (!keyResult.trim()) return setError('El resultado clave es obligatorio.');
     if (objective.length > 2000 || keyResult.length > 2000) return setError('Los textos no pueden pasar de 2,000 caracteres.');
-    const w = weight.trim() === '' ? null : Number(weight);
-    if (w !== null && (!Number.isFinite(w) || w < 0 || w > 100)) return setError('El peso debe estar entre 0 y 100.');
+    const weightProblem = okrWeightError(weight);
+    if (weightProblem) return setError(weightProblem);
 
     setSaving(true);
     try {
       const payload = {
-        period: isTemplate ? null : makePeriod(year, semester),
+        period: makePeriod(year, semester),
         objectiveCode: objectiveCode.trim() || null,
         krCode: krCode.trim() || null,
         objective: objective.trim(),
         keyResult: keyResult.trim(),
-        weight: w,
+        weight: Number(weight),
         isActive,
       };
       const res = await fetch(okr ? `/api/hr/job-position-okrs/${okr.id}` : `/api/hr/job-positions/${positionId}/okrs`, {
@@ -105,20 +105,16 @@ export function OkrDialog({
   return (
     <Shell title={okr ? 'Editar OKR' : 'Nuevo OKR'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
       <div className="space-y-4">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input type="checkbox" checked={isTemplate} onChange={(e) => setIsTemplate(e.target.checked)} />
-          Plantilla (Sin Periodo): vale para cualquier semestre
-        </label>
-        <div className={`grid grid-cols-2 gap-4 ${isTemplate ? 'opacity-50' : ''}`}>
+        <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1">
             <label htmlFor="okr-year" className={LABEL}>Año</label>
-            <select id="okr-year" value={year} disabled={isTemplate} onChange={(e) => setYear(Number(e.target.value))} className={INPUT}>
+            <select id="okr-year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={INPUT}>
               {yearOptions(currentYearMx(), [initial.year]).map((y) => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
           <div className="flex flex-col gap-1">
             <label htmlFor="okr-sem" className={LABEL}>Semestre</label>
-            <select id="okr-sem" value={semester} disabled={isTemplate} onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)} className={INPUT}>
+            <select id="okr-sem" value={semester} onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)} className={INPUT}>
               <option value={1}>Semestre 1 (Ene–Jun)</option>
               <option value={2}>Semestre 2 (Jul–Dic)</option>
             </select>
@@ -144,8 +140,8 @@ export function OkrDialog({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="okr-w" className={LABEL}>Peso % (0–100, Opcional)</label>
-            <input id="okr-w" type="number" min={0} max={100} step="0.01" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} className={INPUT} />
+            <label htmlFor="okr-w" className={LABEL}>Peso % (Entero, 1–100)</label>
+            <input id="okr-w" type="number" min={1} max={100} step={1} inputMode="numeric" value={weight} onChange={(e) => setWeight(e.target.value)} className={INPUT} />
           </div>
           <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
@@ -154,6 +150,111 @@ export function OkrDialog({
         </div>
         {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
       </div>
+    </Shell>
+  );
+}
+
+/**
+ * Copia los OKRs activos de un semestre a otro. Muestra cuántos se copiarán (los activos del origen) y, al terminar, el
+ * resumen de copiados y omitidos (los que ya existían en el destino). Si la suma del destino pasara de 100 el API no
+ * copia nada y el mensaje se muestra aquí.
+ */
+export function CopyOkrsDialog({
+  positionId,
+  fromPeriod,
+  activeCount,
+  onClose,
+  onDone,
+}: {
+  positionId: string;
+  fromPeriod: string;
+  activeCount: number;
+  onClose: () => void;
+  /** Se llama al cerrar el resumen, para recargar los OKRs. */
+  onDone: () => void;
+}) {
+  const next = parsePeriod(nextPeriod(fromPeriod)) ?? { year: currentYearMx(), semester: 1 as const };
+  const [year, setYear] = useState(next.year);
+  const [semester, setSemester] = useState<1 | 2>(next.semester);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{ copied: number; skipped: number; toPeriod: string } | null>(null);
+  const toPeriod = makePeriod(year, semester);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (toPeriod === fromPeriod) return setError('El semestre de destino debe ser distinto al de origen.');
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/hr/job-positions/${positionId}/okrs/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromPeriod, toPeriod }),
+      });
+      if (!res.ok) throw new Error(await readError(res, 'No se pudieron copiar los OKRs.'));
+      setResult((await res.json()) as { copied: number; skipped: number; toPeriod: string });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudieron copiar los OKRs.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const close = () => (result ? onDone() : onClose());
+
+  return (
+    <Shell
+      title="Copiar OKRs a Otro Semestre"
+      onClose={close}
+      {...(result ? {} : { onSubmit: submit })}
+      footer={
+        result ? (
+          <button type="button" onClick={close} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800">Cerrar</button>
+        ) : (
+          <>
+            <button type="button" onClick={onClose} className="rounded-md border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-slate-300">Cancelar</button>
+            <button type="submit" disabled={saving || activeCount === 0} className="rounded-md bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60">
+              {saving ? 'Copiando…' : 'Copiar'}
+            </button>
+          </>
+        )
+      }
+    >
+      {result ? (
+        <div role="status" className="space-y-1 text-sm text-slate-700">
+          <p><strong>{result.copied}</strong> {result.copied === 1 ? 'OKR copiado' : 'OKRs copiados'} a <strong>{okrPeriodLabel(result.toPeriod)}</strong>.</p>
+          <p>{result.skipped} {result.skipped === 1 ? 'omitido' : 'omitidos'} (ya existían en el destino).</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-col gap-1">
+            <span className={LABEL}>Semestre de Origen</span>
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-navy">{okrPeriodLabel(fromPeriod)}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label htmlFor="copy-year" className={LABEL}>Año de Destino</label>
+              <select id="copy-year" value={year} onChange={(e) => setYear(Number(e.target.value))} className={INPUT}>
+                {yearOptions(currentYearMx(), [next.year]).map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="copy-sem" className={LABEL}>Semestre de Destino</label>
+              <select id="copy-sem" value={semester} onChange={(e) => setSemester(Number(e.target.value) as 1 | 2)} className={INPUT}>
+                <option value={1}>Semestre 1 (Ene–Jun)</option>
+                <option value={2}>Semestre 2 (Jul–Dic)</option>
+              </select>
+            </div>
+          </div>
+          <p className="text-sm text-slate-600">
+            {activeCount === 0
+              ? 'No hay OKRs activos en el semestre de origen para copiar.'
+              : <>Se copiarán <strong>{activeCount}</strong> {activeCount === 1 ? 'OKR activo' : 'OKRs activos'} de {okrPeriodLabel(fromPeriod)} a {okrPeriodLabel(toPeriod)}, con su peso. Los que ya existan en el destino se omiten, y si la suma pasara de 100 % no se copia nada.</>}
+          </p>
+          {error && <div role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</div>}
+        </div>
+      )}
     </Shell>
   );
 }
@@ -237,7 +338,7 @@ export function KpiDialog({
   );
 }
 
-/** Alta o edición de una actividad (responsabilidad) con su grupo, frecuencia y nota. */
+/** Alta o edición de una actividad dentro de una responsabilidad (el grupo), con su frecuencia y nota. */
 export function ActivityDialog({
   positionId,
   activity,
@@ -263,8 +364,8 @@ export function ActivityDialog({
     e.preventDefault();
     setError(null);
     const order = Number(groupOrder);
-    if (!Number.isInteger(order) || order < 1) return setError('El número de grupo debe ser un entero de 1 o más.');
-    if (!groupTitle.trim()) return setError('El título del grupo es obligatorio.');
+    if (!Number.isInteger(order) || order < 1) return setError('El número de la responsabilidad debe ser un entero de 1 o más.');
+    if (!groupTitle.trim()) return setError('El título de la responsabilidad es obligatorio.');
     if (!description.trim()) return setError('La descripción de la actividad es obligatoria.');
     setSaving(true);
     try {
@@ -283,15 +384,15 @@ export function ActivityDialog({
   };
 
   return (
-    <Shell title={activity ? 'Editar Actividad' : 'Nueva Actividad'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
+    <Shell title={activity ? 'Editar Actividad' : defaultGroup ? 'Nueva Actividad' : 'Nueva Responsabilidad'} onClose={onClose} onSubmit={submit} footer={<Actions onClose={onClose} saving={saving} />}>
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
           <div className="flex flex-col gap-1">
-            <label htmlFor="act-order" className={LABEL}>Grupo Núm.</label>
+            <label htmlFor="act-order" className={LABEL}>Responsabilidad Núm.</label>
             <input id="act-order" type="number" min={1} step={1} value={groupOrder} onChange={(e) => setGroupOrder(e.target.value)} className={INPUT} />
           </div>
           <div className="flex flex-col gap-1 sm:col-span-3">
-            <label htmlFor="act-group" className={LABEL}>Título del Grupo</label>
+            <label htmlFor="act-group" className={LABEL}>Título de la Responsabilidad</label>
             <input id="act-group" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={300} className={INPUT} />
           </div>
         </div>
@@ -301,7 +402,7 @@ export function ActivityDialog({
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
-            <label htmlFor="act-freq" className={LABEL}>Frecuencia</label>
+            <label htmlFor="act-freq" className={LABEL}>Frecuencia de la Actividad</label>
             <select id="act-freq" value={frequency} onChange={(e) => setFrequency(e.target.value)} className={INPUT}>
               <option value="">Sin frecuencia</option>
               {ACTIVITY_FREQUENCY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

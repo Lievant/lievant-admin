@@ -12,14 +12,21 @@ export type ActivityFrequency = (typeof ACTIVITY_FREQUENCIES)[number];
 
 export const VALIDATION_STATUSES = ['pendiente', 'validado', 'validado_con_ajustes', 'rechazado'] as const;
 export type ValidationStatus = (typeof VALIDATION_STATUSES)[number];
-/** Valor del parámetro de periodo que designa la plantilla (OKRs sin periodo). */
-export const BASE_PERIOD = 'base';
 export const PERIOD_REGEX = /^[0-9]{4}-S[12]$/;
+
+/** Competencia IA (nivel): se guarda sin acentos y en minúsculas; la pantalla muestra Básico / Intermedio / Avanzado. */
+export const AI_LEVELS = ['basico', 'intermedio', 'avanzado'] as const;
+export type AiLevel = (typeof AI_LEVELS)[number];
+export const AI_LEVEL_LABELS: Record<AiLevel, string> = { basico: 'Básico', intermedio: 'Intermedio', avanzado: 'Avanzado' };
 
 export const MAX_TITLE = 200;
 export const MAX_DESCRIPTION = 10000;
 export const MAX_OKR_TEXT = 2000;
 export const MAX_WEIGHT_SUM = 100;
+/** Peso de un OKR de puesto: entero de 1 a 100. */
+export const MIN_OKR_WEIGHT = 1;
+export const MAX_OKR_WEIGHT = 100;
+export const OKR_WEIGHT_MESSAGE = 'El peso debe ser un número entero entre 1 y 100';
 export const DEFAULT_LIMIT = 25;
 export const MAX_LIMIT = 100;
 
@@ -119,16 +126,31 @@ export function assertPeriod(period: string): void {
   }
 }
 
-/**
- * Periodo de un OKR de la Matriz: vacío/null/'base' = plantilla (NULL en la base); en otro caso AAAA-S1/S2.
- * `undefined` se conserva (no se pidió cambiar).
- */
-export function normalizeOkrPeriod(period: string | null | undefined): string | null | undefined {
-  if (period === undefined) return undefined;
+/** Semestre de un OKR de la Matriz: obligatorio, AAAA-S1 o AAAA-S2 (ya no existe la plantilla sin periodo). */
+export function requireOkrPeriod(period: string | null | undefined): string {
   const p = (period ?? '').trim();
-  if (p === '' || p === BASE_PERIOD) return null;
+  if (p === '') throw new BadRequestException('El semestre es obligatorio (AAAA-S1 o AAAA-S2)');
   assertPeriod(p);
   return p;
+}
+
+/** Peso de un OKR de puesto: obligatorio y entero de 1 a 100 (la columna sigue siendo DECIMAL(5,2)). */
+export function assertOkrWeight(weight: unknown): asserts weight is number {
+  if (typeof weight !== 'number' || !Number.isInteger(weight) || weight < MIN_OKR_WEIGHT || weight > MAX_OKR_WEIGHT) {
+    throw new BadRequestException(OKR_WEIGHT_MESSAGE);
+  }
+}
+
+/**
+ * Reparto equitativo con enteros de la capacidad entre `n` OKRs nuevos: base = floor(capacidad / n) y los primeros
+ * `capacidad % n` reciben una unidad más (100 entre 3 → 34, 33, 33). `null` si no alcanza 1 por OKR.
+ */
+export function splitWeights(capacity: number, n: number): number[] | null {
+  if (n <= 0) return [];
+  const base = Math.floor(capacity / n);
+  if (base < MIN_OKR_WEIGHT) return null;
+  const rest = capacity % n;
+  return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
 export function assertFrequency(freq: string | null | undefined): void {
@@ -139,8 +161,8 @@ export function assertFrequency(freq: string | null | undefined): void {
 }
 
 /** Suma de pesos (en centésimas, para no arrastrar errores de coma flotante). */
-export function sumWeights(weights: (number | null)[]): number {
-  return weights.reduce<number>((acc, w) => acc + Math.round((w ?? 0) * 100), 0) / 100;
+export function sumWeights(weights: number[]): number {
+  return weights.reduce<number>((acc, w) => acc + Math.round(w * 100), 0) / 100;
 }
 
 /**
@@ -148,8 +170,8 @@ export function sumWeights(weights: (number | null)[]): number {
  * de 100. `others` son los demás OKRs vivos del periodo (sin el que se guarda);
  * justo 100 es válido y los eliminados no cuentan (ni llegan aquí).
  */
-export function assertWeightSum(others: (number | null)[], own: number | null, ownActive: boolean): void {
-  if (!ownActive || own === null) return;
+export function assertWeightSum(others: number[], own: number, ownActive: boolean): void {
+  if (!ownActive) return;
   const total = sumWeights([...others, own]);
   if (total > MAX_WEIGHT_SUM) {
     throw new BadRequestException(
@@ -179,7 +201,7 @@ export function escapeLike(text: string): string {
 // ── Orden de la lista (en el servidor, sobre todos los registros) ────────────
 
 /** Columnas por las que se puede ordenar la lista: lista cerrada (nunca se interpola texto del usuario en el SQL). */
-export const POSITION_SORT_COLUMNS = ['code', 'title', 'division', 'area', 'level', 'seniority', 'plazas', 'validationStatus', 'status'] as const;
+export const POSITION_SORT_COLUMNS = ['code', 'title', 'division', 'area', 'level', 'seniority', 'plazas', 'vacancies', 'aiCompetencyLevel', 'validationStatus', 'status'] as const;
 export type PositionSortColumn = (typeof POSITION_SORT_COLUMNS)[number];
 export const SORT_DIRECTIONS = ['asc', 'desc'] as const;
 
@@ -199,6 +221,8 @@ const SORT_EXPRESSIONS: Record<PositionSortColumn, string> = {
   level: `(SELECT l.sort_order FROM catalogs.org_levels l WHERE upper(btrim(l.code)) = upper(btrim(p.level)) LIMIT 1)`,
   seniority: `CASE p.seniority WHEN 'junior' THEN 1 WHEN 'semi_senior' THEN 2 WHEN 'senior' THEN 3 END`,
   plazas: 'p.plazas',
+  vacancies: 'p.vacancies',
+  aiCompetencyLevel: `CASE p.ai_competency_level WHEN 'basico' THEN 1 WHEN 'intermedio' THEN 2 WHEN 'avanzado' THEN 3 END`,
   // Mismo orden lógico que ya usan los filtros de la pantalla.
   validationStatus: `CASE p.validation_status WHEN 'pendiente' THEN 1 WHEN 'validado' THEN 2 WHEN 'validado_con_ajustes' THEN 3 WHEN 'rechazado' THEN 4 END`,
   status: `CASE p.status WHEN 'activo' THEN 1 WHEN 'pendiente_aprobacion' THEN 2 WHEN 'inactivo' THEN 3 END`,
@@ -276,10 +300,14 @@ export interface PositionRow {
   seniority: string | null;
   reports_to_text: string | null;
   reports_to_employee_id: string | null;
+  reports_to_position_id: string | null;
+  supervises_text: string | null;
   reports_to_name?: string | null;
   reports_to_position?: string | null;
   reports_to_active?: boolean | null;
   plazas: number | null;
+  vacancies: number;
+  ai_competency_level: string | null;
   role_summary: string | null;
   position_objective: string | null;
   validation_points: string | null;
@@ -305,9 +333,14 @@ export interface PositionListItem {
   descriptionApproved: boolean;
   division: string | null;
   seniority: string | null;
+  /** Plazas ocupadas. */
   plazas: number | null;
-  /** `plazas = 0`: se muestra como "Vacante". */
+  /** Vacantes (separadas de las plazas ocupadas). */
+  vacancies: number;
+  /** Con vacantes: `vacancies > 0`. */
   vacant: boolean;
+  /** basico / intermedio / avanzado o null. */
+  aiCompetencyLevel: string | null;
   validationStatus: ValidationStatus;
 }
 
@@ -325,7 +358,9 @@ export function toListItem(r: PositionRow): PositionListItem {
     division: r.division,
     seniority: r.seniority,
     plazas: r.plazas,
-    vacant: r.plazas === 0,
+    vacancies: r.vacancies ?? 0,
+    vacant: (r.vacancies ?? 0) > 0,
+    aiCompetencyLevel: r.ai_competency_level ?? null,
     validationStatus: r.validation_status,
   };
 }
@@ -338,7 +373,7 @@ export interface OkrRow {
   kr_code: string | null;
   objective: string;
   key_result: string;
-  weight: string | number | null;
+  weight: string | number;
   sort_order: number;
   is_active: boolean;
 }
@@ -346,13 +381,14 @@ export interface OkrRow {
 export interface OkrView {
   id: string;
   jobPositionId: string;
-  /** null = plantilla (vale para cualquier semestre). */
-  period: string | null;
+  /** Semestre AAAA-S1 / AAAA-S2. */
+  period: string;
   objectiveCode: string | null;
   krCode: string | null;
   objective: string;
   keyResult: string;
-  weight: number | null;
+  /** Entero de 1 a 100. */
+  weight: number;
   sortOrder: number;
   isActive: boolean;
 }
@@ -361,12 +397,12 @@ export function toOkrView(r: OkrRow): OkrView {
   return {
     id: r.id,
     jobPositionId: r.job_position_id,
-    period: r.period,
+    period: r.period as string,
     objectiveCode: r.objective_code,
     krCode: r.kr_code,
     objective: r.objective,
     keyResult: r.key_result,
-    weight: r.weight === null ? null : Number(r.weight),
+    weight: Number(r.weight),
     sortOrder: r.sort_order,
     isActive: r.is_active,
   };
@@ -455,7 +491,55 @@ export function applyValidationChange(current: ValidationState, next: Validation
   return { status: next, by: actorId, at: now };
 }
 
-export interface PositionDetail extends PositionListItem {
+/** Un puesto de la misma matriz, tal como se enlaza desde «Reporta a» y «Supervisa a». */
+export interface PositionRef {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+export interface PositionEmployee {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+  status: string;
+}
+
+/** Relaciones del puesto y colaboradores que lo tienen asignado (solo datos básicos). */
+export interface PositionRelations {
+  reportsToPosition: PositionRef | null;
+  supervises: PositionRef[];
+  supervisedBy: PositionRef[];
+  directReports: PositionRef[];
+  employees: PositionEmployee[];
+  employeesCount: number;
+}
+
+export const EMPTY_RELATIONS: PositionRelations = {
+  reportsToPosition: null,
+  supervises: [],
+  supervisedBy: [],
+  directReports: [],
+  employees: [],
+  employeesCount: 0,
+};
+
+export interface PositionRefRow {
+  id: string;
+  code: string;
+  title: string;
+  area: string;
+  level: string | null;
+}
+
+export const toPositionRef = (r: PositionRefRow): PositionRef => ({ id: r.id, code: r.code, title: r.title, area: r.area, level: r.level });
+
+export interface PositionDetail extends PositionListItem, PositionRelations {
+  /** Texto original de la celda «Supervisa a» del Excel (solo lectura). */
+  supervisesText: string | null;
   /** Texto del nivel como venía en el Excel (solo lectura). */
   levelOriginal: string | null;
   /** Texto de «Reporta a» que venía del Excel (solo lectura en la pantalla). */
@@ -478,9 +562,11 @@ export interface PositionDetail extends PositionListItem {
   activities: ActivityView[];
 }
 
-export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = []): PositionDetail {
+export function toDetail(r: PositionRow, okrs: OkrView[], kpis: KpiView[], activities: ActivityView[] = [], relations: PositionRelations = EMPTY_RELATIONS): PositionDetail {
   return {
     ...toListItem(r),
+    ...relations,
+    supervisesText: r.supervises_text ?? null,
     levelOriginal: r.level_original,
     reportsTo: r.reports_to_text,
     reportsToEmployee: r.reports_to_employee_id

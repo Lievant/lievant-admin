@@ -75,7 +75,7 @@ describe('Matriz de Puestos (web) · ciclo y URL del orden', () => {
 
   it('las columnas de la tabla son exactamente las que acepta el API, y ninguna es de acciones', () => {
     expect(SORT_COLUMNS.map((c) => c.key)).toEqual([...POSITION_SORT_COLUMNS]);
-    expect(SORT_COLUMNS.map((c) => c.label)).toEqual(['Código', 'Puesto', 'División', 'Área', 'Nivel', 'Categoría', 'Plazas', 'Validación', 'Estado']);
+    expect(SORT_COLUMNS.map((c) => c.label)).toEqual(['Código', 'Puesto', 'División', 'Área', 'Nivel', 'Categoría', 'Plazas Ocupadas', 'Vacantes', 'Competencia IA', 'Validación', 'Estado']);
   });
 
   it('el orden se escribe y se lee de la URL (sortBy y sortDir)', () => {
