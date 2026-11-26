@@ -6,6 +6,7 @@ import { EmployeeStatus } from '../employees/constants/employee-status.constant'
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
@@ -614,6 +615,70 @@ export class HelpdeskService {
     }
 
     return saved;
+  }
+
+  /**
+   * Cambia la categoría y la subcategoría (solo TD; el controlador lo valida).
+   *
+   * - La categoría debe existir y estar activa; la subcategoría, ser del
+   *   catálogo activo de esa categoría (o ninguna).
+   * - Prioridad: si era igual a la prioridad base de la categoría anterior, se
+   *   recalcula con la de la nueva. Si alguien la había cambiado a mano, se deja.
+   * - Historial: una fila 'categoria_cambiada' (valor anterior y nuevo) y, si se
+   *   recalculó, otra 'actualizado.priority'. Todo en una transacción.
+   * - No notifica al solicitante. Se permite en tickets cerrados, igual que el
+   *   resto de la edición de TD (PATCH /tickets/:id no lo impide).
+   */
+  async changeCategory(id: string, dto: ChangeTicketCategoryDto, user: User) {
+    const ticket = await this.getOrFail(id);
+    const newSlug = dto.category.trim();
+    const newSub = dto.subcategory?.trim() || null;
+
+    const [oldCategory, newCategory] = await Promise.all([
+      this.categoriesRepo.findOne({ where: { slug: ticket.category } }),
+      this.categoriesRepo.findOne({ where: { slug: newSlug } }),
+    ]);
+    if (!newCategory || !newCategory.isActive) {
+      throw new BadRequestException('La categoría elegida no existe o está desactivada.');
+    }
+    if (newSub) {
+      const sub = await this.subcategoriesRepo.findOne({ where: { categorySlug: newSlug, name: newSub, isActive: true } });
+      if (!sub) throw new BadRequestException(`"${newSub}" no es una subcategoría activa de ${newCategory.name}.`);
+    }
+    if (ticket.category === newSlug && (ticket.subcategory ?? null) === newSub) return ticket;
+
+    const label = (name: string, sub: string | null) => (sub ? `${name} / ${sub}` : name);
+    const oldLabel = label(oldCategory?.name ?? ticket.category, ticket.subcategory);
+    const newLabel = label(newCategory.name, newSub);
+
+    const oldPriority = ticket.priority;
+    const recalc =
+      ticket.category !== newSlug && oldCategory?.priorityBase != null && oldPriority === oldCategory.priorityBase;
+    const newPriority = recalc ? (newCategory.priorityBase ?? 'P3') : oldPriority;
+
+    ticket.category = newSlug;
+    ticket.subcategory = newSub;
+    ticket.priority = newPriority;
+
+    return this.ticketsRepo.manager.transaction(async (m) => {
+      const saved = await m.getRepository(Ticket).save(ticket);
+      const history = m.getRepository(TicketHistory);
+      const entry = (action: string, oldValue: string | null, newValue: string | null, notes: string | null) =>
+        history.create({ ticketId: id, userId: user.id, userName: user.name, action, oldValue, newValue, notes });
+      const rows = [entry('categoria_cambiada', oldLabel, newLabel, null)];
+      if (recalc && newPriority !== oldPriority) {
+        rows.push(
+          entry(
+            'actualizado.priority',
+            oldPriority,
+            newPriority,
+            `Recalculada por cambio de categoría (prioridad base de ${newCategory.name}).`,
+          ),
+        );
+      }
+      await history.save(rows);
+      return saved;
+    });
   }
 
   /**

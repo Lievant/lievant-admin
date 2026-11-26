@@ -16,6 +16,7 @@ import {
   updateStatusAction,
   updateTicketAction,
 } from './actions';
+import { CategoryEditor } from './category-editor';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -54,6 +55,7 @@ const ACTION_LABELS: Record<string, string> = {
   'actualizado.solution': 'Solución registrada',
   'actualizado.internalNotes': 'Nota interna',
   'actualizado.collaboratorConfirmation': 'Confirmación de resolución',
+  categoria_cambiada: 'Categoría cambiada',
 };
 
 function slaInfo(ticket: TicketDetail): { pct: number; label: string; color: string } | null {
@@ -433,6 +435,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                   Actualizar estado
                 </button>
               </div>
+
+              {/* Categoría y subcategoría */}
+              <CategoryEditor ticketId={ticket.id} category={ticket.category} subcategory={ticket.subcategory} />
 
               {/* Prioridad */}
               <div>

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ForbiddenException,
   Controller,
   DefaultValuePipe,
   Delete,
@@ -20,6 +21,7 @@ import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
@@ -149,6 +151,17 @@ export class HelpdeskController {
     @CurrentUser() user: User,
   ) {
     return this.service.updateTicket(id, dto, user);
+  }
+
+  /** Solo personal de TD (mismo criterio que abrir en nombre de otro). El solicitante recibe 403. */
+  @Patch('tickets/:id/category')
+  changeCategory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTicketCategoryDto,
+    @CurrentUser() user: User,
+  ) {
+    if (!isTdUser(user)) throw new ForbiddenException('Solo el personal de TD puede cambiar la categoría.');
+    return this.service.changeCategory(id, dto, user);
   }
 
   @Patch('tickets/:id/status')
