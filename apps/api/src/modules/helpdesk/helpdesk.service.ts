@@ -521,6 +521,9 @@ export class HelpdeskService {
 
     await this.ticketsRepo.save(ticket);
     await this.addHistory(id, user, 'estado_cambiado', oldStatus, dto.status, dto.notes);
+    if (dto.status === 'cerrado' && oldStatus !== 'cerrado') {
+      await this.notifyClosed(ticket, user);
+    }
     return ticket;
   }
 
@@ -954,6 +957,36 @@ export class HelpdeskService {
         `Categoría: ${ticket.category} · Prioridad: ${prioridad}${nota}`,
       actionUrl: `/transformacion/tickets/${ticket.id}`,
     });
+  }
+
+  /**
+   * Avisa al solicitante real del ticket (requester_id: la persona elegida cuando
+   * TD lo abrió en su nombre, no el técnico) que su ticket se cerró. Sin
+   * solicitante con cuenta no hay a quién avisar. Nunca lanza: el ticket ya
+   * quedó cerrado.
+   */
+  private async notifyClosed(ticket: Ticket, actor: User): Promise<void> {
+    if (!ticket.requesterId) return;
+    try {
+      await this.notificationsService.create({
+        recipientId: ticket.requesterId,
+        senderId: actor.id,
+        senderName: actor.name,
+        title: `Ticket cerrado — ${ticket.displayId}`,
+        message: `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI.`,
+        type: 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        actionUrl: '/herramientas/soporte',
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar el cierre del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**

@@ -7,6 +7,7 @@ import {
   type ListTicketsParams,
 } from '@/lib/api';
 import { TicketsScreen } from './tickets-screen';
+import { isTdFromMe } from '@/lib/td-user';
 
 async function safe<T>(p: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
@@ -56,10 +57,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   ]);
   const currentUser = currentUserResult.data;
 
-  const isTd =
-    currentUser?.roles.some((r) => r.name === 'SUPER_ADMIN' || r.name === 'TECNICO_TD') ||
-    currentUser?.permissions.some((p) => p.module === 'tickets.gestion') ||
-    false;
+  const isTd = isTdFromMe(currentUser);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">

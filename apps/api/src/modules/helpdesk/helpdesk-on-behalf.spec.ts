@@ -4,6 +4,7 @@ import { InventoryController } from '../inventory/inventory.controller';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { HelpdeskService } from './helpdesk.service';
 import { isTdUser } from './td-user.util';
+import { isTdFromMe } from '../../../../web/src/lib/td-user';
 
 const TD_USER = {
   id: 'u-td',
@@ -201,5 +202,97 @@ describe('Equipos del formulario de ticket (GET /inventory/equipment/search)', (
       await ctl.searchEquipment(u, undefined, 'emp-otro');
       expect(calls[0]).toEqual({ employeeId: 'emp-otro' });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Solicitante real: lista de "Mis tickets" y aviso de cierre
+// ---------------------------------------------------------------------------
+
+/** QueryBuilder mínimo sobre un arreglo: solo entiende el filtro por solicitante y deleted_at. */
+function listingRepo(rows: any[]) {
+  return {
+    createQueryBuilder: () => {
+      const filters: Array<(t: any) => boolean> = [];
+      const qb: any = {
+        where: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        take: () => qb,
+        andWhere: (sql: string, params?: Record<string, unknown>) => {
+          if (sql.includes('requester_id = :uid')) filters.push((t) => t.requesterId === params!.uid);
+          return qb;
+        },
+        getMany: async () => rows.filter((t) => filters.every((f) => f(t))),
+      };
+      return qb;
+    },
+  };
+}
+
+describe('Tickets · el abierto por TD es del solicitante', () => {
+  it('técnico abre a nombre de X: sale en "Mis tickets" de X y no en la del técnico', async () => {
+    const { service, saved } = setup();
+    await service.create(behalf, TD_USER, true);
+    const stored = saved.map((t) => ({ ...t, requestedAt: new Date('2026-11-26T10:00:00Z') }));
+    (service as any).ticketsRepo = { ...(service as any).ticketsRepo, ...listingRepo(stored) };
+    (service as any).assigneesRepo = { findBy: async () => [] };
+
+    const deX = await service.findMyTickets(TARGET_USER, {} as any);
+    const delTecnico = await service.findMyTickets(TD_USER.id, {} as any);
+    expect(deX.data.map((t: any) => t.id)).toEqual(['tk-1']);
+    expect(delTecnico.data).toHaveLength(0);
+  });
+
+  it('un usuario normal que manda otro solicitante no lo logra: 403 y no se guarda nada', async () => {
+    const { service, saved } = setup();
+    await expect(service.create(behalf, NORMAL_USER, false)).rejects.toBeInstanceOf(ForbiddenException);
+    // Tampoco por los campos de texto heredados: el solicitante sigue siendo la sesión.
+    await service.create({ ...base, openedByTd: true, openedOnBehalfOf: 'Otra Persona' }, NORMAL_USER, false);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({ requesterId: 'u-normal', openedByTd: false, openedOnBehalfOf: null });
+  });
+
+  it('el aviso de cierre llega a X (el solicitante), no al técnico que lo abrió ni al que lo cierra', async () => {
+    const service = Object.create(HelpdeskService.prototype) as any;
+    const ticket = {
+      id: 'tk-1', displayId: 'TIC-2026-010', requesterId: TARGET_USER, requesterName: 'TEST-Titular Dos',
+      status: 'en_atencion', closedAt: null, requestedAt: new Date('2026-11-26T08:00:00Z'), timesReopened: 0,
+    };
+    service.ticketsRepo = { findOne: async () => ticket, save: async (t: any) => t };
+    service.historyRepo = { create: (x: any) => x, save: async () => undefined };
+    const sent: any[] = [];
+    service.notificationsService = { create: async (n: any) => sent.push(n) };
+    service.logger = { error: () => undefined };
+
+    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ recipientId: TARGET_USER, module: 'helpdesk', entityId: 'tk-1' });
+    expect(sent[0].recipientId).not.toBe(TD_USER.id);
+
+    // Volver a guardar "cerrado" no repite el aviso.
+    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER);
+    expect(sent).toHaveLength(1);
+  });
+
+  it('un fallo del aviso de cierre no impide cerrar', async () => {
+    const service = Object.create(HelpdeskService.prototype) as any;
+    const ticket = { id: 'tk-1', displayId: 'TIC-2026-011', requesterId: TARGET_USER, status: 'resuelto', closedAt: null, requestedAt: new Date() };
+    service.ticketsRepo = { findOne: async () => ticket, save: async (t: any) => t };
+    service.historyRepo = { create: (x: any) => x, save: async () => undefined };
+    service.notificationsService = { create: async () => { throw new Error('socket caído'); } };
+    service.logger = { error: jest.fn() };
+    await expect(service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER)).resolves.toMatchObject({ status: 'cerrado' });
+    expect(service.logger.error).toHaveBeenCalled();
+  });
+});
+
+describe('Criterio TD en la interfaz (isTdFromMe) = criterio del API', () => {
+  it('SUPER_ADMIN o un permiso de tickets.gestion; el nombre de rol TECNICO_TD solo no basta', () => {
+    expect(isTdFromMe({ roles: [{ name: 'SUPER_ADMIN' }], permissions: [] })).toBe(true);
+    expect(isTdFromMe({ roles: [], permissions: [{ module: 'tickets.gestion' }] })).toBe(true);
+    expect(isTdFromMe({ roles: [{ name: 'TECNICO_TD' }], permissions: [] })).toBe(false);
+    expect(isTdFromMe({ roles: [{ name: 'COLABORADOR' }], permissions: [{ module: 'tickets' }] })).toBe(false);
+    expect(isTdFromMe(null)).toBe(false);
   });
 });
