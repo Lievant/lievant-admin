@@ -23,6 +23,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateTicketSurveyDto } from './dto/create-ticket-survey.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -162,6 +163,22 @@ export class HelpdeskController {
   ) {
     if (!isTdUser(user)) throw new ForbiddenException('Solo el personal de TD puede cambiar la categoría.');
     return this.service.changeCategory(id, dto, user);
+  }
+
+  /** Encuesta de satisfacción: solo el solicitante de un ticket cerrado, una vez. */
+  @Post('tickets/:id/survey')
+  answerSurvey(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateTicketSurveyDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.answerSurvey(id, dto, user);
+  }
+
+  /** La ven el solicitante y TD; nadie más. */
+  @Get('tickets/:id/survey')
+  getSurvey(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.getSurvey(id, user, isTdUser(user));
   }
 
   @Patch('tickets/:id/status')

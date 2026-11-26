@@ -2044,6 +2044,25 @@ export interface MyTicketDetail {
   equipmentId: string | null;
   /** Notas de solución del técnico. */
   solution: string | null;
+  /** Respuesta de la encuesta de satisfacción, si ya la hay. */
+  survey: TicketSurveyItem | null;
+  /** Cerrado, con invitación y sin respuesta: se muestra "¿Cómo fue la atención?". */
+  canAnswerSurvey: boolean;
+}
+
+export type TicketSurveyRating = 'feliz' | 'normal' | 'triste' | 'enojado';
+
+export interface TicketSurveyItem {
+  rating: TicketSurveyRating;
+  comment: string | null;
+  answeredByName: string;
+  createdAt: string;
+}
+
+/** GET /helpdesk/tickets/:id/survey (solicitante o TD). */
+export interface TicketSurveyState {
+  survey: TicketSurveyItem | null;
+  canAnswerSurvey: boolean;
 }
 
 export interface TicketDetail extends TicketSummary {

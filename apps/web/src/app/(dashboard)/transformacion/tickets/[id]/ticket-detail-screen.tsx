@@ -17,6 +17,7 @@ import {
   updateTicketAction,
 } from './actions';
 import { CategoryEditor } from './category-editor';
+import { SurveyPanel } from './survey-panel';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -56,6 +57,7 @@ const ACTION_LABELS: Record<string, string> = {
   'actualizado.internalNotes': 'Nota interna',
   'actualizado.collaboratorConfirmation': 'Confirmación de resolución',
   categoria_cambiada: 'Categoría cambiada',
+  encuesta_solicitada: 'Encuesta de satisfacción enviada',
 };
 
 function slaInfo(ticket: TicketDetail): { pct: number; label: string; color: string } | null {
@@ -394,6 +396,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
               <p className="mt-1 text-right text-xs text-slate-400">{sla.pct.toFixed(0)}%</p>
             </div>
           )}
+
+          {/* Encuesta de satisfacción (solo TD; el solicitante la ve en Mis tickets) */}
+          {isTd && <SurveyPanel ticketId={ticket.id} />}
 
           {/* ── Panel de acciones TD ── */}
           {isTd && (

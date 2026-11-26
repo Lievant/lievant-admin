@@ -261,7 +261,8 @@ describe('Tickets · el abierto por TD es del solicitante', () => {
       status: 'en_atencion', closedAt: null, requestedAt: new Date('2026-11-26T08:00:00Z'), timesReopened: 0,
     };
     service.ticketsRepo = { findOne: async () => ticket, save: async (t: any) => t };
-    service.historyRepo = { create: (x: any) => x, save: async () => undefined };
+    service.historyRepo = { create: (x: any) => x, save: async () => undefined, count: async () => 0 };
+    service.surveysRepo = { count: async () => 0 };
     const sent: any[] = [];
     service.notificationsService = { create: async (n: any) => sent.push(n) };
     service.logger = { error: () => undefined };
@@ -280,7 +281,8 @@ describe('Tickets · el abierto por TD es del solicitante', () => {
     const service = Object.create(HelpdeskService.prototype) as any;
     const ticket = { id: 'tk-1', displayId: 'TIC-2026-011', requesterId: TARGET_USER, status: 'resuelto', closedAt: null, requestedAt: new Date() };
     service.ticketsRepo = { findOne: async () => ticket, save: async (t: any) => t };
-    service.historyRepo = { create: (x: any) => x, save: async () => undefined };
+    service.historyRepo = { create: (x: any) => x, save: async () => undefined, count: async () => 0 };
+    service.surveysRepo = { count: async () => 0 };
     service.notificationsService = { create: async () => { throw new Error('socket caído'); } };
     service.logger = { error: jest.fn() };
     await expect(service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER)).resolves.toMatchObject({ status: 'cerrado' });

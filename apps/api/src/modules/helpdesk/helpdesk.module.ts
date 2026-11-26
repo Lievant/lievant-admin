@@ -9,6 +9,7 @@ import { Ticket } from './entities/ticket.entity';
 import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
+import { TicketSurvey } from './entities/ticket-survey.entity';
 import { HelpdeskStorageService } from './helpdesk-storage.service';
 import { HelpdeskController } from './helpdesk.controller';
 import { HelpdeskService } from './helpdesk.service';
@@ -20,6 +21,7 @@ import { HelpdeskService } from './helpdesk.service';
       TicketAssignee,
       TicketHistory,
       TicketAttachment,
+      TicketSurvey,
       HelpdeskCategory,
       HelpdeskSubcategory,
       EmployeeRecord,

@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
@@ -8,6 +15,7 @@ import { NotificationFlowsService } from '../notifications/notification-flows.se
 import { NotificationsService } from '../notifications/notifications.service';
 import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateTicketSurveyDto } from './dto/create-ticket-survey.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto, UNASSIGNED_FILTER } from './dto/query-tickets.dto';
@@ -20,6 +28,7 @@ import { Ticket } from './entities/ticket.entity';
 import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
+import { TicketSurvey } from './entities/ticket-survey.entity';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 // Seconds per SLA hour-limit (for inline CASE expression)
@@ -31,6 +40,21 @@ const PRIORITY_LABELS: Record<string, string> = {
   high: 'P2',
   medium: 'P3',
   low: 'P4',
+};
+
+/**
+ * Marca en el historial de que al cerrar se invitó al solicitante a calificar.
+ * Solo los tickets con esta marca aceptan encuesta: así no hay encuesta
+ * retroactiva para los cerrados antes de este cambio, ni para los que la
+ * Auditoría de Equipos crea ya cerrados (createClosedTicket no pasa por aquí).
+ */
+const SURVEY_REQUESTED = 'encuesta_solicitada';
+
+const SURVEY_RATING_LABELS: Record<string, string> = {
+  feliz: 'Feliz',
+  normal: 'Normal',
+  triste: 'Triste',
+  enojado: 'Enojado',
 };
 
 function resolvePriority(value: string | undefined, categoryBase: string | null): string {
@@ -56,6 +80,7 @@ export class HelpdeskService {
     private readonly storage: HelpdeskStorageService,
     private readonly notificationsService: NotificationsService,
     private readonly notificationFlows: NotificationFlowsService,
+    @InjectRepository(TicketSurvey) private readonly surveysRepo: Repository<TicketSurvey>,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -260,6 +285,7 @@ export class HelpdeskService {
       assigneeName: assignee?.name ?? null,
       equipmentId: ticket.equipmentId,
       solution: ticket.solution,
+      ...(await this.surveyState(ticket, userId)),
     };
   }
 
@@ -577,7 +603,8 @@ export class HelpdeskService {
     await this.ticketsRepo.save(ticket);
     await this.addHistory(id, user, 'estado_cambiado', oldStatus, dto.status, dto.notes);
     if (dto.status === 'cerrado' && oldStatus !== 'cerrado') {
-      await this.notifyClosed(ticket, user);
+      const invite = await this.markSurveyRequested(ticket, user);
+      await this.notifyClosed(ticket, user, invite);
     }
     return ticket;
   }
@@ -615,6 +642,118 @@ export class HelpdeskService {
     }
 
     return saved;
+  }
+
+  // -----------------------------------------------------------------------
+  // Encuesta de satisfacción
+  // -----------------------------------------------------------------------
+
+  /**
+   * Al cerrar, deja la marca de invitación (una sola vez por ticket) si hay un
+   * solicitante con cuenta que pueda responder. Devuelve si hay que invitar.
+   */
+  private async markSurveyRequested(ticket: Ticket, actor: User): Promise<boolean> {
+    if (!ticket.requesterId) return false;
+    try {
+      const already = await this.historyRepo.count({ where: { ticketId: ticket.id, action: SURVEY_REQUESTED } });
+      if (already > 0) {
+        // Reabierto y vuelto a cerrar: se invita otra vez solo si aún no respondió.
+        return !(await this.surveysRepo.count({ where: { ticketId: ticket.id } }));
+      }
+      await this.addHistory(ticket.id, actor, SURVEY_REQUESTED, null, null, 'Se invitó al solicitante a calificar la atención.');
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo registrar la invitación a la encuesta del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  private async surveyState(ticket: Ticket, userId: string) {
+    const [survey, invited] = await Promise.all([
+      this.surveysRepo.findOne({ where: { ticketId: ticket.id } }),
+      this.historyRepo.count({ where: { ticketId: ticket.id, action: SURVEY_REQUESTED } }),
+    ]);
+    return {
+      survey: survey ? toSurveyItem(survey) : null,
+      canAnswerSurvey: !survey && invited > 0 && ticket.status === 'cerrado' && ticket.requesterId === userId,
+    };
+  }
+
+  /**
+   * Respuesta del solicitante. Reglas: solo el solicitante (403); ticket
+   * cerrado (400) y con invitación (400: no hay encuesta retroactiva ni para los
+   * de Auditoría); una sola vez (409). Guardada la respuesta, avisa al
+   * coordinador por el flujo `helpdesk.encuesta_respondida`; si el aviso falla,
+   * la respuesta se queda.
+   */
+  async answerSurvey(id: string, dto: CreateTicketSurveyDto, user: User) {
+    const ticket = await this.getOrFail(id);
+    if (ticket.deletedAt) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    if (ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo quien solicitó el ticket puede calificar la atención.');
+    }
+    if (ticket.status !== 'cerrado') {
+      throw new BadRequestException('Solo se puede calificar un ticket cerrado.');
+    }
+    const invited = await this.historyRepo.count({ where: { ticketId: id, action: SURVEY_REQUESTED } });
+    if (!invited) throw new BadRequestException('Este ticket no tiene encuesta de satisfacción.');
+    if (await this.surveysRepo.count({ where: { ticketId: id } })) {
+      throw new ConflictException('Ya calificaste la atención de este ticket.');
+    }
+
+    const employee = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
+    const comment = dto.comment?.trim() || null;
+    let saved: TicketSurvey;
+    try {
+      saved = await this.surveysRepo.save(
+        this.surveysRepo.create({
+          ticketId: id,
+          rating: dto.rating,
+          comment,
+          answeredBy: user.id,
+          answeredByName: (employee?.fullName || user.name || user.email || 'Desconocido').slice(0, 200),
+        }),
+      );
+    } catch (err) {
+      // Dos envíos a la vez: el UNIQUE(ticket_id) deja pasar solo uno.
+      if ((err as { code?: string }).code === '23505') {
+        throw new ConflictException('Ya calificaste la atención de este ticket.');
+      }
+      throw err;
+    }
+
+    try {
+      await this.notificationFlows.notify('helpdesk', 'encuesta_respondida', {
+        requesterId: user.id,
+        actorId: user.id,
+        entityId: ticket.id,
+        entityType: 'ticket',
+        senderName: saved.answeredByName,
+        title: `Encuesta de satisfacción — ${ticket.displayId}`,
+        message:
+          `${saved.answeredByName} calificó la atención del ticket ${ticket.displayId}: ${SURVEY_RATING_LABELS[saved.rating]}.` +
+          (comment ? `\nObservaciones: ${comment}` : ''),
+        actionUrl: `/transformacion/tickets/${ticket.id}`,
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar la encuesta del ticket ${ticket.displayId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return toSurveyItem(saved);
+  }
+
+  /** La ven el solicitante y TD; nadie más (403). */
+  async getSurvey(id: string, user: User, isTd: boolean) {
+    const ticket = await this.getOrFail(id);
+    if (!isTd && ticket.requesterId !== user.id) {
+      throw new ForbiddenException('No tienes acceso a la encuesta de este ticket.');
+    }
+    return this.surveyState(ticket, user.id);
   }
 
   /**
@@ -1084,7 +1223,7 @@ export class HelpdeskService {
    * solicitante con cuenta no hay a quién avisar. Nunca lanza: el ticket ya
    * quedó cerrado.
    */
-  private async notifyClosed(ticket: Ticket, actor: User): Promise<void> {
+  private async notifyClosed(ticket: Ticket, actor: User, inviteSurvey: boolean): Promise<void> {
     if (!ticket.requesterId) return;
     try {
       await this.notificationsService.create({
@@ -1092,12 +1231,14 @@ export class HelpdeskService {
         senderId: actor.id,
         senderName: actor.name,
         title: `Ticket cerrado — ${ticket.displayId}`,
-        message: `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI.`,
+        message: inviteSurvey
+          ? `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI. ¿Cómo fue la atención? Califícala desde el detalle del ticket.`
+          : `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI.`,
         type: 'informativa',
         module: 'helpdesk',
         entityId: ticket.id,
         entityType: 'ticket',
-        actionUrl: '/herramientas/soporte',
+        actionUrl: `/herramientas/soporte?ticket=${ticket.id}`,
       });
     } catch (err) {
       this.logger.error(
@@ -1195,4 +1336,13 @@ export class HelpdeskService {
       }),
     );
   }
+}
+
+function toSurveyItem(s: TicketSurvey) {
+  return {
+    rating: s.rating,
+    comment: s.comment,
+    answeredByName: s.answeredByName,
+    createdAt: s.createdAt,
+  };
 }

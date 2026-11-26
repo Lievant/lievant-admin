@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { MyTicketDetail } from '@/lib/api';
 import { attentionTime, slaStatus } from './ticket-sla';
+import { SurveyAnswer, SurveyForm } from './survey-section';
 import { PRIORITY_STYLES, SLA_TONE_STYLES, STATUS_LABELS, STATUS_STYLES, formatDateTime } from './ticket-display';
 
 interface Props {
@@ -114,6 +115,22 @@ export function TicketDetailModal({ ticketId, onClose }: Props) {
                   <p className="text-sm text-slate-400">El técnico aún no registra la solución.</p>
                 )}
               </section>
+
+              {ticket.survey ? (
+                <section>
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Tu calificación</h3>
+                  <SurveyAnswer survey={ticket.survey} />
+                </section>
+              ) : (
+                ticket.canAnswerSurvey && (
+                  <section className="rounded-lg border border-slate-200 p-4">
+                    <SurveyForm
+                      ticketId={ticket.id}
+                      onAnswered={(survey) => setTicket({ ...ticket, survey, canAnswerSurvey: false })}
+                    />
+                  </section>
+                )
+              )}
             </div>
           )}
         </div>

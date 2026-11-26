@@ -41,6 +41,8 @@ function setup(row: any) {
     find: async () => [{ slug: 'equipos', name: 'Equipos', slaResolutionHours: 8 }],
   };
   service.assigneesRepo = { findOne: async () => ({ id: 'as-1', name: 'Técnico Uno' }) };
+  service.surveysRepo = { findOne: async () => null };
+  service.historyRepo = { count: async () => 1 };
   return service as HelpdeskService;
 }
 
@@ -48,6 +50,8 @@ describe('GET /helpdesk/tickets/my/:id', () => {
   it('el solicitante ve su ticket con notas de solución, técnico, equipo y fechas', async () => {
     const detail = await setup(ticket()).findMyTicketDetail(OWNER, 'tk-1');
     expect(detail).toMatchObject({
+      survey: null,
+      canAnswerSurvey: true,
       displayId: 'TIC-2026-020',
       categoryName: 'Equipos',
       subcategory: 'Laptop',
