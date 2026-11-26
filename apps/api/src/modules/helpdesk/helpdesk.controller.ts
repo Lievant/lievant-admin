@@ -119,6 +119,12 @@ export class HelpdeskController {
     return this.service.findMyTickets(user.id, query);
   }
 
+  /** Detalle para "Mis tickets": solo el solicitante; sin notas internas ni diagnóstico. */
+  @Get('tickets/my/:id')
+  getMyTicket(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.findMyTicketDetail(user.id, id);
+  }
+
   @Get('tickets')
   findAll(@Query() query: QueryTicketsDto, @CurrentUser() user: User) {
     return this.service.findAll(query, isTdUser(user), user.id);

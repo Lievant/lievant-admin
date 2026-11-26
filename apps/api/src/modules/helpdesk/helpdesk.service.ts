@@ -209,8 +209,62 @@ export class HelpdeskService {
     };
   }
 
+  /**
+   * "Mis tickets": los del solicitante, con el nombre de la categoría y su meta
+   * de resolución (helpdesk.categories.sla_resolution_hours) para calcular el
+   * SLA en pantalla.
+   */
   async findMyTickets(userId: string, query: QueryTicketsDto) {
-    return this.findAll(query, false, userId);
+    const page = await this.findAll(query, false, userId);
+    const categories = await this.categoryMap();
+    return {
+      ...page,
+      data: page.data.map((t) => ({
+        ...t,
+        categoryName: categories.get(t.category)?.name ?? null,
+        slaResolutionHours: categories.get(t.category)?.slaResolutionHours ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Detalle de un ticket propio para "Mis tickets". Solo el solicitante: de otro
+   * (o inexistente) responde 404, sin decir si existe. Devuelve una lista
+   * cerrada de campos: las notas de solución sí; el diagnóstico, las notas
+   * internas y el historial (que también las contiene) no.
+   */
+  async findMyTicketDetail(userId: string, id: string) {
+    const ticket = await this.ticketsRepo.findOne({ where: { id } });
+    if (!ticket || ticket.deletedAt || ticket.requesterId !== userId) {
+      throw new NotFoundException('Ticket no encontrado');
+    }
+    const [categories, assignee] = await Promise.all([
+      this.categoryMap(),
+      ticket.assignedTo ? this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } }) : Promise.resolve(null),
+    ]);
+    const category = categories.get(ticket.category);
+    return {
+      id: ticket.id,
+      displayId: ticket.displayId,
+      category: ticket.category,
+      categoryName: category?.name ?? null,
+      subcategory: ticket.subcategory,
+      description: ticket.description,
+      priority: ticket.priority,
+      status: ticket.status,
+      requestedAt: ticket.requestedAt,
+      resolvedAt: ticket.resolvedAt,
+      closedAt: ticket.closedAt,
+      slaResolutionHours: category?.slaResolutionHours ?? null,
+      assigneeName: assignee?.name ?? null,
+      equipmentId: ticket.equipmentId,
+      solution: ticket.solution,
+    };
+  }
+
+  private async categoryMap(): Promise<Map<string, HelpdeskCategory>> {
+    const rows = await this.categoriesRepo.find();
+    return new Map(rows.map((c) => [c.slug, c]));
   }
 
   // -----------------------------------------------------------------------

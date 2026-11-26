@@ -237,6 +237,7 @@ describe('Tickets · el abierto por TD es del solicitante', () => {
     const stored = saved.map((t) => ({ ...t, requestedAt: new Date('2026-11-26T10:00:00Z') }));
     (service as any).ticketsRepo = { ...(service as any).ticketsRepo, ...listingRepo(stored) };
     (service as any).assigneesRepo = { findBy: async () => [] };
+    (service as any).categoriesRepo = { find: async () => [] };
 
     const deX = await service.findMyTickets(TARGET_USER, {} as any);
     const delTecnico = await service.findMyTickets(TD_USER.id, {} as any);

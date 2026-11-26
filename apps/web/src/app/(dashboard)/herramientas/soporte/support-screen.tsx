@@ -1,50 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { ErrorKind, TicketPage, TicketPriority, TicketStatus, TicketSummary } from '@/lib/api';
+import type { ErrorKind, TicketPage } from '@/lib/api';
 import { NoPermissions } from '@/components/ui/no-permissions';
 import { ScrollableTable } from '@/components/ui/scrollable-table';
 import { PlusIcon } from '@/components/icons';
-
-const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
-
-const PRIORITY_STYLES: Record<TicketPriority, string> = {
-  P1: 'bg-red-100 text-red-700',
-  P2: 'bg-orange-100 text-orange-700',
-  P3: 'bg-yellow-100 text-yellow-800',
-  P4: 'bg-emerald-100 text-emerald-700',
-};
-
-const STATUS_STYLES: Record<TicketStatus, string> = {
-  abierto: 'bg-amber-100 text-amber-700',
-  en_atencion: 'bg-blue-100 text-blue-700',
-  en_revision: 'bg-indigo-100 text-indigo-700',
-  resuelto: 'bg-emerald-100 text-emerald-700',
-  cerrado: 'bg-slate-100 text-slate-600',
-  cancelado: 'bg-red-50 text-red-400',
-};
-
-const STATUS_LABELS: Record<TicketStatus, string> = {
-  abierto: 'Abierto',
-  en_atencion: 'En atención',
-  en_revision: 'En revisión',
-  resuelto: 'Resuelto',
-  cerrado: 'Cerrado',
-  cancelado: 'Cancelado',
-};
-
-function slaLight(ticket: TicketSummary): 'verde' | 'amarillo' | 'rojo' | null {
-  if (!ticket.priority || ticket.status === 'cerrado' || ticket.status === 'cancelado') return null;
-  const limit = SLA_HOURS[ticket.priority];
-  if (!limit) return null;
-  const elapsed = (Date.now() - new Date(ticket.requestedAt).getTime()) / 3_600_000;
-  const pct = elapsed / limit;
-  if (pct >= 1) return 'rojo';
-  if (pct >= 0.75) return 'amarillo';
-  return 'verde';
-}
+import { TicketDetailModal } from './ticket-detail-modal';
+import { PRIORITY_STYLES, SLA_TONE_STYLES, STATUS_LABELS, STATUS_STYLES, formatDate } from './ticket-display';
+import { attentionTime, slaStatus } from './ticket-sla';
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos' },
@@ -62,6 +28,22 @@ interface SupportScreenProps {
 
 export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?ticket=<id> (el enlace de las notificaciones) abre el detalle al entrar.
+  const [openTicketId, setOpenTicketId] = useState<string | null>(null);
+  useEffect(() => {
+    const fromUrl = searchParams.get('ticket');
+    if (fromUrl) setOpenTicketId(fromUrl);
+  }, [searchParams]);
+
+  function closeDetail() {
+    setOpenTicketId(null);
+    if (searchParams.get('ticket')) {
+      const sp = new URLSearchParams(searchParams.toString());
+      sp.delete('ticket');
+      router.replace(`/herramientas/soporte${sp.toString() ? `?${sp.toString()}` : ''}`);
+    }
+  }
 
   function onStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
@@ -154,15 +136,19 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
                 <th className="px-4 py-3 text-left">Estado</th>
                 <th className="px-4 py-3 text-left">SLA</th>
                 <th className="px-4 py-3 text-left">Apertura</th>
+                <th className="px-4 py-3 text-left">Cierre</th>
+                <th className="px-4 py-3 text-left">Tiempo de atención</th>
+                <th className="px-4 py-3 text-right"><span className="sr-only">Acciones</span></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {tickets.map((t) => {
-                const sla = slaLight(t);
+                const sla = slaStatus({ ...t, slaResolutionHours: t.slaResolutionHours ?? null });
+                const attention = attentionTime(t);
                 return (
                   <tr key={t.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-xs text-slate-700">{t.displayId}</td>
-                    <td className="px-4 py-3 capitalize text-slate-700">{t.category ?? '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{t.categoryName ?? t.category ?? '—'}</td>
                     <td className="max-w-xs px-4 py-3 text-slate-600">
                       <span title={t.description}>
                         {t.description.length > 60
@@ -182,26 +168,26 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
                         {STATUS_LABELS[t.status]}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      {sla === null ? (
-                        <span className="text-slate-400">—</span>
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {sla.tone === 'none' ? (
+                        <span className="text-slate-400">{sla.label}</span>
                       ) : (
-                        <span
-                          className={cn('inline-block h-3 w-3 rounded-full', {
-                            'bg-emerald-500': sla === 'verde',
-                            'bg-amber-400': sla === 'amarillo',
-                            'bg-red-500': sla === 'rojo',
-                          })}
-                          title={sla === 'verde' ? 'En tiempo' : sla === 'amarillo' ? 'Próximo a vencer' : 'Vencido'}
-                        />
+                        <span className={cn('rounded px-2 py-0.5 text-xs font-medium', SLA_TONE_STYLES[sla.tone])}>
+                          {sla.label}
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-slate-500">
-                      {new Date(t.requestedAt).toLocaleDateString('es-MX', {
-                        day: '2-digit',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">{formatDate(t.requestedAt)}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">{t.closedAt ? formatDate(t.closedAt) : ''}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-500">{attention ?? ''}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setOpenTicketId(t.id)}
+                        className="whitespace-nowrap rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+                      >
+                        Ver detalle
+                      </button>
                     </td>
                   </tr>
                 );
@@ -211,6 +197,8 @@ export function SupportScreen({ page, errorKind, statusFilter }: SupportScreenPr
           </ScrollableTable>
         </div>
       )}
+
+      {openTicketId && <TicketDetailModal ticketId={openTicketId} onClose={closeDetail} />}
     </>
   );
 }
