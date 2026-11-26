@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import type { MyTicketDetail } from '@/lib/api';
 import { attentionTime, slaStatus } from './ticket-sla';
 import { SurveyAnswer, SurveyForm } from './survey-section';
+import { requesterActions } from './ticket-requester-actions';
 import { PRIORITY_STYLES, SLA_TONE_STYLES, STATUS_LABELS, STATUS_STYLES, formatDateTime } from './ticket-display';
 
 interface Props {
@@ -19,6 +21,10 @@ interface Props {
 export function TicketDetailModal({ ticketId, onClose }: Props) {
   const [ticket, setTicket] = useState<MyTicketDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +41,31 @@ export function TicketDetailModal({ ticketId, onClose }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [ticketId]);
+  }, [ticketId, reloadKey]);
+
+  /** Acciones del solicitante; el API valida que el ticket sea suyo. */
+  async function runAction(path: string, body?: unknown) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/helpdesk/tickets/${encodeURIComponent(ticketId)}/${path}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as { message?: string | string[] } | null;
+        const msg = Array.isArray(data?.message) ? data?.message[0] : data?.message;
+        throw new Error(msg || 'No se pudo completar la acción.');
+      }
+      setReloadKey((k) => k + 1);
+      router.refresh();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'No se pudo completar la acción.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
@@ -45,6 +75,7 @@ export function TicketDetailModal({ ticketId, onClose }: Props) {
 
   const sla = ticket ? slaStatus(ticket) : null;
   const attention = ticket ? attentionTime(ticket) : null;
+  const actions = ticket ? requesterActions(ticket) : null;
 
   return (
     <div
@@ -115,6 +146,36 @@ export function TicketDetailModal({ ticketId, onClose }: Props) {
                   <p className="text-sm text-slate-400">El técnico aún no registra la solución.</p>
                 )}
               </section>
+
+              {actions && (actions.canConfirm || actions.canReportRecurrence) && (
+                <section className="space-y-2">
+                  {actionError && (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</p>
+                  )}
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    {actions.canConfirm && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => runAction('confirm-resolution')}
+                        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
+                      >
+                        Confirmar resolución
+                      </button>
+                    )}
+                    {actions.canReportRecurrence && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => runAction('status', { status: 'abierto', notes: 'Reapertura: problema recurrente.' })}
+                        className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100 disabled:opacity-40"
+                      >
+                        Reportar recurrencia
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
 
               {ticket.survey ? (
                 <section>

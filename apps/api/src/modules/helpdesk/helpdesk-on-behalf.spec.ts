@@ -267,13 +267,13 @@ describe('Tickets · el abierto por TD es del solicitante', () => {
     service.notificationsService = { create: async (n: any) => sent.push(n) };
     service.logger = { error: () => undefined };
 
-    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER);
+    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER, true);
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ recipientId: TARGET_USER, module: 'helpdesk', entityId: 'tk-1' });
     expect(sent[0].recipientId).not.toBe(TD_USER.id);
 
     // Volver a guardar "cerrado" no repite el aviso.
-    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER);
+    await service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER, true);
     expect(sent).toHaveLength(1);
   });
 
@@ -285,7 +285,7 @@ describe('Tickets · el abierto por TD es del solicitante', () => {
     service.surveysRepo = { count: async () => 0 };
     service.notificationsService = { create: async () => { throw new Error('socket caído'); } };
     service.logger = { error: jest.fn() };
-    await expect(service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER)).resolves.toMatchObject({ status: 'cerrado' });
+    await expect(service.updateStatus('tk-1', { status: 'cerrado' }, TD_USER, true)).resolves.toMatchObject({ status: 'cerrado' });
     expect(service.logger.error).toHaveBeenCalled();
   });
 });

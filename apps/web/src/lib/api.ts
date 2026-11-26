@@ -2044,11 +2044,15 @@ export interface MyTicketDetail {
   equipmentId: string | null;
   /** Notas de solución del técnico. */
   solution: string | null;
+  collaboratorConfirmation: CollaboratorConfirmation | null;
   /** Respuesta de la encuesta de satisfacción, si ya la hay. */
   survey: TicketSurveyItem | null;
   /** Cerrado, con invitación y sin respuesta: se muestra "¿Cómo fue la atención?". */
   canAnswerSurvey: boolean;
 }
+
+/** helpdesk.tickets.collaborator_confirmation (VARCHAR, 'pendiente' por defecto). */
+export type CollaboratorConfirmation = 'pendiente' | 'confirmado' | 'rechazado';
 
 export type TicketSurveyRating = 'feliz' | 'normal' | 'triste' | 'enojado';
 
@@ -2071,11 +2075,14 @@ export interface TicketDetail extends TicketSummary {
   behalfReason: string | null;
   /** Quien abrió el ticket cuando fue TD en nombre de otra persona (el solicitante es la otra persona). */
   openedByName?: string | null;
-  diagnosis: string | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  diagnosis?: string | null;
   solution: string | null;
-  internalNotes: string | null;
-  problemStatus: string | null;
-  collaboratorConfirmation: boolean | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  internalNotes?: string | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  problemStatus?: string | null;
+  collaboratorConfirmation: CollaboratorConfirmation | null;
   /** Id de auth.users; para mostrar en pantalla usa `escalatedToName`. */
   escalatedTo: string | null;
   escalatedToName: string | null;
@@ -2169,7 +2176,6 @@ export interface UpdateTicketPayload {
   internalNotes?: string | undefined;
   problemStatus?: string | undefined;
   subcategory?: string | undefined;
-  collaboratorConfirmation?: boolean | undefined;
   estimatedDelivery?: string | undefined;
 }
 
@@ -2225,6 +2231,11 @@ export function updateTicketStatus(id: string, payload: UpdateTicketStatusPayloa
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+/** "Confirmar resolución" del solicitante en su ticket resuelto (no exige tickets.gestion). */
+export function confirmTicketResolution(id: string): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>(`/helpdesk/tickets/${id}/confirm-resolution`, { method: 'PATCH' });
 }
 
 export function updateTicket(id: string, payload: UpdateTicketPayload): Promise<TicketSummary> {

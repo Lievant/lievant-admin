@@ -14,6 +14,7 @@ import {
   escalateAction,
   updatePriorityAction,
   updateStatusAction,
+  confirmResolutionAction,
   updateTicketAction,
 } from './actions';
 import { CategoryEditor } from './category-editor';
@@ -161,7 +162,7 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
   async function handleConfirmResolution() {
     setError(null);
     startTransition(async () => {
-      const r = await updateTicketAction(ticket.id, { collaboratorConfirmation: true });
+      const r = await confirmResolutionAction(ticket.id);
       if (r.success) refresh();
       else setError(r.error ?? 'Error.');
     });
@@ -563,7 +564,7 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
               )}
 
-              {ticket.status === 'resuelto' && !ticket.collaboratorConfirmation && (
+              {ticket.status === 'resuelto' && ticket.collaboratorConfirmation !== 'confirmado' && (
                 <button
                   type="button"
                   disabled={isPending}

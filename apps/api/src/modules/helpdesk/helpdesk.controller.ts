@@ -133,9 +133,10 @@ export class HelpdeskController {
     return this.service.findAll(query, isTdUser(user), user.id);
   }
 
+  /** TD ve cualquier ticket; los demás, solo el suyo y sin notas internas (404 si no). */
   @Get('tickets/:id')
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.findById(id);
+  findOne(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.findById(id, { userId: user.id, isTd: isTdUser(user) });
   }
 
   @Post('tickets')
@@ -181,13 +182,20 @@ export class HelpdeskController {
     return this.service.getSurvey(id, user, isTdUser(user));
   }
 
+  /** TD: cualquier transición. Solicitante: solo reabrir su ticket cerrado (≤ 7 días). Resto: 403. */
   @Patch('tickets/:id/status')
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTicketStatusDto,
     @CurrentUser() user: User,
   ) {
-    return this.service.updateStatus(id, dto, user);
+    return this.service.updateStatus(id, dto, user, isTdUser(user));
+  }
+
+  /** "Confirmar resolución": solo el solicitante, en su ticket resuelto. Sin tickets.gestion. */
+  @Patch('tickets/:id/confirm-resolution')
+  confirmResolution(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.confirmResolution(id, user);
   }
 
   @Patch('tickets/:id/escalate')

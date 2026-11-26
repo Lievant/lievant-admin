@@ -66,7 +66,7 @@ function setup(over: Record<string, unknown> = {}, opts: { flowFails?: boolean; 
 }
 
 async function closeIt(t: ReturnType<typeof setup>) {
-  await t.service.updateStatus('tk-1', { status: 'cerrado' }, TD);
+  await t.service.updateStatus('tk-1', { status: 'cerrado' }, TD, true);
 }
 
 describe('Encuesta: invitación al cerrar', () => {

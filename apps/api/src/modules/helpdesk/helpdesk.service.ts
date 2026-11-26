@@ -50,6 +50,22 @@ const PRIORITY_LABELS: Record<string, string> = {
  */
 const SURVEY_REQUESTED = 'encuesta_solicitada';
 
+/**
+ * Lo que el solicitante (o el director al que se escaló) no ve del ticket: el
+ * trabajo interno de TD. Los campos se quitan de la respuesta y los eventos del
+ * historial que los registran también, porque llevan el valor en old/new.
+ */
+const INTERNAL_TICKET_FIELDS = ['internalNotes', 'diagnosis', 'problemStatus'] as const;
+const INTERNAL_HISTORY_ACTIONS = new Set(INTERNAL_TICKET_FIELDS.map((f) => `actualizado.${f}`));
+
+/** "Reportar recurrencia": el solicitante reabre su ticket cerrado dentro de estos días. */
+const REQUESTER_REOPEN_DAYS = 7;
+
+/** Vista del ticket para el solicitante ("Mis tickets"), no la página de TD. */
+export function myTicketUrl(ticketId: string): string {
+  return `/herramientas/soporte?ticket=${ticketId}`;
+}
+
 const SURVEY_RATING_LABELS: Record<string, string> = {
   feliz: 'Feliz',
   normal: 'Normal',
@@ -159,9 +175,22 @@ export class HelpdeskService {
     return { data: enriched, nextCursor, total: enriched.length };
   }
 
-  async findById(id: string) {
+  /**
+   * Detalle completo. Sin `viewer` (uso interno) o con TD se devuelve todo. Un
+   * usuario que no es TD solo ve su ticket (o el que le escalaron) y sin el
+   * trabajo interno; cualquier otro recibe 404, sin confirmar que existe.
+   */
+  async findById(id: string, viewer?: { userId: string; isTd: boolean }) {
     const ticket = await this.ticketsRepo.findOne({ where: { id } });
     if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    const restricted = !!viewer && !viewer.isTd;
+    if (
+      viewer &&
+      restricted &&
+      (ticket.deletedAt || (ticket.requesterId !== viewer.userId && ticket.escalatedTo !== viewer.userId))
+    ) {
+      throw new NotFoundException(`Ticket ${id} no encontrado`);
+    }
     // escalated_to guarda un id de auth.users; el nombre legible está en el
     // expediente, y si el director no tiene expediente se cae al de la cuenta.
     const [history, assignee, attachments, escalatedEmployee, escalatedUser] = await Promise.all([
@@ -178,7 +207,7 @@ export class HelpdeskService {
         : Promise.resolve(null),
     ]);
 
-    return {
+    const detail = {
       ...ticket,
       history,
       // Quién abrió el ticket cuando fue TD en nombre de otra persona (autor del evento 'creado').
@@ -187,6 +216,14 @@ export class HelpdeskService {
       escalatedToName: escalatedEmployee?.fullName ?? escalatedUser?.name ?? null,
       attachments,
     };
+    if (!restricted) return detail;
+
+    const visible: Partial<typeof detail> = {
+      ...detail,
+      history: history.filter((h) => !INTERNAL_HISTORY_ACTIONS.has(h.action)),
+    };
+    for (const field of INTERNAL_TICKET_FIELDS) delete visible[field];
+    return visible;
   }
 
   async getAttachments(ticketId: string) {
@@ -285,6 +322,7 @@ export class HelpdeskService {
       assigneeName: assignee?.name ?? null,
       equipmentId: ticket.equipmentId,
       solution: ticket.solution,
+      collaboratorConfirmation: ticket.collaboratorConfirmation,
       ...(await this.surveyState(ticket, userId)),
     };
   }
@@ -580,8 +618,14 @@ export class HelpdeskService {
     return saved;
   }
 
-  async updateStatus(id: string, dto: UpdateTicketStatusDto, user: User) {
+  /**
+   * TD cambia el estado de cualquier ticket. Quien no es TD solo puede lo que le
+   * ofrece la pantalla: reabrir SU ticket cerrado dentro de los 7 días
+   * ("Reportar recurrencia"). Todo lo demás, 403.
+   */
+  async updateStatus(id: string, dto: UpdateTicketStatusDto, user: User, isTd: boolean) {
     const ticket = await this.getOrFail(id);
+    if (!isTd) this.assertRequesterTransition(ticket, dto, user);
     const oldStatus = ticket.status;
     const now = new Date();
 
@@ -607,6 +651,44 @@ export class HelpdeskService {
       await this.notifyClosed(ticket, user, invite);
     }
     return ticket;
+  }
+
+  private assertRequesterTransition(ticket: Ticket, dto: UpdateTicketStatusDto, user: User): void {
+    if (ticket.deletedAt || !ticket.requesterId || ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo puedes cambiar el estado de tus propios tickets.');
+    }
+    const closedDaysAgo = ticket.closedAt ? (Date.now() - ticket.closedAt.getTime()) / 86_400_000 : null;
+    const isRecurrence =
+      ticket.status === 'cerrado' &&
+      dto.status === 'abierto' &&
+      closedDaysAgo !== null &&
+      closedDaysAgo <= REQUESTER_REOPEN_DAYS;
+    if (!isRecurrence) {
+      throw new ForbiddenException(
+        `Solo puedes reabrir tu ticket cerrado dentro de los ${REQUESTER_REOPEN_DAYS} días siguientes al cierre.`,
+      );
+    }
+  }
+
+  /**
+   * "Confirmar resolución" del solicitante: solo en SU ticket, solo si está
+   * resuelto. Marca collaborator_confirmation = 'confirmado' y no cambia el
+   * estado (igual que antes; el cierre sigue siendo de TD).
+   */
+  async confirmResolution(id: string, user: User) {
+    const ticket = await this.getOrFail(id);
+    if (ticket.deletedAt || !ticket.requesterId || ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo quien solicitó el ticket puede confirmar la resolución.');
+    }
+    if (ticket.status !== 'resuelto') {
+      throw new BadRequestException('Solo se puede confirmar la resolución de un ticket resuelto.');
+    }
+    if (ticket.collaboratorConfirmation === 'confirmado') return ticket;
+    const old = ticket.collaboratorConfirmation || null;
+    ticket.collaboratorConfirmation = 'confirmado';
+    const saved = await this.ticketsRepo.save(ticket);
+    await this.addHistory(id, user, 'actualizado.collaboratorConfirmation', old, 'confirmado');
+    return saved;
   }
 
   async updateTicket(id: string, dto: UpdateTicketDto, user: User) {
@@ -738,6 +820,7 @@ export class HelpdeskService {
           `${saved.answeredByName} calificó la atención del ticket ${ticket.displayId}: ${SURVEY_RATING_LABELS[saved.rating]}.` +
           (comment ? `\nObservaciones: ${comment}` : ''),
         actionUrl: `/transformacion/tickets/${ticket.id}`,
+        requesterActionUrl: myTicketUrl(ticket.id),
       });
     } catch (err) {
       this.logger.error(
@@ -1191,7 +1274,7 @@ export class HelpdeskService {
           module: 'helpdesk',
           entityId: ticket.id,
           entityType: 'ticket',
-          actionUrl: `/transformacion/tickets/${ticket.id}`,
+          actionUrl: myTicketUrl(ticket.id),
         });
       }
     } catch (err) {
@@ -1214,6 +1297,7 @@ export class HelpdeskService {
         `${ticket.requesterName} escaló el ticket ${ticket.displayId} a ${director.fullName}.\n` +
         `Categoría: ${ticket.category} · Prioridad: ${prioridad}${nota}`,
       actionUrl: `/transformacion/tickets/${ticket.id}`,
+      requesterActionUrl: myTicketUrl(ticket.id),
     });
   }
 
@@ -1238,7 +1322,7 @@ export class HelpdeskService {
         module: 'helpdesk',
         entityId: ticket.id,
         entityType: 'ticket',
-        actionUrl: `/herramientas/soporte?ticket=${ticket.id}`,
+        actionUrl: myTicketUrl(ticket.id),
       });
     } catch (err) {
       this.logger.error(
@@ -1306,6 +1390,7 @@ export class HelpdeskService {
           `El ticket ${ticket.displayId} quedó asignado a ${assignee.name}.\n` +
           `Solicitante: ${ticket.requesterName} · Prioridad: ${ticket.priority ?? 'sin prioridad'}`,
         actionUrl: `/transformacion/tickets/${ticket.id}`,
+        requesterActionUrl: myTicketUrl(ticket.id),
       });
     } catch (err) {
       this.logger.error(
