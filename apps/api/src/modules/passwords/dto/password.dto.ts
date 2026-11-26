@@ -96,3 +96,27 @@ export class CreatePasswordApplicationDto {
 }
 
 export class UpdatePasswordApplicationDto extends PartialType(CreatePasswordApplicationDto) {}
+
+/** Largo de passwords.account_transfers.reason. */
+export const TRANSFER_REASON_MAX = 300;
+
+export class TransferAccountPasswordDto {
+  @IsUUID('all', { message: 'Elige a quién se transfiere la cuenta' })
+  toEmployeeId!: string;
+
+  // Vacío equivale a sin motivo.
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(TRANSFER_REASON_MAX, { message: `El motivo no puede pasar de ${TRANSFER_REASON_MAX} caracteres` })
+  reason?: string | null;
+}
+
+/** Buscador de colaboradores activos para elegir el destino de una transferencia. */
+export class TransferCandidatesQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+}

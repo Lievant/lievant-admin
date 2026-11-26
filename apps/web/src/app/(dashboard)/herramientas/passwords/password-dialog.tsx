@@ -6,6 +6,7 @@ import { AlertIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon } from '@/components/
 import { createAccountPasswordAction, updateAccountPasswordAction } from './actions';
 import { buildAccountPayload, resolveOwnerId, USERNAME_MAX, validateAccountForm } from './account-form';
 import { PersonSelect } from './person-select';
+import { TransferHistory } from './transfer-history';
 import { generatePassword, passwordStrength, todayIso, type PasswordStrength } from './utils';
 
 const STRENGTH_META: Record<PasswordStrength, { label: string; bar: string; text: string; width: string }> = {
@@ -230,6 +231,12 @@ export function PasswordDialog({
               className={fieldClass}
             />
           </Section>
+
+          {isEdit && (
+            <Section title="Historial de transferencias">
+              <TransferHistory accountId={account.id} />
+            </Section>
+          )}
         </div>
 
         {error && (

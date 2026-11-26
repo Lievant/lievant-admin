@@ -15,7 +15,7 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
 import { EmployeeStatus } from '../employees/constants/employee-status.constant';
-import { AuditService } from '../audit/audit.service';
+import { AuditService, normalizeIp } from '../audit/audit.service';
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -23,6 +23,7 @@ import {
   CreateAccountPasswordDto,
   CreatePasswordApplicationDto,
   QueryPasswordsDto,
+  TransferAccountPasswordDto,
   UpdateAccountPasswordDto,
   UpdatePasswordApplicationDto,
 } from './dto/password.dto';
@@ -38,6 +39,9 @@ export const APPLICATION_CREATE_LIMIT_PER_HOUR = 10;
 
 /** Largo máximo del nombre en un alta (el modal usa el mismo tope). */
 export const APPLICATION_NAME_MAX = 100;
+
+/** Máximo de transferencias de cuentas que un usuario puede hacer por hora. */
+export const TRANSFER_LIMIT_PER_HOUR = 20;
 
 /** Máximo de contraseñas que un usuario puede ver o copiar por hora. */
 const REVEAL_LIMIT_PER_HOUR = 10;
@@ -92,6 +96,76 @@ interface AccessRow {
   expiry_date: string | null;
 }
 
+interface TransferAccountRow {
+  id: string;
+  employee_id: string;
+  status: string;
+  deleted_at: Date | null;
+  employee_name: string;
+  employee_manager_id: string | null;
+}
+
+interface TransferTargetRow {
+  id: string;
+  full_name: string;
+  status: string;
+  deleted_at: Date | null;
+  /** Jefe directo activo del destino (null si no tiene o se apunta a sí mismo). */
+  boss_id: string | null;
+}
+
+interface TransferRow {
+  id: string;
+  account_id: string;
+  from_employee_id: string;
+  to_employee_id: string;
+  from_employee_name: string;
+  to_employee_name: string;
+  transferred_by: string | null;
+  transferred_by_name: string;
+  reason: string | null;
+  created_at: Date;
+}
+
+/** Una fila del historial tal como sale del API. Nunca lleva contraseñas. */
+export interface AccountTransferItem {
+  id: string;
+  accountId: string;
+  from: { id: string; fullName: string };
+  to: { id: string; fullName: string };
+  transferredBy: { id: string | null; name: string };
+  reason: string | null;
+  createdAt: Date;
+}
+
+function toTransferItem(r: TransferRow): AccountTransferItem {
+  return {
+    id: r.id,
+    accountId: r.account_id,
+    from: { id: r.from_employee_id, fullName: r.from_employee_name },
+    to: { id: r.to_employee_id, fullName: r.to_employee_name },
+    transferredBy: { id: r.transferred_by, name: r.transferred_by_name },
+    reason: r.reason,
+    createdAt: r.created_at,
+  };
+}
+
+/**
+ * ¿Puede quien llama transferir la cuenta? El dueño, su jefe directo actual
+ * (`direct_report_to_id` del dueño, aunque el dueño ya esté dado de baja: es
+ * justo cuando más hace falta pasar sus cuentas) o SUPER_ADMIN.
+ */
+export function canTransferAccount(
+  meId: string | null,
+  superAdmin: boolean,
+  account: { employee_id: string; employee_manager_id: string | null },
+): boolean {
+  if (superAdmin) return true;
+  if (!meId) return false;
+  if (account.employee_id === meId) return true;
+  return account.employee_manager_id === meId;
+}
+
 interface ExpiringRow {
   id: string;
   expiry_date: string;
@@ -107,6 +181,8 @@ export class PasswordsService {
   private readonly logger = new Logger(PasswordsService.name);
   /** userId → marcas de tiempo de sus altas recientes de aplicaciones. */
   private readonly applicationCreations = new Map<string, number[]>();
+  /** userId → marcas de tiempo de sus transferencias recientes. */
+  private readonly accountTransfers = new Map<string, number[]>();
 
   constructor(
     @InjectDataSource() private readonly db: DataSource,
@@ -435,6 +511,183 @@ export class PasswordsService {
        WHERE id = $1`,
       [id, user.id],
     );
+  }
+
+  // ==========================================================================
+  // Transferencias entre colaboradores
+  // ==========================================================================
+
+  /**
+   * Pasa la cuenta a otro colaborador activo. Pueden hacerlo el dueño, su jefe
+   * directo actual o SUPER_ADMIN; nadie más (403 genérico).
+   *
+   * Efecto sobre la cuenta:
+   *  - `employee_id` (el dueño, que es lo que decide quién la ve) pasa al destino.
+   *  - `manager_id` (el líder que recibe el aviso de vencimiento y agrupa la
+   *    detección de reutilización) pasa al jefe directo activo del destino, o al
+   *    propio destino si no tiene: el mismo criterio que al crear (el jefe que la
+   *    registra o la persona misma). Si se quedara el anterior, un líder sin
+   *    alcance seguiría recibiendo avisos de una cuenta que ya no puede ver.
+   *  - `expiry_notified_at` vuelve a NULL: el nuevo líder no ha recibido el aviso.
+   *  - `password_encrypted` no se lee, no se descifra ni se vuelve a cifrar.
+   *
+   * Cambio de dueño, fila de historial y evento de seguridad van en una sola
+   * transacción: si algo falla, no queda nada.
+   */
+  async transfer(
+    user: User,
+    id: string,
+    dto: TransferAccountPasswordDto,
+    ipAddress: string | null,
+  ): Promise<{ id: string; transfer: AccountTransferItem }> {
+    const superAdmin = this.isSuperAdmin(user);
+    const me = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
+    if (!me && !superAdmin) throw new ForbiddenException(NO_ACCESS_ACCOUNT);
+    const recent = this.assertTransferQuota(user.id);
+    const reason = dto.reason?.trim() || null;
+
+    const transfer = await this.db.transaction(async (m) => {
+      // FOR UPDATE: dos transferencias simultáneas de la misma cuenta no pueden
+      // partir las dos del mismo dueño.
+      const [account] = (await m.query(
+        `SELECT ap.id, ap.employee_id, ap.status, ap.deleted_at,
+                e.full_name AS employee_name, e.direct_report_to_id AS employee_manager_id
+         FROM passwords.account_passwords ap
+         JOIN employees.employee_records e ON e.id = ap.employee_id
+         WHERE ap.id = $1
+         FOR UPDATE OF ap`,
+        [id],
+      )) as TransferAccountRow[];
+      if (!account) throw new NotFoundException('Registro no encontrado');
+
+      // Primero el alcance: a quien no puede transferir no se le dice nada más
+      // de la cuenta (ni si está revocada).
+      if (!canTransferAccount(me?.id ?? null, superAdmin, account)) throw new ForbiddenException(NO_ACCESS_ACCOUNT);
+
+      if (account.deleted_at || account.status === 'revocada') {
+        throw new BadRequestException('La cuenta está revocada y no se puede transferir');
+      }
+      if (dto.toEmployeeId === account.employee_id) {
+        throw new BadRequestException('La cuenta ya es de esa persona');
+      }
+
+      const [target] = (await m.query(
+        `SELECT e.id, e.full_name, e.status, e.deleted_at,
+                b.id AS boss_id
+         FROM employees.employee_records e
+         LEFT JOIN employees.employee_records b
+           ON b.id = e.direct_report_to_id AND b.id <> e.id
+          AND b.status = $2 AND b.deleted_at IS NULL
+         WHERE e.id = $1`,
+        [dto.toEmployeeId, EmployeeStatus.ACTIVE],
+      )) as TransferTargetRow[];
+      if (!target || target.status !== EmployeeStatus.ACTIVE || target.deleted_at) {
+        throw new BadRequestException('La persona destino no existe o no es un colaborador activo');
+      }
+
+      await m.query(
+        `UPDATE passwords.account_passwords
+         SET employee_id = $2, manager_id = $3, expiry_notified_at = NULL,
+             updated_by = $4, updated_at = NOW()
+         WHERE id = $1`,
+        [id, target.id, target.boss_id ?? target.id, user.id],
+      );
+
+      const byName = (me?.fullName || user.name || user.email || 'Desconocido').slice(0, 200);
+      const [row] = (await m.query(
+        `INSERT INTO passwords.account_transfers
+           (account_id, from_employee_id, to_employee_id, from_employee_name, to_employee_name,
+            transferred_by, transferred_by_name, reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING id, account_id, from_employee_id, to_employee_id, from_employee_name, to_employee_name,
+                   transferred_by, transferred_by_name, reason, created_at`,
+        [
+          id,
+          account.employee_id,
+          target.id,
+          account.employee_name.slice(0, 200),
+          target.full_name.slice(0, 200),
+          user.id,
+          byName,
+          reason,
+        ],
+      )) as TransferRow[];
+
+      // Va dentro de la transacción (no por AuditService.logSecurity, que usa
+      // otra conexión y se traga los errores): sin evento no hay transferencia.
+      await m.query(
+        `INSERT INTO audit.security_events
+           (event_type, user_id, user_email, ip_address, module, resource_id, details, severity)
+         VALUES ('password_transfer', $1, $2, $3, 'passwords', $4, $5::jsonb, 'warning')`,
+        [
+          user.id,
+          user.email ?? null,
+          normalizeIp(ipAddress),
+          id,
+          JSON.stringify({
+            fromEmployeeId: account.employee_id,
+            fromEmployeeName: account.employee_name,
+            toEmployeeId: target.id,
+            toEmployeeName: target.full_name,
+            reason,
+          }),
+        ],
+      );
+
+      return toTransferItem(row!);
+    });
+
+    // Solo cuentan las transferencias que sí se hicieron.
+    recent.push(Date.now());
+    this.accountTransfers.set(user.id, recent);
+    // `id` es el de la cuenta: el AuditInterceptor lo toma como entidad en audit.user_activity.
+    return { id, transfer };
+  }
+
+  /** Historial de una cuenta, del más reciente al más antiguo. Mismo alcance que ver la cuenta. */
+  async listTransfers(user: User, id: string): Promise<AccountTransferItem[]> {
+    const row = await this.getAccessRow(id);
+    await this.assertCanView(user, row);
+    const rows = (await this.db.query(
+      `SELECT id, account_id, from_employee_id, to_employee_id, from_employee_name, to_employee_name,
+              transferred_by, transferred_by_name, reason, created_at
+       FROM passwords.account_transfers
+       WHERE account_id = $1
+       ORDER BY created_at DESC, id DESC`,
+      [id],
+    )) as TransferRow[];
+    return rows.map(toTransferItem);
+  }
+
+  /**
+   * Colaboradores activos que se pueden elegir como destino (mínimo 2 letras,
+   * máximo 10 resultados). Solo id, nombre, cargo y área.
+   */
+  async searchTransferCandidates(q: string) {
+    const term = q.trim();
+    if (term.length < 2) return [];
+    const rows = (await this.db.query(
+      `SELECT id, full_name, position, area FROM employees.employee_records
+       WHERE status = $2 AND deleted_at IS NULL
+         AND translate(lower(full_name), 'áéíóúüñ', 'aeiouun') LIKE translate(lower($1), 'áéíóúüñ', 'aeiouun')
+       ORDER BY full_name ASC LIMIT 10`,
+      [`%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`, EmployeeStatus.ACTIVE],
+    )) as { id: string; full_name: string; position: string; area: string | null }[];
+    return rows.map((r) => ({ id: r.id, fullName: r.full_name, position: r.position, area: r.area }));
+  }
+
+  /** Tope de transferencias por usuario en una ventana de una hora (mismo esquema que el alta de aplicaciones). */
+  private assertTransferQuota(userId: string): number[] {
+    const since = Date.now() - 60 * 60 * 1000;
+    const recent = (this.accountTransfers.get(userId) ?? []).filter((t) => t > since);
+    this.accountTransfers.set(userId, recent);
+    if (recent.length >= TRANSFER_LIMIT_PER_HOUR) {
+      throw new HttpException(
+        `Alcanzaste el límite de ${TRANSFER_LIMIT_PER_HOUR} transferencias por hora. Intenta más tarde.`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    return recent;
   }
 
   /**

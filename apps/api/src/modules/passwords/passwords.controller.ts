@@ -23,6 +23,8 @@ import {
   CreatePasswordApplicationDto,
   QueryPasswordsDto,
   RevealQueryDto,
+  TransferAccountPasswordDto,
+  TransferCandidatesQueryDto,
   UpdateAccountPasswordDto,
   UpdatePasswordApplicationDto,
 } from './dto/password.dto';
@@ -92,6 +94,15 @@ export class PasswordsController {
     return this.service.getVisiblePeople(user.id);
   }
 
+  /**
+   * Destinos posibles de una transferencia: cualquier colaborador activo. Sin
+   * permiso, como el resto del módulo; solo devuelve id, nombre, cargo y área.
+   */
+  @Get('transfer-candidates')
+  searchTransferCandidates(@Query() query: TransferCandidatesQueryDto) {
+    return this.service.searchTransferCandidates(query.q ?? '');
+  }
+
   // SUPER_ADMIN se valida en el servicio.
   @Get('audit-log')
   getAuditLog(@CurrentUser() user: User) {
@@ -128,6 +139,25 @@ export class PasswordsController {
     @Body() dto: UpdateAccountPasswordDto,
   ) {
     return this.service.update(user, id, dto);
+  }
+
+  // Sin permiso: dueño, jefe directo actual o SUPER_ADMIN, validado en el servicio.
+  // El AuditInterceptor global ya la registra en audit.user_activity (módulo passwords).
+  @Post(':id/transfer')
+  @HttpCode(HttpStatus.OK)
+  transfer(
+    @CurrentUser() user: User,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: TransferAccountPasswordDto,
+    @Ip() ip: string,
+  ) {
+    return this.service.transfer(user, id, dto, ip ?? null);
+  }
+
+  // Mismo alcance que ver la cuenta. Nunca devuelve contraseñas.
+  @Get(':id/transfers')
+  listTransfers(@CurrentUser() user: User, @Param('id', ParseUUIDPipe) id: string) {
+    return this.service.listTransfers(user, id);
   }
 
   @Delete(':id')
