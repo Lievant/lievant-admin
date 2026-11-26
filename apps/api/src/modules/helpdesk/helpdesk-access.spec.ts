@@ -60,13 +60,47 @@ function setup(over: Record<string, unknown> = {}) {
   };
   service.surveysRepo = { count: async () => 0, findOne: async () => null };
   service.assigneesRepo = { findOne: async () => null };
-  service.attachmentsRepo = { find: async () => [] };
+  const attachments: any[] = [
+    { id: 'att-1', ticketId: 'tk-1', fileName: 'foto.png', s3Key: 'tickets/tk-1/foto.png', fileSize: 10, mimeType: 'image/png' },
+  ];
+  const presigned: string[] = [];
+  const uploaded: string[] = [];
+  service.attachmentsRepo = {
+    find: async ({ where }: any) => attachments.filter((a) => a.ticketId === where.ticketId),
+    create: (x: any) => x,
+    save: async (x: any) => {
+      const row = { ...x, id: `att-${attachments.length + 1}`, uploadedAt: new Date() };
+      attachments.push(row);
+      return row;
+    },
+  };
+  service.storage = {
+    getPresignedUrl: async (key: string) => {
+      presigned.push(key);
+      return `https://s3.example/${key}?firma`;
+    },
+    uploadAttachment: async (_f: any, ticketId: string) => {
+      const key = `tickets/${ticketId}/nuevo.pdf`;
+      uploaded.push(key);
+      return key;
+    },
+  };
   service.employeesRepo = { findOne: async () => null };
   service.usersRepo = { findOne: async () => null };
   service.notificationsService = { create: async (n: any) => notifications.push(n) };
   service.notificationFlows = { notify: async (...args: any[]) => flows.push(args) };
   const controller = new HelpdeskController(service as HelpdeskService);
-  return { service: service as HelpdeskService, controller, ticket, history, notifications, flows };
+  return {
+    service: service as HelpdeskService,
+    controller,
+    ticket,
+    history,
+    notifications,
+    flows,
+    attachments,
+    presigned,
+    uploaded,
+  };
 }
 
 describe('GET /helpdesk/tickets/:id (control de acceso)', () => {
@@ -238,5 +272,57 @@ describe('Las notificaciones al solicitante no llevan a la página de TD', () =>
     });
     expect(sent.find((n) => n.recipientId === 'u-req').actionUrl).toBe('/herramientas/soporte?ticket=tk-1');
     expect(sent.find((n) => n.recipientId === 'u-coord').actionUrl).toBe('/transformacion/tickets/tk-1');
+  });
+});
+
+describe('Adjuntos de tickets (control de acceso)', () => {
+  const FILE = { originalname: 'evidencia.pdf', mimetype: 'application/pdf', size: 2048, buffer: Buffer.from('x') } as any;
+
+  it('un usuario ajeno no lista, no sube ni descarga: 404 y sin URL prefirmada', async () => {
+    const t = setup();
+    await expect(t.controller.getAttachments('tk-1', OTHER)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(t.controller.uploadAttachment('tk-1', FILE, OTHER)).rejects.toBeInstanceOf(NotFoundException);
+    // La descarga es la URL prefirmada del listado o del detalle: no se genera ninguna.
+    await expect(t.controller.findOne('tk-1', OTHER)).rejects.toBeInstanceOf(NotFoundException);
+    expect(t.presigned).toEqual([]);
+    expect(t.uploaded).toEqual([]);
+    expect(t.attachments).toHaveLength(1);
+  });
+
+  it('el solicitante sube y descarga en su ticket', async () => {
+    const t = setup();
+    const up: any = await t.controller.uploadAttachment('tk-1', FILE, REQUESTER);
+    expect(up).toMatchObject({ fileName: 'evidencia.pdf', downloadUrl: expect.stringContaining('tickets/tk-1/nuevo.pdf') });
+    expect(t.attachments.at(-1)).toMatchObject({ uploadedBy: 'u-req', ticketId: 'tk-1' });
+    const list: any[] = await t.controller.getAttachments('tk-1', REQUESTER);
+    expect(list.map((a) => a.fileName)).toEqual(['foto.png', 'evidencia.pdf']);
+    expect(list.every((a) => a.downloadUrl.startsWith('https://s3.example/'))).toBe(true);
+  });
+
+  it('TD lista y sube en cualquier ticket', async () => {
+    const t = setup();
+    await expect(t.controller.getAttachments('tk-1', TD)).resolves.toHaveLength(1);
+    await expect(t.controller.uploadAttachment('tk-1', FILE, TD)).resolves.toMatchObject({ fileName: 'evidencia.pdf' });
+  });
+
+  it('el director escalado lee los adjuntos pero no sube (403)', async () => {
+    const t = setup({ escalatedTo: 'u-dir' });
+    await expect(t.controller.getAttachments('tk-1', DIRECTOR)).resolves.toHaveLength(1);
+    await expect(t.controller.uploadAttachment('tk-1', FILE, DIRECTOR)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(t.uploaded).toEqual([]);
+  });
+
+  it('en un ticket borrado el solicitante recibe 404 y no se firma nada', async () => {
+    const t = setup({ deletedAt: new Date() });
+    await expect(t.controller.getAttachments('tk-1', REQUESTER)).rejects.toBeInstanceOf(NotFoundException);
+    await expect(t.controller.uploadAttachment('tk-1', FILE, REQUESTER)).rejects.toBeInstanceOf(NotFoundException);
+    expect(t.presigned).toEqual([]);
+  });
+
+  it('se mantienen los límites de tipo: un tipo no permitido es 400', () => {
+    const t = setup();
+    expect(() =>
+      t.controller.uploadAttachment('tk-1', { ...FILE, mimetype: 'application/x-msdownload' }, REQUESTER),
+    ).toThrow(BadRequestException);
   });
 });
