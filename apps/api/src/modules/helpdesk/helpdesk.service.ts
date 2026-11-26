@@ -58,6 +58,18 @@ const SURVEY_REQUESTED = 'encuesta_solicitada';
 const INTERNAL_TICKET_FIELDS = ['internalNotes', 'diagnosis', 'problemStatus'] as const;
 const INTERNAL_HISTORY_ACTIONS = new Set(INTERNAL_TICKET_FIELDS.map((f) => `actualizado.${f}`));
 
+/**
+ * El diagnóstico deja de ser interno cuando el ticket se resuelve: el solicitante
+ * (y el director escalado) lo ven junto a la solución si está resuelto o
+ * cerrado y hay texto escrito. Su evento del historial sigue oculto.
+ */
+const DIAGNOSIS_VISIBLE_STATUSES: ReadonlySet<string> = new Set(['resuelto', 'cerrado']);
+
+function requesterDiagnosis(ticket: Pick<Ticket, 'status' | 'diagnosis'>): string | null {
+  if (!DIAGNOSIS_VISIBLE_STATUSES.has(ticket.status)) return null;
+  return ticket.diagnosis?.trim() ? ticket.diagnosis : null;
+}
+
 /** Quién consulta un ticket: su id de auth.users y si es personal de TD (isTdUser). */
 export interface TicketViewer {
   userId: string;
@@ -221,6 +233,8 @@ export class HelpdeskService {
       history: history.filter((h) => !INTERNAL_HISTORY_ACTIONS.has(h.action)),
     };
     for (const field of INTERNAL_TICKET_FIELDS) delete visible[field];
+    const diagnosis = requesterDiagnosis(ticket);
+    if (diagnosis) visible.diagnosis = diagnosis;
     return visible;
   }
 
@@ -352,6 +366,8 @@ export class HelpdeskService {
       assigneeName: assignee?.name ?? null,
       equipmentId: ticket.equipmentId,
       solution: ticket.solution,
+      // Solo resuelto o cerrado y con texto; si no, la clave no sale.
+      ...(requesterDiagnosis(ticket) ? { diagnosis: requesterDiagnosis(ticket) } : {}),
       collaboratorConfirmation: ticket.collaboratorConfirmation,
       ...(await this.surveyState(ticket, userId)),
     };

@@ -2044,6 +2044,8 @@ export interface MyTicketDetail {
   equipmentId: string | null;
   /** Notas de solución del técnico. */
   solution: string | null;
+  /** Solo llega con el ticket resuelto o cerrado y con diagnóstico escrito. */
+  diagnosis?: string | null;
   collaboratorConfirmation: CollaboratorConfirmation | null;
   /** Respuesta de la encuesta de satisfacción, si ya la hay. */
   survey: TicketSurveyItem | null;

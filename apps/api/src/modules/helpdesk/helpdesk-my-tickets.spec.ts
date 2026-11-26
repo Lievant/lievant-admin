@@ -62,12 +62,37 @@ describe('GET /helpdesk/tickets/my/:id', () => {
     });
   });
 
-  it('las notas internas y el diagnóstico no salen', async () => {
-    const detail = await setup(ticket()).findMyTicketDetail(OWNER, 'tk-1');
+  it('las notas internas, problem_status y el historial no salen', async () => {
+    const detail = await setup(ticket({ problemStatus: 'PS-INTERNO' })).findMyTicketDetail(OWNER, 'tk-1');
     expect(detail).not.toHaveProperty('internalNotes');
-    expect(detail).not.toHaveProperty('diagnosis');
+    expect(detail).not.toHaveProperty('problemStatus');
     expect(detail).not.toHaveProperty('history');
-    expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA|diagnóstico interno/);
+    expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA|PS-INTERNO/);
+  });
+
+  it.each(['abierto', 'en_atencion', 'en_revision', 'cancelado'])(
+    'con el ticket %s el diagnóstico no sale',
+    async (status: string) => {
+      const detail = await setup(ticket({ status, closedAt: null })).findMyTicketDetail(OWNER, 'tk-1');
+      expect(detail).not.toHaveProperty('diagnosis');
+      expect(JSON.stringify(detail)).not.toMatch(/diagnóstico interno/);
+    },
+  );
+
+  it.each(['resuelto', 'cerrado'])('con el ticket %s el diagnóstico sale junto a la solución', async (status: string) => {
+    const detail = await setup(ticket({ status })).findMyTicketDetail(OWNER, 'tk-1');
+    expect(detail).toMatchObject({
+      diagnosis: 'Fuente dañada (diagnóstico interno)',
+      solution: 'Se cambió la fuente de poder.',
+    });
+    expect(detail).not.toHaveProperty('internalNotes');
+  });
+
+  it('resuelto sin diagnóstico escrito: no hay sección', async () => {
+    for (const diagnosis of [null, '', '   ']) {
+      const detail = await setup(ticket({ diagnosis })).findMyTicketDetail(OWNER, 'tk-1');
+      expect(detail).not.toHaveProperty('diagnosis');
+    }
   });
 
   it('el detalle de un ticket ajeno se rechaza (404, sin decir si existe)', async () => {
