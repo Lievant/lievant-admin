@@ -29,6 +29,7 @@ import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
 import { TicketSurvey } from './entities/ticket-survey.entity';
+import { isTdUser } from './td-user.util';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 // Seconds per SLA hour-limit (for inline CASE expression)
@@ -83,6 +84,10 @@ const REQUESTER_REOPEN_DAYS = 7;
 export function myTicketUrl(ticketId: string): string {
   return `/herramientas/soporte?ticket=${ticketId}`;
 }
+
+/** Calificaciones que llegan al técnico como 'atencion' en lugar de 'informativa'. */
+const SURVEY_ATTENTION_RATINGS: ReadonlySet<string> = new Set(['triste', 'enojado']);
+const SURVEY_COMMENT_PREVIEW = 300;
 
 const SURVEY_RATING_LABELS: Record<string, string> = {
   feliz: 'Feliz',
@@ -854,8 +859,12 @@ export class HelpdeskService {
       throw err;
     }
 
+    // Aviso directo al técnico asignado; si llegó, el flujo no le manda otro.
+    const notifiedTechId = await this.notifySurveyToAssignee(ticket, saved);
+
     try {
       await this.notificationFlows.notify('helpdesk', 'encuesta_respondida', {
+        ...(notifiedTechId ? { excludeUserIds: [notifiedTechId] } : {}),
         requesterId: user.id,
         actorId: user.id,
         entityId: ticket.id,
@@ -874,6 +883,57 @@ export class HelpdeskService {
       );
     }
     return toSurveyItem(saved);
+  }
+
+  /**
+   * Avisa al técnico asignado en este momento que su ticket recibió una
+   * calificación. Del solicitante solo va el nombre. Si el técnico pasa
+   * isTdUser el enlace es el detalle de TD; si no, va sin enlace (esa página le
+   * daría 404 y el ticket no es suyo en "Mis tickets"). Sin técnico, sin correo
+   * o sin usuario se omite. Nunca lanza: la encuesta ya quedó guardada.
+   * Devuelve el id del usuario notificado, o null.
+   */
+  private async notifySurveyToAssignee(ticket: Ticket, survey: TicketSurvey): Promise<string | null> {
+    try {
+      if (!ticket.assignedTo) return null;
+      const assignee = await this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } });
+      if (!assignee?.email) return null;
+      const techUser = await this.usersRepo.findOne({
+        where: { email: assignee.email },
+        relations: { roles: { permissions: true }, userPermissions: { permission: true } },
+      });
+      if (!techUser) return null;
+
+      const label = SURVEY_RATING_LABELS[survey.rating] ?? survey.rating;
+      const comment = survey.comment?.trim();
+      const preview =
+        comment && comment.length > SURVEY_COMMENT_PREVIEW ? `${comment.slice(0, SURVEY_COMMENT_PREVIEW)}…` : comment;
+      await this.notificationsService.create({
+        recipientId: techUser.id,
+        ...(survey.answeredBy ? { senderId: survey.answeredBy } : {}),
+        senderName: survey.answeredByName,
+        title: `Calificación recibida: ${label}`,
+        message:
+          `Ticket ${ticket.displayId} · Calificación: ${label}
+` +
+          `Solicitante: ${survey.answeredByName}` +
+          (preview ? `
+Comentario: ${preview}` : ''),
+        type: SURVEY_ATTENTION_RATINGS.has(survey.rating) ? 'atencion' : 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        ...(isTdUser(techUser) ? { actionUrl: `/transformacion/tickets/${ticket.id}` } : {}),
+      });
+      return techUser.id;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar al técnico la calificación del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
   }
 
   /** La ven el solicitante y TD; nadie más (403). */

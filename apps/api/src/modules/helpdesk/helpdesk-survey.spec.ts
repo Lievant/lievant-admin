@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { CreateTicketSurveyDto } from './dto/create-ticket-survey.dto';
 import { HelpdeskService } from './helpdesk.service';
+import { NotificationFlowsService } from '../notifications/notification-flows.service';
 
 const REQUESTER = { id: 'u-req', name: 'Ana Solicitante', email: 'ana@lievant.com' } as any;
 const OTHER = { id: 'u-otro', name: 'Otro', email: 'otro@lievant.com' } as any;
@@ -18,7 +19,18 @@ const TD = { id: 'u-td', name: 'Técnico', email: 'td@lievant.com' } as any;
  * el flujo configurable. `opts.flowFails` simula que el aviso al coordinador
  * truena; `opts.uniqueRace` que otro envío ganó la carrera del UNIQUE.
  */
-function setup(over: Record<string, unknown> = {}, opts: { flowFails?: boolean; uniqueRace?: boolean } = {}) {
+const TECH_USER = {
+  id: 'u-tech',
+  name: 'Técnico Uno',
+  email: 'tecnico@lievant.com',
+  roles: [{ name: 'SOPORTE', permissions: [{ module: 'tickets.gestion' }] }],
+  userPermissions: [],
+};
+
+function setup(
+  over: Record<string, unknown> = {},
+  opts: { flowFails?: boolean; uniqueRace?: boolean; notifyFails?: boolean; techUser?: any } = {},
+) {
   const ticket: any = {
     id: 'tk-1',
     displayId: 'TIC-2026-040',
@@ -54,7 +66,18 @@ function setup(over: Record<string, unknown> = {}, opts: { flowFails?: boolean; 
     },
   };
   service.employeesRepo = { findOne: async () => ({ fullName: 'Ana Solicitante (expediente)' }) };
-  service.notificationsService = { create: async (n: any) => notifications.push(n) };
+  service.notificationsService = {
+    create: async (n: any) => {
+      if (opts.notifyFails && n.title?.startsWith('Calificación recibida')) throw new Error('socket caído');
+      notifications.push(n);
+    },
+  };
+  service.assigneesRepo = {
+    findOne: async ({ where }: any) =>
+      where.id === 'as-1' ? { id: 'as-1', name: 'Técnico Uno', email: 'tecnico@lievant.com' } : null,
+  };
+  const techUser = 'techUser' in opts ? opts.techUser : TECH_USER;
+  service.usersRepo = { findOne: async ({ where }: any) => (where.email === 'tecnico@lievant.com' ? techUser : null) };
   service.notificationFlows = {
     notify: async (...args: any[]) => {
       if (opts.flowFails) throw new Error('flujo caído');
@@ -190,5 +213,105 @@ describe('DTO de la encuesta', () => {
     [{ rating: 'feliz', ticketId: 'otro' }, 'campo extra'],
   ])('rechaza %p (%s) con 400', async (body: Record<string, unknown>, _label: string) => {
     await expect(pipe.transform(body, meta)).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('Aviso al técnico asignado con la calificación', () => {
+  const closedWithTech = { assignedTo: 'as-1' };
+  const techNotes = (t: ReturnType<typeof setup>) => t.notifications.filter((n) => n.recipientId === 'u-tech');
+
+  it('se notifica al técnico asignado con folio, calificación, nombre y comentario', async () => {
+    const t = setup(closedWithTech);
+    await closeIt(t);
+    await t.service.answerSurvey('tk-1', { rating: 'feliz', comment: 'Muy rápido, gracias' }, REQUESTER);
+    const [n] = techNotes(t);
+    expect(n).toMatchObject({
+      title: 'Calificación recibida: Feliz',
+      type: 'informativa',
+      actionUrl: '/transformacion/tickets/tk-1',
+      entityId: 'tk-1',
+    });
+    expect(n.message).toContain('TIC-2026-040');
+    expect(n.message).toContain('Feliz');
+    expect(n.message).toContain('Muy rápido, gracias');
+    expect(n.message).toContain('Ana Solicitante (expediente)');
+    // Del solicitante solo va el nombre.
+    expect(n.message).not.toMatch(/ana@lievant\.com|u-req/);
+  });
+
+  it.each([
+    ['triste', 'Triste'],
+    ['enojado', 'Enojado'],
+  ])('%s sale como atención', async (rating: string, label: string) => {
+    const t = setup(closedWithTech);
+    await closeIt(t);
+    await t.service.answerSurvey('tk-1', { rating: rating as any }, REQUESTER);
+    expect(techNotes(t)[0]).toMatchObject({ title: `Calificación recibida: ${label}`, type: 'atencion' });
+  });
+
+  it('el comentario se recorta a 300 caracteres con …', async () => {
+    const t = setup(closedWithTech);
+    await closeIt(t);
+    await t.service.answerSurvey('tk-1', { rating: 'normal', comment: 'x'.repeat(500) }, REQUESTER);
+    const msg: string = techNotes(t)[0].message;
+    expect(msg).toContain(`${'x'.repeat(300)}…`);
+    expect(msg).not.toContain('x'.repeat(301));
+  });
+
+  it('sin técnico asignado o sin usuario vinculado se omite sin error', async () => {
+    const none = setup();
+    await closeIt(none);
+    await expect(none.service.answerSurvey('tk-1', { rating: 'feliz' }, REQUESTER)).resolves.toMatchObject({ rating: 'feliz' });
+    expect(techNotes(none)).toHaveLength(0);
+
+    const noUser = setup(closedWithTech, { techUser: null });
+    await closeIt(noUser);
+    await expect(noUser.service.answerSurvey('tk-1', { rating: 'feliz' }, REQUESTER)).resolves.toMatchObject({
+      rating: 'feliz',
+    });
+    expect(noUser.notifications.filter((n) => n.title?.startsWith('Calificación'))).toHaveLength(0);
+    expect(noUser.flows[0][2]).not.toHaveProperty('excludeUserIds');
+  });
+
+  it('un técnico que no es TD recibe el aviso sin enlace (la página de TD le daría 404)', async () => {
+    const t = setup(closedWithTech, { techUser: { ...TECH_USER, roles: [] } });
+    await closeIt(t);
+    await t.service.answerSurvey('tk-1', { rating: 'feliz' }, REQUESTER);
+    expect(techNotes(t)[0]).not.toHaveProperty('actionUrl');
+  });
+
+  it('si falla el envío al técnico, la encuesta queda y el flujo sigue', async () => {
+    const t = setup(closedWithTech, { notifyFails: true });
+    await closeIt(t);
+    await expect(t.service.answerSurvey('tk-1', { rating: 'enojado' }, REQUESTER)).resolves.toMatchObject({
+      rating: 'enojado',
+    });
+    expect(t.surveys).toHaveLength(1);
+    expect((t.service as any).logger.error).toHaveBeenCalled();
+    // Como no le llegó el directo, el flujo no lo excluye.
+    expect(t.flows[0][2]).not.toHaveProperty('excludeUserIds');
+  });
+
+  it('el flujo encuesta_respondida no le manda un segundo aviso al técnico', async () => {
+    const t = setup(closedWithTech);
+    await closeIt(t);
+    await t.service.answerSurvey('tk-1', { rating: 'feliz' }, REQUESTER);
+    expect(t.flows[0][2]).toMatchObject({ excludeUserIds: ['u-tech'] });
+
+    // Y el servicio de flujos respeta la exclusión aunque el técnico sea destinatario configurado.
+    const flows = Object.create(NotificationFlowsService.prototype) as any;
+    const sent: any[] = [];
+    flows.logger = { error: jest.fn() };
+    flows.notificationsService = { create: async (n: any) => sent.push(n) };
+    flows.getFlow = async () => ({
+      isActive: true,
+      recipients: [
+        { isActive: true, recipientType: 'empleado', notificationType: 'informativa', employeeId: 'e-coord' },
+        { isActive: true, recipientType: 'empleado', notificationType: 'informativa', employeeId: 'e-tech' },
+      ],
+    });
+    flows.resolveRecipient = async (r: any) => [r.employeeId === 'e-tech' ? 'u-tech' : 'u-coord'];
+    await flows.notify('helpdesk', 'encuesta_respondida', { ...t.flows[0][2] });
+    expect(sent.map((n) => n.recipientId)).toEqual(['u-coord']);
   });
 });
