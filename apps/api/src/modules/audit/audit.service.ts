@@ -450,7 +450,7 @@ function page<T extends { createdAt: Date }>(rows: T[], limit: number) {
  * Express entrega '::ffff:10.0.0.1' detrás del ALB y a veces una lista; se
  * toma la primera y se limpia el prefijo IPv4-mapped.
  */
-function normalizeIp(raw?: string | null): string | null {
+export function normalizeIp(raw?: string | null): string | null {
   if (!raw) return null;
   const first = raw.split(',')[0]?.trim() ?? '';
   const cleaned = first.startsWith('::ffff:') ? first.slice(7) : first;

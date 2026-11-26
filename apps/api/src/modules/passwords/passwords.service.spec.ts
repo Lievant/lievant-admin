@@ -1,10 +1,10 @@
 import 'reflect-metadata';
-import { ConflictException, ExecutionContext, ForbiddenException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, ConflictException, ExecutionContext, ForbiddenException, HttpStatus } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { PERMISSION_KEY } from '../auth/decorators/permission.decorator';
 import { PasswordsController } from './passwords.controller';
-import { APPLICATION_CREATE_LIMIT_PER_HOUR, PasswordsService } from './passwords.service';
+import { APPLICATION_CREATE_LIMIT_PER_HOUR, PasswordsService, TRANSFER_LIMIT_PER_HOUR } from './passwords.service';
 import { evaluatePasswordStrength, reusedPasswordWarning, WEAK_PASSWORD_WARNING } from './password-strength';
 import { ArgumentMetadata, ValidationPipe } from '@nestjs/common';
 // Lógica pura del formulario "Nueva cuenta" (frontend): se prueba aquí con el API real.
@@ -13,7 +13,13 @@ import {
   resolveOwnerId,
   validateAccountForm,
 } from '../../../../web/src/app/(dashboard)/herramientas/passwords/account-form';
-import { CreateAccountPasswordDto } from './dto/password.dto';
+import {
+  buildTransferPayload,
+  TRANSFER_WARNING,
+  transferConfirmLabel,
+  validateTransferForm,
+} from '../../../../web/src/app/(dashboard)/herramientas/passwords/transfer-form';
+import { CreateAccountPasswordDto, TransferAccountPasswordDto, UpdateAccountPasswordDto } from './dto/password.dto';
 
 // Todos los ids son uuid-like; la jerarquía de las pruebas:
 //   BOSS ── SUB1 (activo)
@@ -422,6 +428,9 @@ describe('PasswordsController (permisos y exportación)', () => {
     'getTeamEmployees',
     'listApplications',
     'createApplication',
+    'transfer',
+    'listTransfers',
+    'searchTransferCandidates',
   ] as const)('%s no exige permiso: el alcance lo fija el servicio', (m) => {
     expect(required(m)).toBeUndefined();
   });
@@ -508,11 +517,52 @@ describe('Formulario "Nueva cuenta" → API', () => {
 
   it.each([
     [{ applicationId: '' }, 'Selecciona la aplicación.'],
-    [{ username: 'sin-arroba' }, 'El usuario debe ser un correo válido.'],
+    [{ username: '   ' }, 'Escribe el usuario o correo.'],
+    [{ username: 'x'.repeat(501) }, 'El usuario o correo no puede pasar de 500 caracteres.'],
     [{ password: '' }, 'Escribe o genera la contraseña.'],
     [{ expiryDate: '2026-01-01' }, 'El vencimiento no puede ser anterior a la fecha de asignación.'],
   ])('mensajes de validación: %p', (override, message) => {
     expect(validateAccountForm({ ...base, employeeId: BOSS, ...override })).toBe(message);
+  });
+
+  it('el usuario acepta texto libre (nickname, sin arroba) y se guarda tal cual, solo recortado', () => {
+    for (const username of ['sin-arroba', 'Juan.Perez_MX', '@marca', 'cuenta@cliente.com']) {
+      expect(validateAccountForm({ ...base, employeeId: BOSS, username })).toBeNull();
+    }
+    expect(buildAccountPayload({ ...base, employeeId: BOSS, username: '  NickName_01  ' }).username).toBe('NickName_01');
+  });
+
+  describe('DTO del API: usuario de texto libre', () => {
+    const body = (username: unknown) => ({
+      applicationId: '0db5a2f5-865b-47e5-a9b3-512efe50c627',
+      employeeId: UUID_ME,
+      username,
+      password: 'Clave-de-prueba-1',
+    });
+    const updateMeta: ArgumentMetadata = { type: 'body', metatype: UpdateAccountPasswordDto };
+
+    it.each(['sin-arroba', 'Juan.Perez_MX', '=SUMA(A1)', 'x'.repeat(500)])('acepta %p al crear y al editar', async (username) => {
+      await expect(pipe.transform(body(username), meta)).resolves.toBeDefined();
+      await expect(pipe.transform({ username }, updateMeta)).resolves.toBeDefined();
+    });
+
+    it('recorta espacios pero conserva mayúsculas y caracteres tal cual', async () => {
+      const dto = await pipe.transform(body('  MiUsuario.ÑANDÚ  '), meta);
+      expect(dto.username).toBe('MiUsuario.ÑANDÚ');
+    });
+
+    it.each([['', 'vacío'], ['   ', 'solo espacios'], ['x'.repeat(501), '501 caracteres'], [123, 'no texto']])(
+      'rechaza %p (%s) con 400 al crear y al editar',
+      async (username: unknown, _label: string) => {
+        await expect(pipe.transform(body(username), meta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+        await expect(pipe.transform({ username }, updateMeta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+      },
+    );
+
+    it('falta el usuario al crear: 400', async () => {
+      const { username: _omit, ...rest } = body('x');
+      await expect(pipe.transform(rest, meta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+    });
   });
 
   it('end to end: el cuerpo del formulario con "Yo" crea la cuenta propia en el servicio', async () => {
@@ -662,5 +712,375 @@ describe('PasswordsService.createApplication', () => {
     for (let i = 0; i < APPLICATION_CREATE_LIMIT_PER_HOUR + 2; i++) {
       await expect(service.createApplication({ name: 'canva' }, 'u-1')).rejects.toBeInstanceOf(ConflictException);
     }
+  });
+});
+
+// ============================================================================
+// Transferencias
+// ============================================================================
+
+/** Jefe directo (direct_report_to_id) de cada expediente; incluye al inactivo. */
+const bossOf: Record<string, string | null> = {
+  [BOSS]: 'e-dir',
+  [SUB1]: BOSS,
+  [SUB2_INACTIVE]: BOSS,
+  [JEFE_B]: BOSS,
+  [NIETO]: JEFE_B,
+  [PAR]: 'e-dir',
+  [ALIEN]: null,
+};
+const inactive = new Set([SUB2_INACTIVE]);
+const CIPHER = Buffer.from('c3c0d1f1cad0-no-se-toca');
+
+interface TransferStore {
+  account: {
+    id: string;
+    employee_id: string;
+    manager_id: string;
+    status: string;
+    deleted_at: Date | null;
+    password_encrypted: Buffer;
+    expiry_notified_at: Date | null;
+  };
+  transfers: Record<string, unknown>[];
+  events: { sql: string; params: unknown[] }[];
+}
+
+/**
+ * Base en memoria con transacciones de verdad: `transaction` trabaja sobre una
+ * copia y solo la publica si el callback termina bien; si lanza, se descarta.
+ */
+function buildTransfer(
+  opts: { owner?: string; status?: string; deletedAt?: Date | null; failOn?: 'history' | 'event' } = {},
+) {
+  let store: TransferStore = {
+    account: {
+      id: 'a1',
+      employee_id: opts.owner ?? SUB1,
+      manager_id: BOSS,
+      status: opts.status ?? 'activa',
+      deleted_at: opts.deletedAt ?? null,
+      password_encrypted: CIPHER,
+      expiry_notified_at: new Date('2026-11-01'),
+    },
+    transfers: [],
+    events: [],
+  };
+  const sqls: string[] = [];
+  let clock = Date.parse('2026-11-26T10:00:00Z');
+
+  const run = async (st: TransferStore, sql: string, params: unknown[] = []): Promise<unknown[]> => {
+    sqls.push(sql);
+    const acc = st.account;
+    if (sql.includes('FOR UPDATE OF ap')) {
+      if (params[0] !== acc.id) return [];
+      return [
+        {
+          id: acc.id,
+          employee_id: acc.employee_id,
+          status: acc.status,
+          deleted_at: acc.deleted_at,
+          employee_name: employees[acc.employee_id]!.fullName,
+          employee_manager_id: bossOf[acc.employee_id] ?? null,
+        },
+      ];
+    }
+    if (sql.includes('b.id AS boss_id')) {
+      const e = employees[params[0] as string];
+      if (!e) return [];
+      const boss = bossOf[e.id];
+      const bossActive = boss && boss !== e.id && employees[boss] && !inactive.has(boss) ? boss : null;
+      return [
+        { id: e.id, full_name: e.fullName, status: inactive.has(e.id) ? 'inactive' : 'active', deleted_at: null, boss_id: bossActive },
+      ];
+    }
+    if (sql.includes('UPDATE passwords.account_passwords')) {
+      Object.assign(acc, { employee_id: params[1], manager_id: params[2], expiry_notified_at: null });
+      return [];
+    }
+    if (sql.includes('INSERT INTO passwords.account_transfers')) {
+      if (opts.failOn === 'history') throw new Error('falla simulada del historial');
+      clock += 60_000;
+      const row = {
+        id: `t${st.transfers.length + 1}`,
+        account_id: params[0],
+        from_employee_id: params[1],
+        to_employee_id: params[2],
+        from_employee_name: params[3],
+        to_employee_name: params[4],
+        transferred_by: params[5],
+        transferred_by_name: params[6],
+        reason: params[7],
+        created_at: new Date(clock),
+      };
+      st.transfers.push(row);
+      return [row];
+    }
+    if (sql.includes('INSERT INTO audit.security_events')) {
+      if (opts.failOn === 'event') throw new Error('falla simulada del evento');
+      st.events.push({ sql, params });
+      return [];
+    }
+    if (sql.includes('FROM passwords.account_transfers')) {
+      const rows = st.transfers.filter((t) => t.account_id === params[0]);
+      // La base ordena; aquí solo se respeta el ORDER BY que pide el servicio.
+      return sql.includes('ORDER BY created_at DESC')
+        ? [...rows].sort((a, b) => (b.created_at as Date).getTime() - (a.created_at as Date).getTime())
+        : rows;
+    }
+    if (sql.includes('e.direct_report_to_id AS employee_manager_id')) {
+      return [
+        {
+          id: acc.id,
+          manager_id: acc.manager_id,
+          employee_id: acc.employee_id,
+          deleted_at: acc.deleted_at,
+          expiry_date: null,
+          employee_manager_id: bossOf[acc.employee_id] ?? null,
+        },
+      ];
+    }
+    return [];
+  };
+
+  const clone = (st: TransferStore): TransferStore => ({
+    account: { ...st.account },
+    transfers: st.transfers.map((t) => ({ ...t })),
+    events: [...st.events],
+  });
+
+  const { service, db } = build();
+  (db as any).query = jest.fn((sql: string, params?: unknown[]) => run(store, sql, params));
+  (db as any).transaction = jest.fn(async (cb: (m: unknown) => Promise<unknown>) => {
+    const draft = clone(store);
+    const result = await cb({ query: (sql: string, params?: unknown[]) => run(draft, sql, params) });
+    store = draft;
+    return result;
+  });
+  return {
+    service,
+    get store() {
+      return store;
+    },
+    sqls,
+  };
+}
+
+describe('PasswordsService.transfer (quién puede)', () => {
+  it('el dueño transfiere su cuenta a cualquier colaborador activo', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    const res = await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, '10.0.0.1');
+    expect(res.id).toBe('a1');
+    expect(t.store.account.employee_id).toBe(NIETO);
+    expect(res.transfer).toMatchObject({
+      from: { id: SUB1, fullName: 'Ana Subordinada' },
+      to: { id: NIETO, fullName: 'Nieto Indirecto' },
+    });
+  });
+
+  it('su jefe directo actual también puede', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-boss'), 'a1', { toEmployeeId: PAR }, null);
+    expect(t.store.account.employee_id).toBe(PAR);
+    expect(t.store.transfers[0]).toMatchObject({ transferred_by: 'u-boss', transferred_by_name: 'Jefa Ejemplo' });
+  });
+
+  it('el jefe directo puede transferir las cuentas de un colaborador dado de baja', async () => {
+    const t = buildTransfer({ owner: SUB2_INACTIVE });
+    await t.service.transfer(userOf('u-boss'), 'a1', { toEmployeeId: SUB1 }, null);
+    expect(t.store.account.employee_id).toBe(SUB1);
+  });
+
+  it('SUPER_ADMIN puede, aunque no tenga expediente ni relación con el dueño', async () => {
+    const t = buildTransfer({ owner: NIETO });
+    const admin = { ...userOf('u-admin', true), name: 'Admin Global' };
+    await t.service.transfer(admin, 'a1', { toEmployeeId: ALIEN }, null);
+    expect(t.store.account.employee_id).toBe(ALIEN);
+    expect(t.store.transfers[0]).toMatchObject({ transferred_by: 'u-admin', transferred_by_name: 'Admin Global' });
+  });
+
+  it.each([
+    ['un colaborador ajeno', 'u-alien'],
+    ['un par del dueño', 'u-par'],
+    ['el jefe indirecto', 'u-boss'],
+    ['un usuario sin expediente', 'u-sin-expediente'],
+  ])('%s recibe 403 y no cambia nada', async (_quien, userId) => {
+    const t = buildTransfer({ owner: NIETO });
+    await expect(t.service.transfer(userOf(userId), 'a1', { toEmployeeId: PAR }, null)).rejects.toThrow(
+      ForbiddenException,
+    );
+    expect(t.store.account.employee_id).toBe(NIETO);
+    expect(t.store.transfers).toHaveLength(0);
+    expect(t.store.events).toHaveLength(0);
+  });
+
+  it('a un ajeno se le responde 403 aunque la cuenta esté revocada (no se revela el estado)', async () => {
+    const t = buildTransfer({ owner: SUB1, status: 'revocada', deletedAt: new Date() });
+    await expect(t.service.transfer(userOf('u-alien'), 'a1', { toEmployeeId: PAR }, null)).rejects.toThrow(
+      ForbiddenException,
+    );
+  });
+});
+
+describe('PasswordsService.transfer (rechazos 400)', () => {
+  it.each([
+    ['destino igual al dueño actual', SUB1, {}],
+    ['destino inactivo o dado de baja', SUB2_INACTIVE, {}],
+    ['destino inexistente', 'e-no-existe', {}],
+    ['cuenta revocada (deleted_at)', PAR, { status: 'revocada', deletedAt: new Date() }],
+    ['cuenta revocada (solo status)', PAR, { status: 'revocada' }],
+  ] as const)('%s → 400 y no cambia nada', async (_caso, toEmployeeId, over) => {
+    const t = buildTransfer({ owner: SUB1, ...over });
+    const err = await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId }, null).catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.getStatus()).toBe(HttpStatus.BAD_REQUEST);
+    expect(t.store.account.employee_id).toBe(SUB1);
+    expect(t.store.transfers).toHaveLength(0);
+    expect(t.store.events).toHaveLength(0);
+  });
+});
+
+describe('PasswordsService.transfer (efecto sobre la cuenta)', () => {
+  it('password_encrypted es idéntico antes y después, y ninguna consulta lo toca', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    const before = Buffer.from(t.store.account.password_encrypted);
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null);
+    expect(t.store.account.password_encrypted.equals(before)).toBe(true);
+    expect(t.sqls.join('\n')).not.toMatch(/password_encrypted|pgp_sym/);
+  });
+
+  it('manager_id pasa al jefe directo activo del destino (o al destino si no tiene) y se rearma el aviso', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null);
+    expect(t.store.account.manager_id).toBe(JEFE_B);
+    expect(t.store.account.expiry_notified_at).toBeNull();
+
+    const t2 = buildTransfer({ owner: SUB1 });
+    await t2.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: ALIEN }, null);
+    expect(t2.store.account.manager_id).toBe(ALIEN);
+  });
+
+  it('registra historial con snapshot y el evento password_transfer (warning) con origen, destino y motivo', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO, reason: 'Cambio de área' }, '::ffff:10.0.0.9');
+    expect(t.store.transfers[0]).toMatchObject({
+      account_id: 'a1',
+      from_employee_id: SUB1,
+      to_employee_id: NIETO,
+      from_employee_name: 'Ana Subordinada',
+      to_employee_name: 'Nieto Indirecto',
+      transferred_by: 'u-sub1',
+      transferred_by_name: 'Ana Subordinada',
+      reason: 'Cambio de área',
+    });
+    expect(t.store.events).toHaveLength(1);
+    const ev = t.store.events[0]!;
+    expect(ev.sql).toMatch(/'password_transfer'[\s\S]*'passwords'[\s\S]*'warning'/);
+    expect(ev.params.slice(0, 4)).toEqual(['u-sub1', 'u-sub1@lievant.com', '10.0.0.9', 'a1']);
+    expect(JSON.parse(ev.params[4] as string)).toEqual({
+      fromEmployeeId: SUB1,
+      fromEmployeeName: 'Ana Subordinada',
+      toEmployeeId: NIETO,
+      toEmployeeName: 'Nieto Indirecto',
+      reason: 'Cambio de área',
+    });
+  });
+
+  it('un motivo vacío o de puros espacios se guarda como null', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO, reason: '   ' }, null);
+    expect(t.store.transfers[0]).toMatchObject({ reason: null });
+  });
+
+  it.each(['history', 'event'] as const)('si falla el insert de %s, el dueño no cambia (transacción)', async (failOn) => {
+    const t = buildTransfer({ owner: SUB1, failOn });
+    await expect(t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null)).rejects.toThrow(
+      /falla simulada/,
+    );
+    expect(t.store.account.employee_id).toBe(SUB1);
+    expect(t.store.account.manager_id).toBe(BOSS);
+    expect(t.store.transfers).toHaveLength(0);
+    expect(t.store.events).toHaveLength(0);
+  });
+
+  it(`aplica un tope de ${TRANSFER_LIMIT_PER_HOUR} transferencias por hora por usuario`, async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    const admin = userOf('u-admin', true);
+    for (let i = 0; i < TRANSFER_LIMIT_PER_HOUR; i++) {
+      const to = t.store.account.employee_id === SUB1 ? NIETO : SUB1;
+      await t.service.transfer(admin, 'a1', { toEmployeeId: to }, null);
+    }
+    await expect(t.service.transfer(admin, 'a1', { toEmployeeId: PAR }, null)).rejects.toMatchObject({
+      status: HttpStatus.TOO_MANY_REQUESTS,
+    });
+    expect(t.store.transfers).toHaveLength(TRANSFER_LIMIT_PER_HOUR);
+  });
+});
+
+describe('PasswordsService.listTransfers', () => {
+  it('devuelve el historial en orden cronológico inverso y sin contraseñas', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: BOSS, reason: 'primera' }, null);
+    await t.service.transfer(userOf('u-boss'), 'a1', { toEmployeeId: SUB1, reason: 'segunda' }, null);
+    const list = await t.service.listTransfers(userOf('u-sub1'), 'a1');
+    expect(list.map((r) => r.reason)).toEqual(['segunda', 'primera']);
+    expect(list[0]).toMatchObject({ from: { id: BOSS }, to: { id: SUB1 }, transferredBy: { name: 'Jefa Ejemplo' } });
+    expect(JSON.stringify(list)).not.toMatch(/password|cipher|c3c0d1f1/i);
+  });
+
+  it('quien no puede ver la cuenta recibe 403', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await expect(t.service.listTransfers(userOf('u-alien'), 'a1')).rejects.toThrow(ForbiddenException);
+  });
+});
+
+describe('TransferAccountPasswordDto', () => {
+  const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+  const meta: ArgumentMetadata = { type: 'body', metatype: TransferAccountPasswordDto };
+  const to = 'cb1ba3e6-c74b-4645-a2e9-637a86d294e5';
+
+  it('acepta destino con o sin motivo y recorta el motivo', async () => {
+    await expect(pipe.transform({ toEmployeeId: to }, meta)).resolves.toBeDefined();
+    const dto = await pipe.transform({ toEmployeeId: to, reason: '  Cambio de área  ' }, meta);
+    expect(dto.reason).toBe('Cambio de área');
+  });
+
+  it.each([
+    [{}, 'sin destino'],
+    [{ toEmployeeId: 'no-es-uuid' }, 'destino inválido'],
+    [{ toEmployeeId: to, reason: 'x'.repeat(301) }, 'motivo de 301'],
+    [{ toEmployeeId: to, password: 'x' }, 'campo extra'],
+  ])('rechaza %p (%s) con 400', async (body: Record<string, unknown>, _label: string) => {
+    await expect(pipe.transform(body, meta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+  });
+});
+
+describe('Modal "Transferir" (frontend) → API', () => {
+  it('el botón de confirmación dice a quién se transfiere', () => {
+    expect(transferConfirmLabel('Nieto Indirecto')).toBe('Transferir a Nieto Indirecto');
+    expect(transferConfirmLabel(null)).toBe('Elige a quién transferir');
+  });
+
+  it('el aviso fijo advierte que la contraseña no cambia', () => {
+    expect(TRANSFER_WARNING).toBe(
+      'La contraseña no cambia. Quien la tenía todavía la conoce. Cámbiala en la plataforma después de transferir.',
+    );
+  });
+
+  it('valida destino, dueño y largo del motivo', () => {
+    expect(validateTransferForm({ ownerId: SUB1, toEmployeeId: '', reason: '' })).toBe('Elige a quién se transfiere la cuenta.');
+    expect(validateTransferForm({ ownerId: SUB1, toEmployeeId: SUB1, reason: '' })).toBe('La cuenta ya es de esa persona.');
+    expect(validateTransferForm({ ownerId: SUB1, toEmployeeId: NIETO, reason: 'x'.repeat(301) })).toMatch(/300/);
+    expect(validateTransferForm({ ownerId: SUB1, toEmployeeId: NIETO, reason: 'x'.repeat(300) })).toBeNull();
+  });
+
+  it('el cuerpo pasa la validación del API y un motivo vacío no viaja', async () => {
+    const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
+    const meta: ArgumentMetadata = { type: 'body', metatype: TransferAccountPasswordDto };
+    const to = 'cb1ba3e6-c74b-4645-a2e9-637a86d294e5';
+    expect(buildTransferPayload({ toEmployeeId: to, reason: '   ' })).toEqual({ toEmployeeId: to });
+    const body = buildTransferPayload({ toEmployeeId: to, reason: ' Baja ' });
+    expect(body).toEqual({ toEmployeeId: to, reason: 'Baja' });
+    await expect(pipe.transform(body, meta)).resolves.toBeDefined();
   });
 });

@@ -65,8 +65,3 @@ export function passwordStrength(password: string): PasswordStrength {
   if (password.length < 8 || !hasDigit || !hasUpper) return 'debil';
   return 'media';
 }
-
-// Misma regla laxa que class-validator acepta en la práctica: algo@algo.tld.
-export function isValidEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value.trim());
-}

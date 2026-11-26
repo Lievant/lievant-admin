@@ -4956,6 +4956,25 @@ export function revokeAccountPassword(id: string): Promise<void> {
   return apiFetch<void>(`/passwords/${id}`, { method: 'DELETE' });
 }
 
+/** Una fila del historial de transferencias de una cuenta. Nunca trae contraseñas. */
+export interface AccountTransferItem {
+  id: string;
+  accountId: string;
+  from: { id: string; fullName: string };
+  to: { id: string; fullName: string };
+  transferredBy: { id: string | null; name: string };
+  reason: string | null;
+  createdAt: string;
+}
+
+/** Colaborador activo que se puede elegir como destino de una transferencia. */
+export interface PasswordTransferCandidate {
+  id: string;
+  fullName: string;
+  position: string;
+  area: string | null;
+}
+
 // ── Líneas telefónicas (SIMs) ────────────────────────────────────────────────
 
 export type SimStatus = 'activa' | 'suspendida' | 'cancelada';

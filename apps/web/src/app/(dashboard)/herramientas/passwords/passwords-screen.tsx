@@ -15,6 +15,7 @@ import { revokeAccountPasswordAction } from './actions';
 import { STATUS_LABEL, accountSortValue, type AccountSortKey, type DisplayStatus } from './account-sort';
 import { PasswordDialog } from './password-dialog';
 import { PersonSelect } from './person-select';
+import { TransferDialog } from './transfer-dialog';
 import { daysUntil, formatDate } from './utils';
 
 /** Cuánto tiempo queda visible una contraseña revelada. */
@@ -77,6 +78,7 @@ export function PasswordsScreen({
   const [sort, setSort] = useState<{ key: AccountSortKey; dir: SortDir } | null>(null);
   const [editing, setEditing] = useState<AccountPasswordItem | 'nueva' | null>(null);
   const [revoking, setRevoking] = useState<AccountPasswordItem | null>(null);
+  const [transferring, setTransferring] = useState<AccountPasswordItem | null>(null);
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
   // Sugerencias sobre la última contraseña guardada: se quedan hasta "Entendido".
   const [passwordWarnings, setPasswordWarnings] = useState<string[]>([]);
@@ -317,7 +319,7 @@ export function PasswordsScreen({
                   <SortColumnHeader label="Aplicación" column="application" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Colaborador" column="employee" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Área" column="area" sort={sort} onSort={onSort} />
-                  <SortColumnHeader label="Usuario / Correo" column="username" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Usuario" column="username" sort={sort} onSort={onSort} />
                   <th className="px-4 py-3 text-left">Contraseña</th>
                   <SortColumnHeader label="Asignación" column="assignedDate" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Vencimiento" column="expiryDate" sort={sort} onSort={onSort} />
@@ -375,6 +377,15 @@ export function PasswordsScreen({
                           >
                             Editar
                           </button>
+                          {/* La lista solo trae cuentas propias o de subordinados directos activos:
+                              quien las ve es el dueño o su jefe directo, que son quienes pueden transferir. */}
+                          <button
+                            type="button"
+                            onClick={() => setTransferring(a)}
+                            className="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-slate-300"
+                          >
+                            Transferir
+                          </button>
                           <button
                             type="button"
                             onClick={() => setRevoking(a)}
@@ -408,6 +419,23 @@ export function PasswordsScreen({
             setEditing(null);
             setNotice({ kind: 'info', text });
             setPasswordWarnings(warnings);
+            void loadAccounts(personId);
+          }}
+        />
+      )}
+
+      {transferring && (
+        <TransferDialog
+          account={transferring}
+          onClose={() => setTransferring(null)}
+          onTransferred={(targetName) => {
+            const app = transferring.application.name;
+            setTransferring(null);
+            setNotice({
+              kind: 'info',
+              text: `Cuenta de ${app} transferida a ${targetName}. Recuerda cambiar la contraseña en la plataforma.`,
+            });
+            // Se recarga la persona seleccionada: si la cuenta ya no es suya, desaparece de la lista.
             void loadAccounts(personId);
           }}
         />
