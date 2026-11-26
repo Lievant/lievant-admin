@@ -16,6 +16,8 @@ import {
   updateStatusAction,
   updateTicketAction,
 } from './actions';
+import { CategoryEditor } from './category-editor';
+import { SurveyPanel } from './survey-panel';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -54,6 +56,8 @@ const ACTION_LABELS: Record<string, string> = {
   'actualizado.solution': 'Solución registrada',
   'actualizado.internalNotes': 'Nota interna',
   'actualizado.collaboratorConfirmation': 'Confirmación de resolución',
+  categoria_cambiada: 'Categoría cambiada',
+  encuesta_solicitada: 'Encuesta de satisfacción enviada',
 };
 
 function slaInfo(ticket: TicketDetail): { pct: number; label: string; color: string } | null {
@@ -393,6 +397,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
             </div>
           )}
 
+          {/* Encuesta de satisfacción (solo TD; el solicitante la ve en Mis tickets) */}
+          {isTd && <SurveyPanel ticketId={ticket.id} />}
+
           {/* ── Panel de acciones TD ── */}
           {isTd && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm space-y-4">
@@ -433,6 +440,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                   Actualizar estado
                 </button>
               </div>
+
+              {/* Categoría y subcategoría */}
+              <CategoryEditor ticketId={ticket.id} category={ticket.category} subcategory={ticket.subcategory} />
 
               {/* Prioridad */}
               <div>

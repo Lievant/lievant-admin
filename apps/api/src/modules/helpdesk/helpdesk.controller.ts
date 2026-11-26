@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Body,
+  ForbiddenException,
   Controller,
   DefaultValuePipe,
   Delete,
@@ -20,7 +21,9 @@ import { RequirePermission } from '../auth/decorators/permission.decorator';
 import { User } from '../auth/entities/user.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateTicketSurveyDto } from './dto/create-ticket-survey.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto } from './dto/query-tickets.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -119,6 +122,12 @@ export class HelpdeskController {
     return this.service.findMyTickets(user.id, query);
   }
 
+  /** Detalle para "Mis tickets": solo el solicitante; sin notas internas ni diagnóstico. */
+  @Get('tickets/my/:id')
+  getMyTicket(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.findMyTicketDetail(user.id, id);
+  }
+
   @Get('tickets')
   findAll(@Query() query: QueryTicketsDto, @CurrentUser() user: User) {
     return this.service.findAll(query, isTdUser(user), user.id);
@@ -143,6 +152,33 @@ export class HelpdeskController {
     @CurrentUser() user: User,
   ) {
     return this.service.updateTicket(id, dto, user);
+  }
+
+  /** Solo personal de TD (mismo criterio que abrir en nombre de otro). El solicitante recibe 403. */
+  @Patch('tickets/:id/category')
+  changeCategory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeTicketCategoryDto,
+    @CurrentUser() user: User,
+  ) {
+    if (!isTdUser(user)) throw new ForbiddenException('Solo el personal de TD puede cambiar la categoría.');
+    return this.service.changeCategory(id, dto, user);
+  }
+
+  /** Encuesta de satisfacción: solo el solicitante de un ticket cerrado, una vez. */
+  @Post('tickets/:id/survey')
+  answerSurvey(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateTicketSurveyDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.service.answerSurvey(id, dto, user);
+  }
+
+  /** La ven el solicitante y TD; nadie más. */
+  @Get('tickets/:id/survey')
+  getSurvey(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.getSurvey(id, user, isTdUser(user));
   }
 
   @Patch('tickets/:id/status')

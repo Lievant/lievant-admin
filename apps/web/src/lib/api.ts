@@ -2021,6 +2021,48 @@ export interface TicketSummary {
   equipmentId: string | null;
   isHistorical: boolean;
   assigneeName: string | null;
+  /** Solo en "Mis tickets": nombre de la categoría y su meta de resolución (horas). */
+  categoryName?: string | null;
+  slaResolutionHours?: number | null;
+}
+
+/** Detalle de un ticket propio en "Mis tickets" (GET /helpdesk/tickets/my/:id). Sin notas internas. */
+export interface MyTicketDetail {
+  id: string;
+  displayId: string;
+  category: string;
+  categoryName: string | null;
+  subcategory: string | null;
+  description: string;
+  priority: TicketPriority | null;
+  status: TicketStatus;
+  requestedAt: string;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  slaResolutionHours: number | null;
+  assigneeName: string | null;
+  equipmentId: string | null;
+  /** Notas de solución del técnico. */
+  solution: string | null;
+  /** Respuesta de la encuesta de satisfacción, si ya la hay. */
+  survey: TicketSurveyItem | null;
+  /** Cerrado, con invitación y sin respuesta: se muestra "¿Cómo fue la atención?". */
+  canAnswerSurvey: boolean;
+}
+
+export type TicketSurveyRating = 'feliz' | 'normal' | 'triste' | 'enojado';
+
+export interface TicketSurveyItem {
+  rating: TicketSurveyRating;
+  comment: string | null;
+  answeredByName: string;
+  createdAt: string;
+}
+
+/** GET /helpdesk/tickets/:id/survey (solicitante o TD). */
+export interface TicketSurveyState {
+  survey: TicketSurveyItem | null;
+  canAnswerSurvey: boolean;
 }
 
 export interface TicketDetail extends TicketSummary {
