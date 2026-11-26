@@ -34,6 +34,11 @@ export interface NotifyContext {
   title: string;
   message: string;
   actionUrl?: string | null;
+  /**
+   * Enlace para el solicitante (`requesterId`) cuando difiere del de los demás:
+   * en tickets, el solicitante va a "Mis tickets" y no a la página de TD.
+   */
+  requesterActionUrl?: string | null;
   senderName?: string | null;
   /**
    * Fuerza el tipo de las notificaciones del disparo, ignorando el configurado
@@ -256,6 +261,8 @@ export class NotificationFlowsService {
 
       let created = 0;
       for (const [userId, recipient] of resolved) {
+        const actionUrl =
+          context.requesterActionUrl && userId === context.requesterId ? context.requesterActionUrl : context.actionUrl;
         // Los opcionales se omiten en vez de mandarse como undefined:
         // el tsconfig usa exactOptionalPropertyTypes.
         await this.notificationsService.create({
@@ -268,7 +275,7 @@ export class NotificationFlowsService {
           module,
           ...(context.entityId ? { entityId: context.entityId } : {}),
           ...(context.entityType ? { entityType: context.entityType } : {}),
-          ...(context.actionUrl ? { actionUrl: context.actionUrl } : {}),
+          ...(actionUrl ? { actionUrl } : {}),
         });
         created++;
       }
