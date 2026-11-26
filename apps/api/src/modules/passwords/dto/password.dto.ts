@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
-  IsEmail,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -12,6 +12,9 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+/** Largo de passwords.account_passwords.username (VARCHAR(500)). */
+export const USERNAME_MAX = 500;
 
 export const PASSWORD_STATUS_FILTERS = ['activa', 'por_vencer', 'vencida', 'revocada'] as const;
 export type PasswordStatusFilter = (typeof PASSWORD_STATUS_FILTERS)[number];
@@ -37,9 +40,12 @@ export class CreateAccountPasswordDto {
   @IsUUID()
   employeeId!: string;
 
-  // Cualquier dominio: las cuentas de clientes y plataformas no son @lievant.com.
-  @IsEmail({}, { message: 'El usuario debe ser un correo válido' })
-  @MaxLength(500)
+  // Texto libre: puede ser un correo de cualquier dominio o un nickname. Se
+  // recorta y se guarda tal cual se escribió (sin minúsculas ni normalizar).
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Escribe el usuario o correo' })
+  @IsNotEmpty({ message: 'Escribe el usuario o correo' })
+  @MaxLength(USERNAME_MAX, { message: `El usuario o correo no puede pasar de ${USERNAME_MAX} caracteres` })
   username!: string;
 
   @IsString()
@@ -90,3 +96,27 @@ export class CreatePasswordApplicationDto {
 }
 
 export class UpdatePasswordApplicationDto extends PartialType(CreatePasswordApplicationDto) {}
+
+/** Largo de passwords.account_transfers.reason. */
+export const TRANSFER_REASON_MAX = 300;
+
+export class TransferAccountPasswordDto {
+  @IsUUID('all', { message: 'Elige a quién se transfiere la cuenta' })
+  toEmployeeId!: string;
+
+  // Vacío equivale a sin motivo.
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString()
+  @MaxLength(TRANSFER_REASON_MAX, { message: `El motivo no puede pasar de ${TRANSFER_REASON_MAX} caracteres` })
+  reason?: string | null;
+}
+
+/** Buscador de colaboradores activos para elegir el destino de una transferencia. */
+export class TransferCandidatesQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  q?: string;
+}
