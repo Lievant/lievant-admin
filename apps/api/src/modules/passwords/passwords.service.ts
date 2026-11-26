@@ -103,11 +103,14 @@ interface TransferAccountRow {
   deleted_at: Date | null;
   employee_name: string;
   employee_manager_id: string | null;
+  application_name: string;
 }
 
 interface TransferTargetRow {
   id: string;
   full_name: string;
+  /** Usuario vinculado del destino; null si no tiene (entonces no se le notifica). */
+  auth_user_id: string | null;
   status: string;
   deleted_at: Date | null;
   /** Jefe directo activo del destino (null si no tiene o se apunta a sí mismo). */
@@ -551,9 +554,11 @@ export class PasswordsService {
       // partir las dos del mismo dueño.
       const [account] = (await m.query(
         `SELECT ap.id, ap.employee_id, ap.status, ap.deleted_at,
-                e.full_name AS employee_name, e.direct_report_to_id AS employee_manager_id
+                e.full_name AS employee_name, e.direct_report_to_id AS employee_manager_id,
+                a.name AS application_name
          FROM passwords.account_passwords ap
          JOIN employees.employee_records e ON e.id = ap.employee_id
+         JOIN passwords.applications a ON a.id = ap.application_id
          WHERE ap.id = $1
          FOR UPDATE OF ap`,
         [id],
@@ -572,7 +577,7 @@ export class PasswordsService {
       }
 
       const [target] = (await m.query(
-        `SELECT e.id, e.full_name, e.status, e.deleted_at,
+        `SELECT e.id, e.full_name, e.status, e.deleted_at, e.auth_user_id,
                 b.id AS boss_id
          FROM employees.employee_records e
          LEFT JOIN employees.employee_records b
@@ -634,14 +639,53 @@ export class PasswordsService {
         ],
       );
 
-      return toTransferItem(row!);
+      return {
+        item: toTransferItem(row!),
+        notice: { recipientUserId: target.auth_user_id, applicationName: account.application_name, byName },
+      };
     });
 
     // Solo cuentan las transferencias que sí se hicieron.
     recent.push(Date.now());
     this.accountTransfers.set(user.id, recent);
+
+    // Ya confirmada la transacción: el aviso nunca la deshace.
+    await this.notifyTransferRecipient(id, user.id, transfer.notice);
     // `id` es el de la cuenta: el AuditInterceptor lo toma como entidad en audit.user_activity.
-    return { id, transfer };
+    return { id, transfer: transfer.item };
+  }
+
+  /**
+   * Aviso informativo al colaborador que recibe la cuenta. Mismo mecanismo que
+   * el aviso de vencimiento al líder (NotificationsService.create, sin flujo
+   * configurable). Solo nombra la aplicación y a quien la transfirió: ni el
+   * usuario ni la contraseña de la cuenta. Sin usuario vinculado se omite; si
+   * falla el envío se registra y la transferencia sigue hecha.
+   */
+  private async notifyTransferRecipient(
+    accountId: string,
+    senderId: string,
+    notice: { recipientUserId: string | null; applicationName: string; byName: string },
+  ): Promise<void> {
+    if (!notice.recipientUserId) return;
+    try {
+      await this.notifications.create({
+        recipientId: notice.recipientUserId,
+        senderId,
+        senderName: notice.byName,
+        title: 'Se te transfirió una cuenta',
+        message: `${notice.byName} te transfirió la cuenta de ${notice.applicationName}.`,
+        type: 'informativa',
+        module: 'passwords',
+        entityId: accountId,
+        entityType: 'account_password',
+        actionUrl: '/herramientas/passwords',
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar la transferencia de la cuenta ${accountId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   /** Historial de una cuenta, del más reciente al más antiguo. Mismo alcance que ver la cuenta. */

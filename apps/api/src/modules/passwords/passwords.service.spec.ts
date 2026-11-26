@@ -33,6 +33,7 @@ const JEFE_B = 'e-jefeb';
 const NIETO = 'e-nieto';
 const PAR = 'e-par';
 const ALIEN = 'e-alien';
+const SIN_USUARIO = 'e-sin-usuario';
 
 const employees: Record<string, { id: string; fullName: string; authUserId: string | null }> = {
   [BOSS]: { id: BOSS, fullName: 'Jefa Ejemplo', authUserId: 'u-boss' },
@@ -42,6 +43,8 @@ const employees: Record<string, { id: string; fullName: string; authUserId: stri
   [NIETO]: { id: NIETO, fullName: 'Nieto Indirecto', authUserId: 'u-nieto' },
   [PAR]: { id: PAR, fullName: 'Par Ejemplo', authUserId: 'u-par' },
   [ALIEN]: { id: ALIEN, fullName: 'Ajena Total', authUserId: 'u-alien' },
+  // Expediente activo sin usuario vinculado (no puede recibir notificaciones).
+  [SIN_USUARIO]: { id: SIN_USUARIO, fullName: 'Sin Usuario', authUserId: null },
 };
 
 /** Subordinados directos ACTIVOS por jefe (los inactivos no entran: teamQuery los excluye). */
@@ -751,7 +754,13 @@ interface TransferStore {
  * copia y solo la publica si el callback termina bien; si lanza, se descarta.
  */
 function buildTransfer(
-  opts: { owner?: string; status?: string; deletedAt?: Date | null; failOn?: 'history' | 'event' } = {},
+  opts: {
+    owner?: string;
+    status?: string;
+    deletedAt?: Date | null;
+    failOn?: 'history' | 'event';
+    notifyFails?: boolean;
+  } = {},
 ) {
   let store: TransferStore = {
     account: {
@@ -782,6 +791,7 @@ function buildTransfer(
           deleted_at: acc.deleted_at,
           employee_name: employees[acc.employee_id]!.fullName,
           employee_manager_id: bossOf[acc.employee_id] ?? null,
+          application_name: 'M365',
         },
       ];
     }
@@ -791,7 +801,14 @@ function buildTransfer(
       const boss = bossOf[e.id];
       const bossActive = boss && boss !== e.id && employees[boss] && !inactive.has(boss) ? boss : null;
       return [
-        { id: e.id, full_name: e.fullName, status: inactive.has(e.id) ? 'inactive' : 'active', deleted_at: null, boss_id: bossActive },
+        {
+          id: e.id,
+          full_name: e.fullName,
+          status: inactive.has(e.id) ? 'inactive' : 'active',
+          deleted_at: null,
+          auth_user_id: e.authUserId,
+          boss_id: bossActive,
+        },
       ];
     }
     if (sql.includes('UPDATE passwords.account_passwords')) {
@@ -850,6 +867,13 @@ function buildTransfer(
   });
 
   const { service, db } = build();
+  const notifications = {
+    create: jest.fn(async (dto: Record<string, unknown>) => {
+      if (opts.notifyFails) throw new Error('falla simulada del envío');
+      return dto;
+    }),
+  };
+  (service as any).notifications = notifications;
   (db as any).query = jest.fn((sql: string, params?: unknown[]) => run(store, sql, params));
   (db as any).transaction = jest.fn(async (cb: (m: unknown) => Promise<unknown>) => {
     const draft = clone(store);
@@ -859,6 +883,7 @@ function buildTransfer(
   });
   return {
     service,
+    notifications,
     get store() {
       return store;
     },
@@ -1082,5 +1107,56 @@ describe('Modal "Transferir" (frontend) → API', () => {
     const body = buildTransferPayload({ toEmployeeId: to, reason: ' Baja ' });
     expect(body).toEqual({ toEmployeeId: to, reason: 'Baja' });
     await expect(pipe.transform(body, meta)).resolves.toBeDefined();
+  });
+});
+
+describe('PasswordsService.transfer (aviso al colaborador que la recibe)', () => {
+  it('notifica al usuario del destino: informativa, título, aplicación, quién la transfirió y actionUrl', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-boss'), 'a1', { toEmployeeId: NIETO }, null);
+    expect(t.notifications.create).toHaveBeenCalledTimes(1);
+    expect(t.notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        recipientId: 'u-nieto',
+        title: 'Se te transfirió una cuenta',
+        message: 'Jefa Ejemplo te transfirió la cuenta de M365.',
+        type: 'informativa',
+        module: 'passwords',
+        entityId: 'a1',
+        actionUrl: '/herramientas/passwords',
+      }),
+    );
+  });
+
+  it('se envía solo después de confirmar la transacción', async () => {
+    const t = buildTransfer({ owner: SUB1, failOn: 'history' });
+    await expect(t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null)).rejects.toThrow();
+    expect(t.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('un destino sin usuario vinculado no falla: la transferencia se hace y no se notifica', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await expect(t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: SIN_USUARIO }, null)).resolves.toBeDefined();
+    expect(t.store.account.employee_id).toBe(SIN_USUARIO);
+    expect(t.notifications.create).not.toHaveBeenCalled();
+  });
+
+  it('si falla el envío, el cambio de dueño se queda y la llamada termina bien', async () => {
+    const t = buildTransfer({ owner: SUB1, notifyFails: true });
+    const logged = jest.spyOn((t.service as any).logger, 'error').mockImplementation(() => undefined);
+    await expect(t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null)).resolves.toMatchObject({ id: 'a1' });
+    expect(t.store.account.employee_id).toBe(NIETO);
+    expect(t.store.transfers).toHaveLength(1);
+    expect(logged).toHaveBeenCalledWith(expect.stringContaining('No se pudo notificar la transferencia'));
+  });
+
+  it('el aviso no contiene la contraseña ni el usuario de la cuenta', async () => {
+    const t = buildTransfer({ owner: SUB1 });
+    await t.service.transfer(userOf('u-sub1'), 'a1', { toEmployeeId: NIETO }, null);
+    // Lo que ve la persona: título y mensaje. (El módulo «passwords» sí viaja como metadato.)
+    const [dto] = t.notifications.create.mock.calls[0]! as [Record<string, unknown>];
+    const visible = `${dto.title} ${dto.message} ${dto.senderName}`;
+    expect(visible).not.toMatch(/secreto-de-prueba|c3c0d1f1|password|contraseña|ana@x\.com/i);
+    expect(JSON.stringify(dto)).not.toMatch(/secreto-de-prueba|c3c0d1f1|ana@x\.com|password_encrypted/);
   });
 });
