@@ -1,4 +1,5 @@
-import { isValidEmail } from './utils';
+/** Largo de la columna username (VARCHAR(500)); el DTO del API usa el mismo tope. */
+export const USERNAME_MAX = 500;
 
 /** Lo mínimo de una persona visible que necesita el formulario. */
 export interface OwnerCandidate {
@@ -37,7 +38,11 @@ export function validateAccountForm(input: AccountFormInput): string | null {
   if (!input.isEdit && !resolveOwnerId(input.people, input.employeeId)) {
     return 'No se pudo determinar de quién es la cuenta.';
   }
-  if (!isValidEmail(input.username)) return 'El usuario debe ser un correo válido.';
+  // Texto libre: un correo de cualquier dominio o un nickname. Solo se exige que
+  // haya algo escrito y que quepa en la columna.
+  const username = input.username.trim();
+  if (!username) return 'Escribe el usuario o correo.';
+  if (username.length > USERNAME_MAX) return `El usuario o correo no puede pasar de ${USERNAME_MAX} caracteres.`;
   if (!input.isEdit && !input.password) return 'Escribe o genera la contraseña.';
   if (input.expiryDate && input.expiryDate < input.assignedDate) {
     return 'El vencimiento no puede ser anterior a la fecha de asignación.';

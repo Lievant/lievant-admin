@@ -4,9 +4,9 @@ import { useMemo, useState, useTransition } from 'react';
 import type { AccountPasswordItem, PasswordApplication, PasswordVisiblePerson } from '@/lib/api';
 import { AlertIcon, EyeIcon, EyeOffIcon, KeyIcon, PlusIcon } from '@/components/icons';
 import { createAccountPasswordAction, updateAccountPasswordAction } from './actions';
-import { buildAccountPayload, resolveOwnerId, validateAccountForm } from './account-form';
+import { buildAccountPayload, resolveOwnerId, USERNAME_MAX, validateAccountForm } from './account-form';
 import { PersonSelect } from './person-select';
-import { generatePassword, isValidEmail, passwordStrength, todayIso, type PasswordStrength } from './utils';
+import { generatePassword, passwordStrength, todayIso, type PasswordStrength } from './utils';
 
 const STRENGTH_META: Record<PasswordStrength, { label: string; bar: string; text: string; width: string }> = {
   debil: { label: 'Débil', bar: 'bg-rose-500', text: 'text-rose-600', width: 'w-1/3' },
@@ -122,20 +122,19 @@ export function PasswordDialog({
           <Section title="Credenciales">
             <div className="flex flex-col gap-1">
               <label className={labelClass} htmlFor="pw-username">
-                Usuario / Correo
+                Usuario
               </label>
               <input
                 id="pw-username"
-                type="email"
+                type="text"
                 autoComplete="off"
+                spellCheck={false}
+                maxLength={USERNAME_MAX}
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="cuenta@cliente.com"
+                placeholder="Correo, nickname o nombre de usuario"
                 className={fieldClass}
               />
-              {username && !isValidEmail(username) && (
-                <p className="text-xs text-rose-600">Formato de correo no válido.</p>
-              )}
             </div>
 
             <div className="flex flex-col gap-1">

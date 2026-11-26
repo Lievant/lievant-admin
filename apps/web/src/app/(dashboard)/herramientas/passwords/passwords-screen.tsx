@@ -317,7 +317,7 @@ export function PasswordsScreen({
                   <SortColumnHeader label="Aplicación" column="application" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Colaborador" column="employee" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Área" column="area" sort={sort} onSort={onSort} />
-                  <SortColumnHeader label="Usuario / Correo" column="username" sort={sort} onSort={onSort} />
+                  <SortColumnHeader label="Usuario" column="username" sort={sort} onSort={onSort} />
                   <th className="px-4 py-3 text-left">Contraseña</th>
                   <SortColumnHeader label="Asignación" column="assignedDate" sort={sort} onSort={onSort} />
                   <SortColumnHeader label="Vencimiento" column="expiryDate" sort={sort} onSort={onSort} />

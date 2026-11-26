@@ -13,7 +13,7 @@ import {
   resolveOwnerId,
   validateAccountForm,
 } from '../../../../web/src/app/(dashboard)/herramientas/passwords/account-form';
-import { CreateAccountPasswordDto } from './dto/password.dto';
+import { CreateAccountPasswordDto, UpdateAccountPasswordDto } from './dto/password.dto';
 
 // Todos los ids son uuid-like; la jerarquía de las pruebas:
 //   BOSS ── SUB1 (activo)
@@ -508,11 +508,52 @@ describe('Formulario "Nueva cuenta" → API', () => {
 
   it.each([
     [{ applicationId: '' }, 'Selecciona la aplicación.'],
-    [{ username: 'sin-arroba' }, 'El usuario debe ser un correo válido.'],
+    [{ username: '   ' }, 'Escribe el usuario o correo.'],
+    [{ username: 'x'.repeat(501) }, 'El usuario o correo no puede pasar de 500 caracteres.'],
     [{ password: '' }, 'Escribe o genera la contraseña.'],
     [{ expiryDate: '2026-01-01' }, 'El vencimiento no puede ser anterior a la fecha de asignación.'],
   ])('mensajes de validación: %p', (override, message) => {
     expect(validateAccountForm({ ...base, employeeId: BOSS, ...override })).toBe(message);
+  });
+
+  it('el usuario acepta texto libre (nickname, sin arroba) y se guarda tal cual, solo recortado', () => {
+    for (const username of ['sin-arroba', 'Juan.Perez_MX', '@marca', 'cuenta@cliente.com']) {
+      expect(validateAccountForm({ ...base, employeeId: BOSS, username })).toBeNull();
+    }
+    expect(buildAccountPayload({ ...base, employeeId: BOSS, username: '  NickName_01  ' }).username).toBe('NickName_01');
+  });
+
+  describe('DTO del API: usuario de texto libre', () => {
+    const body = (username: unknown) => ({
+      applicationId: '0db5a2f5-865b-47e5-a9b3-512efe50c627',
+      employeeId: UUID_ME,
+      username,
+      password: 'Clave-de-prueba-1',
+    });
+    const updateMeta: ArgumentMetadata = { type: 'body', metatype: UpdateAccountPasswordDto };
+
+    it.each(['sin-arroba', 'Juan.Perez_MX', '=SUMA(A1)', 'x'.repeat(500)])('acepta %p al crear y al editar', async (username) => {
+      await expect(pipe.transform(body(username), meta)).resolves.toBeDefined();
+      await expect(pipe.transform({ username }, updateMeta)).resolves.toBeDefined();
+    });
+
+    it('recorta espacios pero conserva mayúsculas y caracteres tal cual', async () => {
+      const dto = await pipe.transform(body('  MiUsuario.ÑANDÚ  '), meta);
+      expect(dto.username).toBe('MiUsuario.ÑANDÚ');
+    });
+
+    it.each([['', 'vacío'], ['   ', 'solo espacios'], ['x'.repeat(501), '501 caracteres'], [123, 'no texto']])(
+      'rechaza %p (%s) con 400 al crear y al editar',
+      async (username: unknown, _label: string) => {
+        await expect(pipe.transform(body(username), meta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+        await expect(pipe.transform({ username }, updateMeta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+      },
+    );
+
+    it('falta el usuario al crear: 400', async () => {
+      const { username: _omit, ...rest } = body('x');
+      await expect(pipe.transform(rest, meta)).rejects.toMatchObject({ status: HttpStatus.BAD_REQUEST });
+    });
   });
 
   it('end to end: el cuerpo del formulario con "Yo" crea la cuenta propia en el servicio', async () => {

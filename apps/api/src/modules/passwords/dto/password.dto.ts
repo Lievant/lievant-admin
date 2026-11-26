@@ -1,7 +1,7 @@
 import { PartialType } from '@nestjs/mapped-types';
+import { Transform } from 'class-transformer';
 import {
   IsDateString,
-  IsEmail,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -12,6 +12,9 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+/** Largo de passwords.account_passwords.username (VARCHAR(500)). */
+export const USERNAME_MAX = 500;
 
 export const PASSWORD_STATUS_FILTERS = ['activa', 'por_vencer', 'vencida', 'revocada'] as const;
 export type PasswordStatusFilter = (typeof PASSWORD_STATUS_FILTERS)[number];
@@ -37,9 +40,12 @@ export class CreateAccountPasswordDto {
   @IsUUID()
   employeeId!: string;
 
-  // Cualquier dominio: las cuentas de clientes y plataformas no son @lievant.com.
-  @IsEmail({}, { message: 'El usuario debe ser un correo válido' })
-  @MaxLength(500)
+  // Texto libre: puede ser un correo de cualquier dominio o un nickname. Se
+  // recorta y se guarda tal cual se escribió (sin minúsculas ni normalizar).
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsString({ message: 'Escribe el usuario o correo' })
+  @IsNotEmpty({ message: 'Escribe el usuario o correo' })
+  @MaxLength(USERNAME_MAX, { message: `El usuario o correo no puede pasar de ${USERNAME_MAX} caracteres` })
   username!: string;
 
   @IsString()
