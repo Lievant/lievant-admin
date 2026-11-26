@@ -219,8 +219,8 @@ export class HelpdeskController {
   // ------- Attachments ----------------------------------------------------
 
   @Get('tickets/:id/attachments')
-  getAttachments(@Param('id', ParseUUIDPipe) id: string) {
-    return this.service.getAttachments(id);
+  getAttachments(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.service.listAttachments(id, { userId: user.id, isTd: isTdUser(user) });
   }
 
   @Post('tickets/:id/attachments')
@@ -240,6 +240,6 @@ export class HelpdeskController {
         `Tipo no permitido. Acepta: ${ALLOWED_ATTACHMENT_MIME_TYPES.join(', ')}`,
       );
     }
-    return this.service.uploadAttachment(id, file, user.id);
+    return this.service.uploadAttachment(id, file, { userId: user.id, isTd: isTdUser(user) });
   }
 }

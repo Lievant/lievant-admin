@@ -58,6 +58,12 @@ const SURVEY_REQUESTED = 'encuesta_solicitada';
 const INTERNAL_TICKET_FIELDS = ['internalNotes', 'diagnosis', 'problemStatus'] as const;
 const INTERNAL_HISTORY_ACTIONS = new Set(INTERNAL_TICKET_FIELDS.map((f) => `actualizado.${f}`));
 
+/** Quién consulta un ticket: su id de auth.users y si es personal de TD (isTdUser). */
+export interface TicketViewer {
+  userId: string;
+  isTd: boolean;
+}
+
 /** "Reportar recurrencia": el solicitante reabre su ticket cerrado dentro de estos días. */
 const REQUESTER_REOPEN_DAYS = 7;
 
@@ -180,17 +186,9 @@ export class HelpdeskService {
    * usuario que no es TD solo ve su ticket (o el que le escalaron) y sin el
    * trabajo interno; cualquier otro recibe 404, sin confirmar que existe.
    */
-  async findById(id: string, viewer?: { userId: string; isTd: boolean }) {
-    const ticket = await this.ticketsRepo.findOne({ where: { id } });
-    if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
+  async findById(id: string, viewer?: TicketViewer) {
+    const ticket = viewer ? await this.getReadableTicket(id, viewer) : await this.getOrFail(id);
     const restricted = !!viewer && !viewer.isTd;
-    if (
-      viewer &&
-      restricted &&
-      (ticket.deletedAt || (ticket.requesterId !== viewer.userId && ticket.escalatedTo !== viewer.userId))
-    ) {
-      throw new NotFoundException(`Ticket ${id} no encontrado`);
-    }
     // escalated_to guarda un id de auth.users; el nombre legible está en el
     // expediente, y si el director no tiene expediente se cae al de la cuenta.
     const [history, assignee, attachments, escalatedEmployee, escalatedUser] = await Promise.all([
@@ -226,6 +224,30 @@ export class HelpdeskService {
     return visible;
   }
 
+  /**
+   * Acceso de lectura a un ticket (detalle y adjuntos): TD a cualquiera; el
+   * solicitante y el director al que se escaló, al suyo. Los demás, 404 sin
+   * confirmar que existe. Se revisa ANTES de generar cualquier URL prefirmada.
+   */
+  private async getReadableTicket(id: string, viewer: TicketViewer): Promise<Ticket> {
+    const ticket = await this.ticketsRepo.findOne({ where: { id } });
+    if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    if (viewer.isTd) return ticket;
+    const isParty =
+      !ticket.deletedAt &&
+      ((!!ticket.requesterId && ticket.requesterId === viewer.userId) ||
+        (!!ticket.escalatedTo && ticket.escalatedTo === viewer.userId));
+    if (!isParty) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    return ticket;
+  }
+
+  /** GET /helpdesk/tickets/:id/attachments: primero el acceso, luego las URLs. */
+  async listAttachments(ticketId: string, viewer: TicketViewer) {
+    await this.getReadableTicket(ticketId, viewer);
+    return this.getAttachments(ticketId);
+  }
+
+  /** Uso interno: solo después de haber revisado el acceso al ticket. */
   async getAttachments(ticketId: string) {
     const rows = await this.attachmentsRepo.find({
       where: { ticketId },
@@ -243,8 +265,16 @@ export class HelpdeskService {
     );
   }
 
-  async uploadAttachment(ticketId: string, file: Express.Multer.File, userId: string) {
-    await this.getOrFail(ticketId);
+  /**
+   * Subir: TD a cualquier ticket y el solicitante al suyo. El director al que se
+   * escaló puede leer pero no subir (403: ya sabe que el ticket existe).
+   */
+  async uploadAttachment(ticketId: string, file: Express.Multer.File, viewer: TicketViewer) {
+    const ticket = await this.getReadableTicket(ticketId, viewer);
+    if (!viewer.isTd && ticket.requesterId !== viewer.userId) {
+      throw new ForbiddenException('Solo quien solicitó el ticket o el personal de TD pueden subir adjuntos.');
+    }
+    const userId = viewer.userId;
 
     if (!(ALLOWED_ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       throw new BadRequestException(`Tipo de archivo no permitido: ${file.mimetype}`);
