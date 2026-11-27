@@ -117,6 +117,17 @@ export class HelpdeskController {
     return this.service.getStats(from || undefined, to || undefined);
   }
 
+  /** Indicadores de satisfacción por rango (YYYY-MM-DD, hora de México). Solo TD. */
+  @Get('surveys/summary')
+  getSurveySummary(
+    @Query('from', new DefaultValuePipe('')) from: string,
+    @Query('to', new DefaultValuePipe('')) to: string,
+    @CurrentUser() user: User,
+  ) {
+    if (!isTdUser(user)) throw new ForbiddenException('Solo el personal de TD puede ver los indicadores de satisfacción.');
+    return this.service.getSurveySummary(from || undefined, to || undefined);
+  }
+
   @Get('tickets/my')
   getMyTickets(@Query() query: QueryTicketsDto, @CurrentUser() user: User) {
     return this.service.findMyTickets(user.id, query);

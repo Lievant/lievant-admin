@@ -30,6 +30,7 @@ import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
 import { TicketSurvey } from './entities/ticket-survey.entity';
 import { isTdUser } from './td-user.util';
+import { buildSurveySummary, resolveSurveySummaryRange } from './survey-summary';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 // Seconds per SLA hour-limit (for inline CASE expression)
@@ -977,6 +978,36 @@ Comentario: ${preview}` : ''),
       );
       return null;
     }
+  }
+
+  /**
+   * Indicadores de satisfacción (solo TD; el controlador lo valida). Fechas en
+   * hora de México: respuestas por su fecha de respuesta; "enviadas" son los
+   * tickets con la marca encuesta_solicitada en el rango. Tickets borrados no
+   * cuentan. Dos consultas agregadas, sin traer filas.
+   */
+  async getSurveySummary(from?: string, to?: string, now: Date = new Date()) {
+    const range = resolveSurveySummaryRange(from, to, now);
+    const [ratingRows, sentRows] = await Promise.all([
+      this.ticketsRepo.manager.query<Array<{ rating: string; count: number }>>(
+        `SELECT s.rating, COUNT(*)::int AS count
+           FROM helpdesk.ticket_surveys s
+           JOIN helpdesk.tickets t ON t.id = s.ticket_id AND t.deleted_at IS NULL
+          WHERE s.created_at >= $1 AND s.created_at < $2
+          GROUP BY s.rating`,
+        [range.start, range.end],
+      ),
+      this.ticketsRepo.manager.query<Array<{ enviadas: number; respondidas: number }>>(
+        `SELECT COUNT(*)::int AS enviadas, COUNT(s.id)::int AS respondidas
+           FROM (SELECT DISTINCT h.ticket_id
+                   FROM helpdesk.ticket_history h
+                   JOIN helpdesk.tickets t ON t.id = h.ticket_id AND t.deleted_at IS NULL
+                  WHERE h.action = $3 AND h.created_at >= $1 AND h.created_at < $2) e
+           LEFT JOIN helpdesk.ticket_surveys s ON s.ticket_id = e.ticket_id`,
+        [range.start, range.end, SURVEY_REQUESTED],
+      ),
+    ]);
+    return buildSurveySummary(range, ratingRows, sentRows[0] ?? { enviadas: 0, respondidas: 0 });
   }
 
   /** La ven el solicitante y TD; nadie más (403). */

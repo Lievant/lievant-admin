@@ -2157,6 +2157,20 @@ export interface ListTicketsParams {
   limit?: number;
 }
 
+/** GET /helpdesk/surveys/summary (solo TD). Fechas YYYY-MM-DD en hora de México. */
+export interface SurveySummary {
+  from: string;
+  to: string;
+  total: number;
+  porCalificacion: Record<TicketSurveyRating, number>;
+  /** Feliz ÷ respuestas; null sin respuestas. */
+  satisfaccionPct: number | null;
+  /** Tickets con encuesta enviada en el rango. */
+  enviadas: number;
+  respondidasDeEnviadas: number;
+  tasaRespuestaPct: number | null;
+}
+
 /** Filtro de satisfacción de la lista de TD (se aplica en el servidor). */
 export type TicketSatisfactionFilter = TicketSurveyRating | 'sin_responder';
 
