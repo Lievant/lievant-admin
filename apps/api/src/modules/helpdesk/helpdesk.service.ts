@@ -77,6 +77,16 @@ export interface TicketViewer {
   isTd: boolean;
 }
 
+/**
+ * ¿Se le envió encuesta al ticket? La marca es el evento `encuesta_solicitada`
+ * del historial (ver SURVEY_REQUESTED). Subconsulta correlacionada sobre `t`.
+ */
+const SURVEY_SENT_SQL =
+  'EXISTS (SELECT 1 FROM helpdesk.ticket_history sh WHERE sh.ticket_id = t.id AND sh.action = :surveyRequested)';
+
+/** Valor de la columna "Satisfacción" de la lista de TD. */
+export type TicketSatisfaction = TicketSurvey['rating'] | 'sin_responder' | null;
+
 /** "Reportar recurrencia": el solicitante reabre su ticket cerrado dentro de estos días. */
 const REQUESTER_REOPEN_DAYS = 7;
 
@@ -133,7 +143,23 @@ export class HelpdeskService {
       .where('t.deleted_at IS NULL')
       .orderBy('t.requested_at', 'DESC')
       .addOrderBy('t.id', 'DESC')
-      .take(limit + 1);
+      // limit y no take: el LEFT JOIN es 1 a 1 (UNIQUE ticket_id) y `take` con
+      // joins haría una consulta extra de ids.
+      .limit(limit + 1);
+
+    // Satisfacción (solo TD): un LEFT JOIN a la encuesta (a lo más una por
+    // ticket) y la marca de enviada en la misma consulta; sin N+1.
+    if (isTd) {
+      qb.leftJoin(TicketSurvey, 'srv', 'srv.ticket_id = t.id')
+        .addSelect('srv.rating', 'survey_rating')
+        .addSelect(SURVEY_SENT_SQL, 'survey_sent')
+        .setParameter('surveyRequested', SURVEY_REQUESTED);
+      if (query.satisfaction === 'sin_responder') {
+        qb.andWhere('srv.id IS NULL').andWhere(SURVEY_SENT_SQL);
+      } else if (query.satisfaction) {
+        qb.andWhere('srv.rating = :satisfaction', { satisfaction: query.satisfaction });
+      }
+    }
 
     if (!isTd && currentUserId) {
       qb.andWhere('t.requester_id = :uid', { uid: currentUserId });
@@ -178,7 +204,20 @@ export class HelpdeskService {
       );
     }
 
-    const rows = await qb.getMany();
+    const { entities: rows, raw } = await qb.getRawAndEntities<{
+      t_id: string;
+      survey_rating?: string | null;
+      survey_sent?: boolean | null;
+    }>();
+    const satisfactionById = new Map<string, TicketSatisfaction>();
+    if (isTd) {
+      for (const r of raw) {
+        satisfactionById.set(
+          r.t_id,
+          (r.survey_rating as TicketSatisfaction) ?? (r.survey_sent ? 'sin_responder' : null),
+        );
+      }
+    }
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
     const last = data.at(-1);
@@ -193,7 +232,11 @@ export class HelpdeskService {
       const assignees = await this.assigneesRepo.findBy({ id: In(assigneeIds) });
       for (const a of assignees) assigneeMap[a.id] = a.name;
     }
-    const enriched = data.map((t) => ({ ...t, assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null }));
+    const enriched = data.map((t) => ({
+      ...t,
+      assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null,
+      ...(isTd ? { satisfaction: satisfactionById.get(t.id) ?? null } : {}),
+    }));
 
     return { data: enriched, nextCursor, total: enriched.length };
   }
