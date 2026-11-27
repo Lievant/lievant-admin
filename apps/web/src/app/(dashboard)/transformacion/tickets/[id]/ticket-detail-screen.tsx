@@ -14,8 +14,11 @@ import {
   escalateAction,
   updatePriorityAction,
   updateStatusAction,
+  confirmResolutionAction,
   updateTicketAction,
 } from './actions';
+import { CategoryEditor } from './category-editor';
+import { SurveyPanel } from './survey-panel';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -54,6 +57,8 @@ const ACTION_LABELS: Record<string, string> = {
   'actualizado.solution': 'Solución registrada',
   'actualizado.internalNotes': 'Nota interna',
   'actualizado.collaboratorConfirmation': 'Confirmación de resolución',
+  categoria_cambiada: 'Categoría cambiada',
+  encuesta_solicitada: 'Encuesta de satisfacción enviada',
 };
 
 function slaInfo(ticket: TicketDetail): { pct: number; label: string; color: string } | null {
@@ -157,7 +162,7 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
   async function handleConfirmResolution() {
     setError(null);
     startTransition(async () => {
-      const r = await updateTicketAction(ticket.id, { collaboratorConfirmation: true });
+      const r = await confirmResolutionAction(ticket.id);
       if (r.success) refresh();
       else setError(r.error ?? 'Error.');
     });
@@ -393,6 +398,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
             </div>
           )}
 
+          {/* Encuesta de satisfacción (solo TD; el solicitante la ve en Mis tickets) */}
+          {isTd && <SurveyPanel ticketId={ticket.id} />}
+
           {/* ── Panel de acciones TD ── */}
           {isTd && (
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-5 shadow-sm space-y-4">
@@ -433,6 +441,9 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                   Actualizar estado
                 </button>
               </div>
+
+              {/* Categoría y subcategoría */}
+              <CategoryEditor ticketId={ticket.id} category={ticket.category} subcategory={ticket.subcategory} />
 
               {/* Prioridad */}
               <div>
@@ -553,7 +564,7 @@ export function TicketDetailScreen({ ticket, isTd, isOwner }: TicketDetailScreen
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{error}</div>
               )}
 
-              {ticket.status === 'resuelto' && !ticket.collaboratorConfirmation && (
+              {ticket.status === 'resuelto' && ticket.collaboratorConfirmation !== 'confirmado' && (
                 <button
                   type="button"
                   disabled={isPending}

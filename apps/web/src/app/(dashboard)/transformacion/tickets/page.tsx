@@ -7,6 +7,8 @@ import {
   type ListTicketsParams,
 } from '@/lib/api';
 import { TicketsScreen } from './tickets-screen';
+import { isTdFromMe } from '@/lib/td-user';
+import { SATISFACTION_VALUES } from './satisfaction';
 
 async function safe<T>(p: Promise<T>): Promise<{ data: T | null; errorKind: ErrorKind | null }> {
   try {
@@ -38,6 +40,8 @@ export default async function TicketsPage({ searchParams }: PageProps) {
     rawAssigned && /^(sin_asignar|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.test(rawAssigned)
       ? rawAssigned
       : undefined;
+  const rawSatisfaction = asString(sp.satisfaction);
+  const satisfaction = SATISFACTION_VALUES.find((v) => v === rawSatisfaction);
   const cursor = asString(sp.cursor);
   const cursors = asString(sp.cursors);
 
@@ -47,6 +51,8 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   if (category) query.category = category;
   if (search) query.search = search;
   if (assignedTo) query.assignedTo = assignedTo;
+  // Solo lo aplica el API para TD; para los demás lo ignora.
+  if (satisfaction) query.satisfaction = satisfaction;
   if (cursor) query.cursor = cursor;
 
   const [ticketPageResult, categoriesResult, currentUserResult] = await Promise.all([
@@ -56,10 +62,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
   ]);
   const currentUser = currentUserResult.data;
 
-  const isTd =
-    currentUser?.roles.some((r) => r.name === 'SUPER_ADMIN' || r.name === 'TECNICO_TD') ||
-    currentUser?.permissions.some((p) => p.module === 'tickets.gestion') ||
-    false;
+  const isTd = isTdFromMe(currentUser);
 
   return (
     <div className="mx-auto max-w-screen-2xl px-6 py-8">
@@ -67,7 +70,7 @@ export default async function TicketsPage({ searchParams }: PageProps) {
         page={ticketPageResult.data ?? { data: [], nextCursor: null, total: 0 }}
         categories={categoriesResult.data ?? []}
         isTd={isTd}
-        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', assignedTo: assignedTo ?? '' }}
+        filters={{ status: status ?? '', priority: priority ?? '', category: category ?? '', search: search ?? '', assignedTo: assignedTo ?? '', satisfaction: satisfaction ?? '' }}
         cursor={cursor ?? ''}
         cursorsStack={cursors ? cursors.split(',').filter(Boolean) : []}
         errorKind={ticketPageResult.errorKind}

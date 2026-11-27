@@ -2,6 +2,7 @@
 
 import {
   ApiError,
+  confirmTicketResolution,
   escalateTicket,
   updateTicket,
   updateTicketStatus,
@@ -23,6 +24,15 @@ export async function updateStatusAction(
 ): Promise<TicketActionResult> {
   try {
     await updateTicketStatus(id, { status, notes });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof ApiError ? err.message : 'Error inesperado.' };
+  }
+}
+
+export async function confirmResolutionAction(id: string): Promise<TicketActionResult> {
+  try {
+    await confirmTicketResolution(id);
     return { success: true };
   } catch (err) {
     return { success: false, error: err instanceof ApiError ? err.message : 'Error inesperado.' };

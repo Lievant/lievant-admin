@@ -1,4 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, In, Like, Repository } from 'typeorm';
 import { User } from '../auth/entities/user.entity';
@@ -6,7 +13,9 @@ import { EmployeeStatus } from '../employees/constants/employee-status.constant'
 import { EmployeeRecord } from '../employees/entities/employee-record.entity';
 import { NotificationFlowsService } from '../notifications/notification-flows.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ChangeTicketCategoryDto } from './dto/change-ticket-category.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
+import { CreateTicketSurveyDto } from './dto/create-ticket-survey.dto';
 import type { CreateSystemTicketDto } from './dto/create-system-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { QueryTicketsDto, UNASSIGNED_FILTER } from './dto/query-tickets.dto';
@@ -19,6 +28,9 @@ import { Ticket } from './entities/ticket.entity';
 import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
+import { TicketSurvey } from './entities/ticket-survey.entity';
+import { isTdUser } from './td-user.util';
+import { buildSurveySummary, resolveSurveySummaryRange } from './survey-summary';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 // Seconds per SLA hour-limit (for inline CASE expression)
@@ -30,6 +42,69 @@ const PRIORITY_LABELS: Record<string, string> = {
   high: 'P2',
   medium: 'P3',
   low: 'P4',
+};
+
+/**
+ * Marca en el historial de que al cerrar se invitó al solicitante a calificar.
+ * Solo los tickets con esta marca aceptan encuesta: así no hay encuesta
+ * retroactiva para los cerrados antes de este cambio, ni para los que la
+ * Auditoría de Equipos crea ya cerrados (createClosedTicket no pasa por aquí).
+ */
+const SURVEY_REQUESTED = 'encuesta_solicitada';
+
+/**
+ * Lo que el solicitante (o el director al que se escaló) no ve del ticket: el
+ * trabajo interno de TD. Los campos se quitan de la respuesta y los eventos del
+ * historial que los registran también, porque llevan el valor en old/new.
+ */
+const INTERNAL_TICKET_FIELDS = ['internalNotes', 'diagnosis', 'problemStatus'] as const;
+const INTERNAL_HISTORY_ACTIONS = new Set(INTERNAL_TICKET_FIELDS.map((f) => `actualizado.${f}`));
+
+/**
+ * El diagnóstico deja de ser interno cuando el ticket se resuelve: el solicitante
+ * (y el director escalado) lo ven junto a la solución si está resuelto o
+ * cerrado y hay texto escrito. Su evento del historial sigue oculto.
+ */
+const DIAGNOSIS_VISIBLE_STATUSES: ReadonlySet<string> = new Set(['resuelto', 'cerrado']);
+
+function requesterDiagnosis(ticket: Pick<Ticket, 'status' | 'diagnosis'>): string | null {
+  if (!DIAGNOSIS_VISIBLE_STATUSES.has(ticket.status)) return null;
+  return ticket.diagnosis?.trim() ? ticket.diagnosis : null;
+}
+
+/** Quién consulta un ticket: su id de auth.users y si es personal de TD (isTdUser). */
+export interface TicketViewer {
+  userId: string;
+  isTd: boolean;
+}
+
+/**
+ * ¿Se le envió encuesta al ticket? La marca es el evento `encuesta_solicitada`
+ * del historial (ver SURVEY_REQUESTED). Subconsulta correlacionada sobre `t`.
+ */
+const SURVEY_SENT_SQL =
+  'EXISTS (SELECT 1 FROM helpdesk.ticket_history sh WHERE sh.ticket_id = t.id AND sh.action = :surveyRequested)';
+
+/** Valor de la columna "Satisfacción" de la lista de TD. */
+export type TicketSatisfaction = TicketSurvey['rating'] | 'sin_responder' | null;
+
+/** "Reportar recurrencia": el solicitante reabre su ticket cerrado dentro de estos días. */
+const REQUESTER_REOPEN_DAYS = 7;
+
+/** Vista del ticket para el solicitante ("Mis tickets"), no la página de TD. */
+export function myTicketUrl(ticketId: string): string {
+  return `/herramientas/soporte?ticket=${ticketId}`;
+}
+
+/** Calificaciones que llegan al técnico como 'atencion' en lugar de 'informativa'. */
+const SURVEY_ATTENTION_RATINGS: ReadonlySet<string> = new Set(['triste', 'enojado']);
+const SURVEY_COMMENT_PREVIEW = 300;
+
+const SURVEY_RATING_LABELS: Record<string, string> = {
+  feliz: 'Feliz',
+  normal: 'Normal',
+  triste: 'Triste',
+  enojado: 'Enojado',
 };
 
 function resolvePriority(value: string | undefined, categoryBase: string | null): string {
@@ -55,6 +130,7 @@ export class HelpdeskService {
     private readonly storage: HelpdeskStorageService,
     private readonly notificationsService: NotificationsService,
     private readonly notificationFlows: NotificationFlowsService,
+    @InjectRepository(TicketSurvey) private readonly surveysRepo: Repository<TicketSurvey>,
   ) {}
 
   // -----------------------------------------------------------------------
@@ -68,7 +144,23 @@ export class HelpdeskService {
       .where('t.deleted_at IS NULL')
       .orderBy('t.requested_at', 'DESC')
       .addOrderBy('t.id', 'DESC')
-      .take(limit + 1);
+      // limit y no take: el LEFT JOIN es 1 a 1 (UNIQUE ticket_id) y `take` con
+      // joins haría una consulta extra de ids.
+      .limit(limit + 1);
+
+    // Satisfacción (solo TD): un LEFT JOIN a la encuesta (a lo más una por
+    // ticket) y la marca de enviada en la misma consulta; sin N+1.
+    if (isTd) {
+      qb.leftJoin(TicketSurvey, 'srv', 'srv.ticket_id = t.id')
+        .addSelect('srv.rating', 'survey_rating')
+        .addSelect(SURVEY_SENT_SQL, 'survey_sent')
+        .setParameter('surveyRequested', SURVEY_REQUESTED);
+      if (query.satisfaction === 'sin_responder') {
+        qb.andWhere('srv.id IS NULL').andWhere(SURVEY_SENT_SQL);
+      } else if (query.satisfaction) {
+        qb.andWhere('srv.rating = :satisfaction', { satisfaction: query.satisfaction });
+      }
+    }
 
     if (!isTd && currentUserId) {
       qb.andWhere('t.requester_id = :uid', { uid: currentUserId });
@@ -113,7 +205,20 @@ export class HelpdeskService {
       );
     }
 
-    const rows = await qb.getMany();
+    const { entities: rows, raw } = await qb.getRawAndEntities<{
+      t_id: string;
+      survey_rating?: string | null;
+      survey_sent?: boolean | null;
+    }>();
+    const satisfactionById = new Map<string, TicketSatisfaction>();
+    if (isTd) {
+      for (const r of raw) {
+        satisfactionById.set(
+          r.t_id,
+          (r.survey_rating as TicketSatisfaction) ?? (r.survey_sent ? 'sin_responder' : null),
+        );
+      }
+    }
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
     const last = data.at(-1);
@@ -128,14 +233,23 @@ export class HelpdeskService {
       const assignees = await this.assigneesRepo.findBy({ id: In(assigneeIds) });
       for (const a of assignees) assigneeMap[a.id] = a.name;
     }
-    const enriched = data.map((t) => ({ ...t, assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null }));
+    const enriched = data.map((t) => ({
+      ...t,
+      assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null,
+      ...(isTd ? { satisfaction: satisfactionById.get(t.id) ?? null } : {}),
+    }));
 
     return { data: enriched, nextCursor, total: enriched.length };
   }
 
-  async findById(id: string) {
-    const ticket = await this.ticketsRepo.findOne({ where: { id } });
-    if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
+  /**
+   * Detalle completo. Sin `viewer` (uso interno) o con TD se devuelve todo. Un
+   * usuario que no es TD solo ve su ticket (o el que le escalaron) y sin el
+   * trabajo interno; cualquier otro recibe 404, sin confirmar que existe.
+   */
+  async findById(id: string, viewer?: TicketViewer) {
+    const ticket = viewer ? await this.getReadableTicket(id, viewer) : await this.getOrFail(id);
+    const restricted = !!viewer && !viewer.isTd;
     // escalated_to guarda un id de auth.users; el nombre legible está en el
     // expediente, y si el director no tiene expediente se cae al de la cuenta.
     const [history, assignee, attachments, escalatedEmployee, escalatedUser] = await Promise.all([
@@ -152,7 +266,7 @@ export class HelpdeskService {
         : Promise.resolve(null),
     ]);
 
-    return {
+    const detail = {
       ...ticket,
       history,
       // Quién abrió el ticket cuando fue TD en nombre de otra persona (autor del evento 'creado').
@@ -161,8 +275,42 @@ export class HelpdeskService {
       escalatedToName: escalatedEmployee?.fullName ?? escalatedUser?.name ?? null,
       attachments,
     };
+    if (!restricted) return detail;
+
+    const visible: Partial<typeof detail> = {
+      ...detail,
+      history: history.filter((h) => !INTERNAL_HISTORY_ACTIONS.has(h.action)),
+    };
+    for (const field of INTERNAL_TICKET_FIELDS) delete visible[field];
+    const diagnosis = requesterDiagnosis(ticket);
+    if (diagnosis) visible.diagnosis = diagnosis;
+    return visible;
   }
 
+  /**
+   * Acceso de lectura a un ticket (detalle y adjuntos): TD a cualquiera; el
+   * solicitante y el director al que se escaló, al suyo. Los demás, 404 sin
+   * confirmar que existe. Se revisa ANTES de generar cualquier URL prefirmada.
+   */
+  private async getReadableTicket(id: string, viewer: TicketViewer): Promise<Ticket> {
+    const ticket = await this.ticketsRepo.findOne({ where: { id } });
+    if (!ticket) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    if (viewer.isTd) return ticket;
+    const isParty =
+      !ticket.deletedAt &&
+      ((!!ticket.requesterId && ticket.requesterId === viewer.userId) ||
+        (!!ticket.escalatedTo && ticket.escalatedTo === viewer.userId));
+    if (!isParty) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    return ticket;
+  }
+
+  /** GET /helpdesk/tickets/:id/attachments: primero el acceso, luego las URLs. */
+  async listAttachments(ticketId: string, viewer: TicketViewer) {
+    await this.getReadableTicket(ticketId, viewer);
+    return this.getAttachments(ticketId);
+  }
+
+  /** Uso interno: solo después de haber revisado el acceso al ticket. */
   async getAttachments(ticketId: string) {
     const rows = await this.attachmentsRepo.find({
       where: { ticketId },
@@ -180,8 +328,16 @@ export class HelpdeskService {
     );
   }
 
-  async uploadAttachment(ticketId: string, file: Express.Multer.File, userId: string) {
-    await this.getOrFail(ticketId);
+  /**
+   * Subir: TD a cualquier ticket y el solicitante al suyo. El director al que se
+   * escaló puede leer pero no subir (403: ya sabe que el ticket existe).
+   */
+  async uploadAttachment(ticketId: string, file: Express.Multer.File, viewer: TicketViewer) {
+    const ticket = await this.getReadableTicket(ticketId, viewer);
+    if (!viewer.isTd && ticket.requesterId !== viewer.userId) {
+      throw new ForbiddenException('Solo quien solicitó el ticket o el personal de TD pueden subir adjuntos.');
+    }
+    const userId = viewer.userId;
 
     if (!(ALLOWED_ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.mimetype)) {
       throw new BadRequestException(`Tipo de archivo no permitido: ${file.mimetype}`);
@@ -209,8 +365,66 @@ export class HelpdeskService {
     };
   }
 
+  /**
+   * "Mis tickets": los del solicitante, con el nombre de la categoría y su meta
+   * de resolución (helpdesk.categories.sla_resolution_hours) para calcular el
+   * SLA en pantalla.
+   */
   async findMyTickets(userId: string, query: QueryTicketsDto) {
-    return this.findAll(query, false, userId);
+    const page = await this.findAll(query, false, userId);
+    const categories = await this.categoryMap();
+    return {
+      ...page,
+      data: page.data.map((t) => ({
+        ...t,
+        categoryName: categories.get(t.category)?.name ?? null,
+        slaResolutionHours: categories.get(t.category)?.slaResolutionHours ?? null,
+      })),
+    };
+  }
+
+  /**
+   * Detalle de un ticket propio para "Mis tickets". Solo el solicitante: de otro
+   * (o inexistente) responde 404, sin decir si existe. Devuelve una lista
+   * cerrada de campos: las notas de solución sí; el diagnóstico, las notas
+   * internas y el historial (que también las contiene) no.
+   */
+  async findMyTicketDetail(userId: string, id: string) {
+    const ticket = await this.ticketsRepo.findOne({ where: { id } });
+    if (!ticket || ticket.deletedAt || ticket.requesterId !== userId) {
+      throw new NotFoundException('Ticket no encontrado');
+    }
+    const [categories, assignee] = await Promise.all([
+      this.categoryMap(),
+      ticket.assignedTo ? this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } }) : Promise.resolve(null),
+    ]);
+    const category = categories.get(ticket.category);
+    return {
+      id: ticket.id,
+      displayId: ticket.displayId,
+      category: ticket.category,
+      categoryName: category?.name ?? null,
+      subcategory: ticket.subcategory,
+      description: ticket.description,
+      priority: ticket.priority,
+      status: ticket.status,
+      requestedAt: ticket.requestedAt,
+      resolvedAt: ticket.resolvedAt,
+      closedAt: ticket.closedAt,
+      slaResolutionHours: category?.slaResolutionHours ?? null,
+      assigneeName: assignee?.name ?? null,
+      equipmentId: ticket.equipmentId,
+      solution: ticket.solution,
+      // Solo resuelto o cerrado y con texto; si no, la clave no sale.
+      ...(requesterDiagnosis(ticket) ? { diagnosis: requesterDiagnosis(ticket) } : {}),
+      collaboratorConfirmation: ticket.collaboratorConfirmation,
+      ...(await this.surveyState(ticket, userId)),
+    };
+  }
+
+  private async categoryMap(): Promise<Map<string, HelpdeskCategory>> {
+    const rows = await this.categoriesRepo.find();
+    return new Map(rows.map((c) => [c.slug, c]));
   }
 
   // -----------------------------------------------------------------------
@@ -499,8 +713,14 @@ export class HelpdeskService {
     return saved;
   }
 
-  async updateStatus(id: string, dto: UpdateTicketStatusDto, user: User) {
+  /**
+   * TD cambia el estado de cualquier ticket. Quien no es TD solo puede lo que le
+   * ofrece la pantalla: reabrir SU ticket cerrado dentro de los 7 días
+   * ("Reportar recurrencia"). Todo lo demás, 403.
+   */
+  async updateStatus(id: string, dto: UpdateTicketStatusDto, user: User, isTd: boolean) {
     const ticket = await this.getOrFail(id);
+    if (!isTd) this.assertRequesterTransition(ticket, dto, user);
     const oldStatus = ticket.status;
     const now = new Date();
 
@@ -521,7 +741,49 @@ export class HelpdeskService {
 
     await this.ticketsRepo.save(ticket);
     await this.addHistory(id, user, 'estado_cambiado', oldStatus, dto.status, dto.notes);
+    if (dto.status === 'cerrado' && oldStatus !== 'cerrado') {
+      const invite = await this.markSurveyRequested(ticket, user);
+      await this.notifyClosed(ticket, user, invite);
+    }
     return ticket;
+  }
+
+  private assertRequesterTransition(ticket: Ticket, dto: UpdateTicketStatusDto, user: User): void {
+    if (ticket.deletedAt || !ticket.requesterId || ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo puedes cambiar el estado de tus propios tickets.');
+    }
+    const closedDaysAgo = ticket.closedAt ? (Date.now() - ticket.closedAt.getTime()) / 86_400_000 : null;
+    const isRecurrence =
+      ticket.status === 'cerrado' &&
+      dto.status === 'abierto' &&
+      closedDaysAgo !== null &&
+      closedDaysAgo <= REQUESTER_REOPEN_DAYS;
+    if (!isRecurrence) {
+      throw new ForbiddenException(
+        `Solo puedes reabrir tu ticket cerrado dentro de los ${REQUESTER_REOPEN_DAYS} días siguientes al cierre.`,
+      );
+    }
+  }
+
+  /**
+   * "Confirmar resolución" del solicitante: solo en SU ticket, solo si está
+   * resuelto. Marca collaborator_confirmation = 'confirmado' y no cambia el
+   * estado (igual que antes; el cierre sigue siendo de TD).
+   */
+  async confirmResolution(id: string, user: User) {
+    const ticket = await this.getOrFail(id);
+    if (ticket.deletedAt || !ticket.requesterId || ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo quien solicitó el ticket puede confirmar la resolución.');
+    }
+    if (ticket.status !== 'resuelto') {
+      throw new BadRequestException('Solo se puede confirmar la resolución de un ticket resuelto.');
+    }
+    if (ticket.collaboratorConfirmation === 'confirmado') return ticket;
+    const old = ticket.collaboratorConfirmation || null;
+    ticket.collaboratorConfirmation = 'confirmado';
+    const saved = await this.ticketsRepo.save(ticket);
+    await this.addHistory(id, user, 'actualizado.collaboratorConfirmation', old, 'confirmado');
+    return saved;
   }
 
   async updateTicket(id: string, dto: UpdateTicketDto, user: User) {
@@ -557,6 +819,268 @@ export class HelpdeskService {
     }
 
     return saved;
+  }
+
+  // -----------------------------------------------------------------------
+  // Encuesta de satisfacción
+  // -----------------------------------------------------------------------
+
+  /**
+   * Al cerrar, deja la marca de invitación (una sola vez por ticket) si hay un
+   * solicitante con cuenta que pueda responder. Devuelve si hay que invitar.
+   */
+  private async markSurveyRequested(ticket: Ticket, actor: User): Promise<boolean> {
+    if (!ticket.requesterId) return false;
+    try {
+      const already = await this.historyRepo.count({ where: { ticketId: ticket.id, action: SURVEY_REQUESTED } });
+      if (already > 0) {
+        // Reabierto y vuelto a cerrar: se invita otra vez solo si aún no respondió.
+        return !(await this.surveysRepo.count({ where: { ticketId: ticket.id } }));
+      }
+      await this.addHistory(ticket.id, actor, SURVEY_REQUESTED, null, null, 'Se invitó al solicitante a calificar la atención.');
+      return true;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo registrar la invitación a la encuesta del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  private async surveyState(ticket: Ticket, userId: string) {
+    const [survey, invited] = await Promise.all([
+      this.surveysRepo.findOne({ where: { ticketId: ticket.id } }),
+      this.historyRepo.count({ where: { ticketId: ticket.id, action: SURVEY_REQUESTED } }),
+    ]);
+    return {
+      survey: survey ? toSurveyItem(survey) : null,
+      canAnswerSurvey: !survey && invited > 0 && ticket.status === 'cerrado' && ticket.requesterId === userId,
+    };
+  }
+
+  /**
+   * Respuesta del solicitante. Reglas: solo el solicitante (403); ticket
+   * cerrado (400) y con invitación (400: no hay encuesta retroactiva ni para los
+   * de Auditoría); una sola vez (409). Guardada la respuesta, avisa al
+   * coordinador por el flujo `helpdesk.encuesta_respondida`; si el aviso falla,
+   * la respuesta se queda.
+   */
+  async answerSurvey(id: string, dto: CreateTicketSurveyDto, user: User) {
+    const ticket = await this.getOrFail(id);
+    if (ticket.deletedAt) throw new NotFoundException(`Ticket ${id} no encontrado`);
+    if (ticket.requesterId !== user.id) {
+      throw new ForbiddenException('Solo quien solicitó el ticket puede calificar la atención.');
+    }
+    if (ticket.status !== 'cerrado') {
+      throw new BadRequestException('Solo se puede calificar un ticket cerrado.');
+    }
+    const invited = await this.historyRepo.count({ where: { ticketId: id, action: SURVEY_REQUESTED } });
+    if (!invited) throw new BadRequestException('Este ticket no tiene encuesta de satisfacción.');
+    if (await this.surveysRepo.count({ where: { ticketId: id } })) {
+      throw new ConflictException('Ya calificaste la atención de este ticket.');
+    }
+
+    const employee = await this.employeesRepo.findOne({ where: { authUserId: user.id } });
+    const comment = dto.comment?.trim() || null;
+    let saved: TicketSurvey;
+    try {
+      saved = await this.surveysRepo.save(
+        this.surveysRepo.create({
+          ticketId: id,
+          rating: dto.rating,
+          comment,
+          answeredBy: user.id,
+          answeredByName: (employee?.fullName || user.name || user.email || 'Desconocido').slice(0, 200),
+        }),
+      );
+    } catch (err) {
+      // Dos envíos a la vez: el UNIQUE(ticket_id) deja pasar solo uno.
+      if ((err as { code?: string }).code === '23505') {
+        throw new ConflictException('Ya calificaste la atención de este ticket.');
+      }
+      throw err;
+    }
+
+    // Aviso directo al técnico asignado; si llegó, el flujo no le manda otro.
+    const notifiedTechId = await this.notifySurveyToAssignee(ticket, saved);
+
+    try {
+      await this.notificationFlows.notify('helpdesk', 'encuesta_respondida', {
+        ...(notifiedTechId ? { excludeUserIds: [notifiedTechId] } : {}),
+        requesterId: user.id,
+        actorId: user.id,
+        entityId: ticket.id,
+        entityType: 'ticket',
+        senderName: saved.answeredByName,
+        title: `Encuesta de satisfacción — ${ticket.displayId}`,
+        message:
+          `${saved.answeredByName} calificó la atención del ticket ${ticket.displayId}: ${SURVEY_RATING_LABELS[saved.rating]}.` +
+          (comment ? `\nObservaciones: ${comment}` : ''),
+        actionUrl: `/transformacion/tickets/${ticket.id}`,
+        requesterActionUrl: myTicketUrl(ticket.id),
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar la encuesta del ticket ${ticket.displayId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return toSurveyItem(saved);
+  }
+
+  /**
+   * Avisa al técnico asignado en este momento que su ticket recibió una
+   * calificación. Del solicitante solo va el nombre. Si el técnico pasa
+   * isTdUser el enlace es el detalle de TD; si no, va sin enlace (esa página le
+   * daría 404 y el ticket no es suyo en "Mis tickets"). Sin técnico, sin correo
+   * o sin usuario se omite. Nunca lanza: la encuesta ya quedó guardada.
+   * Devuelve el id del usuario notificado, o null.
+   */
+  private async notifySurveyToAssignee(ticket: Ticket, survey: TicketSurvey): Promise<string | null> {
+    try {
+      if (!ticket.assignedTo) return null;
+      const assignee = await this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } });
+      if (!assignee?.email) return null;
+      const techUser = await this.usersRepo.findOne({
+        where: { email: assignee.email },
+        relations: { roles: { permissions: true }, userPermissions: { permission: true } },
+      });
+      if (!techUser) return null;
+
+      const label = SURVEY_RATING_LABELS[survey.rating] ?? survey.rating;
+      const comment = survey.comment?.trim();
+      const preview =
+        comment && comment.length > SURVEY_COMMENT_PREVIEW ? `${comment.slice(0, SURVEY_COMMENT_PREVIEW)}…` : comment;
+      await this.notificationsService.create({
+        recipientId: techUser.id,
+        ...(survey.answeredBy ? { senderId: survey.answeredBy } : {}),
+        senderName: survey.answeredByName,
+        title: `Calificación recibida: ${label}`,
+        message:
+          `Ticket ${ticket.displayId} · Calificación: ${label}
+` +
+          `Solicitante: ${survey.answeredByName}` +
+          (preview ? `
+Comentario: ${preview}` : ''),
+        type: SURVEY_ATTENTION_RATINGS.has(survey.rating) ? 'atencion' : 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        ...(isTdUser(techUser) ? { actionUrl: `/transformacion/tickets/${ticket.id}` } : {}),
+      });
+      return techUser.id;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar al técnico la calificación del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Indicadores de satisfacción (solo TD; el controlador lo valida). Fechas en
+   * hora de México: respuestas por su fecha de respuesta; "enviadas" son los
+   * tickets con la marca encuesta_solicitada en el rango. Tickets borrados no
+   * cuentan. Dos consultas agregadas, sin traer filas.
+   */
+  async getSurveySummary(from?: string, to?: string, now: Date = new Date()) {
+    const range = resolveSurveySummaryRange(from, to, now);
+    const [ratingRows, sentRows] = await Promise.all([
+      this.ticketsRepo.manager.query<Array<{ rating: string; count: number }>>(
+        `SELECT s.rating, COUNT(*)::int AS count
+           FROM helpdesk.ticket_surveys s
+           JOIN helpdesk.tickets t ON t.id = s.ticket_id AND t.deleted_at IS NULL
+          WHERE s.created_at >= $1 AND s.created_at < $2
+          GROUP BY s.rating`,
+        [range.start, range.end],
+      ),
+      this.ticketsRepo.manager.query<Array<{ enviadas: number; respondidas: number }>>(
+        `SELECT COUNT(*)::int AS enviadas, COUNT(s.id)::int AS respondidas
+           FROM (SELECT DISTINCT h.ticket_id
+                   FROM helpdesk.ticket_history h
+                   JOIN helpdesk.tickets t ON t.id = h.ticket_id AND t.deleted_at IS NULL
+                  WHERE h.action = $3 AND h.created_at >= $1 AND h.created_at < $2) e
+           LEFT JOIN helpdesk.ticket_surveys s ON s.ticket_id = e.ticket_id`,
+        [range.start, range.end, SURVEY_REQUESTED],
+      ),
+    ]);
+    return buildSurveySummary(range, ratingRows, sentRows[0] ?? { enviadas: 0, respondidas: 0 });
+  }
+
+  /** La ven el solicitante y TD; nadie más (403). */
+  async getSurvey(id: string, user: User, isTd: boolean) {
+    const ticket = await this.getOrFail(id);
+    if (!isTd && ticket.requesterId !== user.id) {
+      throw new ForbiddenException('No tienes acceso a la encuesta de este ticket.');
+    }
+    return this.surveyState(ticket, user.id);
+  }
+
+  /**
+   * Cambia la categoría y la subcategoría (solo TD; el controlador lo valida).
+   *
+   * - La categoría debe existir y estar activa; la subcategoría, ser del
+   *   catálogo activo de esa categoría (o ninguna).
+   * - Prioridad: si era igual a la prioridad base de la categoría anterior, se
+   *   recalcula con la de la nueva. Si alguien la había cambiado a mano, se deja.
+   * - Historial: una fila 'categoria_cambiada' (valor anterior y nuevo) y, si se
+   *   recalculó, otra 'actualizado.priority'. Todo en una transacción.
+   * - No notifica al solicitante. Se permite en tickets cerrados, igual que el
+   *   resto de la edición de TD (PATCH /tickets/:id no lo impide).
+   */
+  async changeCategory(id: string, dto: ChangeTicketCategoryDto, user: User) {
+    const ticket = await this.getOrFail(id);
+    const newSlug = dto.category.trim();
+    const newSub = dto.subcategory?.trim() || null;
+
+    const [oldCategory, newCategory] = await Promise.all([
+      this.categoriesRepo.findOne({ where: { slug: ticket.category } }),
+      this.categoriesRepo.findOne({ where: { slug: newSlug } }),
+    ]);
+    if (!newCategory || !newCategory.isActive) {
+      throw new BadRequestException('La categoría elegida no existe o está desactivada.');
+    }
+    if (newSub) {
+      const sub = await this.subcategoriesRepo.findOne({ where: { categorySlug: newSlug, name: newSub, isActive: true } });
+      if (!sub) throw new BadRequestException(`"${newSub}" no es una subcategoría activa de ${newCategory.name}.`);
+    }
+    if (ticket.category === newSlug && (ticket.subcategory ?? null) === newSub) return ticket;
+
+    const label = (name: string, sub: string | null) => (sub ? `${name} / ${sub}` : name);
+    const oldLabel = label(oldCategory?.name ?? ticket.category, ticket.subcategory);
+    const newLabel = label(newCategory.name, newSub);
+
+    const oldPriority = ticket.priority;
+    const recalc =
+      ticket.category !== newSlug && oldCategory?.priorityBase != null && oldPriority === oldCategory.priorityBase;
+    const newPriority = recalc ? (newCategory.priorityBase ?? 'P3') : oldPriority;
+
+    ticket.category = newSlug;
+    ticket.subcategory = newSub;
+    ticket.priority = newPriority;
+
+    return this.ticketsRepo.manager.transaction(async (m) => {
+      const saved = await m.getRepository(Ticket).save(ticket);
+      const history = m.getRepository(TicketHistory);
+      const entry = (action: string, oldValue: string | null, newValue: string | null, notes: string | null) =>
+        history.create({ ticketId: id, userId: user.id, userName: user.name, action, oldValue, newValue, notes });
+      const rows = [entry('categoria_cambiada', oldLabel, newLabel, null)];
+      if (recalc && newPriority !== oldPriority) {
+        rows.push(
+          entry(
+            'actualizado.priority',
+            oldPriority,
+            newPriority,
+            `Recalculada por cambio de categoría (prioridad base de ${newCategory.name}).`,
+          ),
+        );
+      }
+      await history.save(rows);
+      return saved;
+    });
   }
 
   /**
@@ -930,7 +1454,7 @@ export class HelpdeskService {
           module: 'helpdesk',
           entityId: ticket.id,
           entityType: 'ticket',
-          actionUrl: `/transformacion/tickets/${ticket.id}`,
+          actionUrl: myTicketUrl(ticket.id),
         });
       }
     } catch (err) {
@@ -953,7 +1477,40 @@ export class HelpdeskService {
         `${ticket.requesterName} escaló el ticket ${ticket.displayId} a ${director.fullName}.\n` +
         `Categoría: ${ticket.category} · Prioridad: ${prioridad}${nota}`,
       actionUrl: `/transformacion/tickets/${ticket.id}`,
+      requesterActionUrl: myTicketUrl(ticket.id),
     });
+  }
+
+  /**
+   * Avisa al solicitante real del ticket (requester_id: la persona elegida cuando
+   * TD lo abrió en su nombre, no el técnico) que su ticket se cerró. Sin
+   * solicitante con cuenta no hay a quién avisar. Nunca lanza: el ticket ya
+   * quedó cerrado.
+   */
+  private async notifyClosed(ticket: Ticket, actor: User, inviteSurvey: boolean): Promise<void> {
+    if (!ticket.requesterId) return;
+    try {
+      await this.notificationsService.create({
+        recipientId: ticket.requesterId,
+        senderId: actor.id,
+        senderName: actor.name,
+        title: `Ticket cerrado — ${ticket.displayId}`,
+        message: inviteSurvey
+          ? `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI. ¿Cómo fue la atención? Califícala desde el detalle del ticket.`
+          : `Tu ticket ${ticket.displayId} fue cerrado por Soporte TI.`,
+        type: 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        actionUrl: myTicketUrl(ticket.id),
+      });
+    } catch (err) {
+      this.logger.error(
+        `No se pudo notificar el cierre del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -1013,6 +1570,7 @@ export class HelpdeskService {
           `El ticket ${ticket.displayId} quedó asignado a ${assignee.name}.\n` +
           `Solicitante: ${ticket.requesterName} · Prioridad: ${ticket.priority ?? 'sin prioridad'}`,
         actionUrl: `/transformacion/tickets/${ticket.id}`,
+        requesterActionUrl: myTicketUrl(ticket.id),
       });
     } catch (err) {
       this.logger.error(
@@ -1043,4 +1601,13 @@ export class HelpdeskService {
       }),
     );
   }
+}
+
+function toSurveyItem(s: TicketSurvey) {
+  return {
+    rating: s.rating,
+    comment: s.comment,
+    answeredByName: s.answeredByName,
+    createdAt: s.createdAt,
+  };
 }

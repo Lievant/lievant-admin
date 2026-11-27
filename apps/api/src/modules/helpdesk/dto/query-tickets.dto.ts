@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
+import { SURVEY_RATINGS } from '../entities/ticket-survey.entity';
 import { IsIn, IsInt, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
+
+/** Filtro de satisfacción (solo TD): una calificación o 'sin_responder' (encuesta enviada sin respuesta). */
+export const SATISFACTION_FILTERS = [...SURVEY_RATINGS, 'sin_responder'] as const;
+export type SatisfactionFilter = (typeof SATISFACTION_FILTERS)[number];
 
 /** Valor reservado de `assignedTo` para los tickets sin persona asignada. */
 export const UNASSIGNED_FILTER = 'sin_asignar';
@@ -53,4 +58,8 @@ export class QueryTicketsDto {
   @IsOptional()
   @IsIn(['ok', 'warning', 'overdue'])
   slaStatus?: 'ok' | 'warning' | 'overdue';
+
+  @IsOptional()
+  @IsIn(SATISFACTION_FILTERS)
+  satisfaction?: SatisfactionFilter;
 }

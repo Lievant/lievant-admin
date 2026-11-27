@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getHelpdeskStats, type HelpdeskStats } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { DashboardCharts } from '@/components/helpdesk/dashboard-charts';
+import { SatisfactionSummary } from '@/components/helpdesk/satisfaction-summary';
 
 async function safeStats(): Promise<HelpdeskStats | null> {
   try {
@@ -103,6 +104,8 @@ export default async function TransformacionPage() {
 
       {/* Dashboard ejecutivo — gráficos interactivos */}
       <DashboardCharts />
+
+      <SatisfactionSummary />
 
       {/* Distribución por prioridad */}
       {stats && (

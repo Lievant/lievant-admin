@@ -1,5 +1,6 @@
 import { getCurrentUser, getHelpdeskCategories } from '@/lib/api';
 import { NewTicketForm } from './new-ticket-form';
+import { isTdFromMe } from '@/lib/td-user';
 
 async function safe<T>(p: Promise<T>): Promise<T | null> {
   try { return await p; } catch { return null; }
@@ -11,10 +12,7 @@ export default async function NuevoTicketPage() {
     safe(getCurrentUser()),
   ]);
 
-  const isTd =
-    currentUser?.roles.some((r) => r.name === 'SUPER_ADMIN' || r.name === 'TECNICO_TD') ||
-    currentUser?.permissions.some((p) => p.module === 'tickets.gestion') ||
-    false;
+  const isTd = isTdFromMe(currentUser);
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-10">

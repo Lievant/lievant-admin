@@ -2021,6 +2021,59 @@ export interface TicketSummary {
   equipmentId: string | null;
   isHistorical: boolean;
   assigneeName: string | null;
+  /** Solo en "Mis tickets": nombre de la categoría y su meta de resolución (horas). */
+  categoryName?: string | null;
+  slaResolutionHours?: number | null;
+  /**
+   * Solo en la lista de TD: calificación de la encuesta, 'sin_responder' si se
+   * envió y no hay respuesta, o null si el ticket nunca tuvo encuesta.
+   */
+  satisfaction?: TicketSatisfactionFilter | null;
+}
+
+/** Detalle de un ticket propio en "Mis tickets" (GET /helpdesk/tickets/my/:id). Sin notas internas. */
+export interface MyTicketDetail {
+  id: string;
+  displayId: string;
+  category: string;
+  categoryName: string | null;
+  subcategory: string | null;
+  description: string;
+  priority: TicketPriority | null;
+  status: TicketStatus;
+  requestedAt: string;
+  resolvedAt: string | null;
+  closedAt: string | null;
+  slaResolutionHours: number | null;
+  assigneeName: string | null;
+  equipmentId: string | null;
+  /** Notas de solución del técnico. */
+  solution: string | null;
+  /** Solo llega con el ticket resuelto o cerrado y con diagnóstico escrito. */
+  diagnosis?: string | null;
+  collaboratorConfirmation: CollaboratorConfirmation | null;
+  /** Respuesta de la encuesta de satisfacción, si ya la hay. */
+  survey: TicketSurveyItem | null;
+  /** Cerrado, con invitación y sin respuesta: se muestra "¿Cómo fue la atención?". */
+  canAnswerSurvey: boolean;
+}
+
+/** helpdesk.tickets.collaborator_confirmation (VARCHAR, 'pendiente' por defecto). */
+export type CollaboratorConfirmation = 'pendiente' | 'confirmado' | 'rechazado';
+
+export type TicketSurveyRating = 'feliz' | 'normal' | 'triste' | 'enojado';
+
+export interface TicketSurveyItem {
+  rating: TicketSurveyRating;
+  comment: string | null;
+  answeredByName: string;
+  createdAt: string;
+}
+
+/** GET /helpdesk/tickets/:id/survey (solicitante o TD). */
+export interface TicketSurveyState {
+  survey: TicketSurveyItem | null;
+  canAnswerSurvey: boolean;
 }
 
 export interface TicketDetail extends TicketSummary {
@@ -2029,11 +2082,14 @@ export interface TicketDetail extends TicketSummary {
   behalfReason: string | null;
   /** Quien abrió el ticket cuando fue TD en nombre de otra persona (el solicitante es la otra persona). */
   openedByName?: string | null;
-  diagnosis: string | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  diagnosis?: string | null;
   solution: string | null;
-  internalNotes: string | null;
-  problemStatus: string | null;
-  collaboratorConfirmation: boolean | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  internalNotes?: string | null;
+  /** Solo para TD: al solicitante no se le envía. */
+  problemStatus?: string | null;
+  collaboratorConfirmation: CollaboratorConfirmation | null;
   /** Id de auth.users; para mostrar en pantalla usa `escalatedToName`. */
   escalatedTo: string | null;
   escalatedToName: string | null;
@@ -2095,9 +2151,28 @@ export interface ListTicketsParams {
   dateFrom?: string;
   dateTo?: string;
   slaStatus?: 'ok' | 'warning' | 'overdue';
+  /** Solo TD: una calificación o 'sin_responder'. */
+  satisfaction?: TicketSatisfactionFilter;
   cursor?: string;
   limit?: number;
 }
+
+/** GET /helpdesk/surveys/summary (solo TD). Fechas YYYY-MM-DD en hora de México. */
+export interface SurveySummary {
+  from: string;
+  to: string;
+  total: number;
+  porCalificacion: Record<TicketSurveyRating, number>;
+  /** Feliz ÷ respuestas; null sin respuestas. */
+  satisfaccionPct: number | null;
+  /** Tickets con encuesta enviada en el rango. */
+  enviadas: number;
+  respondidasDeEnviadas: number;
+  tasaRespuestaPct: number | null;
+}
+
+/** Filtro de satisfacción de la lista de TD (se aplica en el servidor). */
+export type TicketSatisfactionFilter = TicketSurveyRating | 'sin_responder';
 
 export interface CreateTicketPayload {
   category: string;
@@ -2127,7 +2202,6 @@ export interface UpdateTicketPayload {
   internalNotes?: string | undefined;
   problemStatus?: string | undefined;
   subcategory?: string | undefined;
-  collaboratorConfirmation?: boolean | undefined;
   estimatedDelivery?: string | undefined;
 }
 
@@ -2152,6 +2226,7 @@ export function listTickets(params?: ListTicketsParams): Promise<TicketPage> {
   if (params?.dateFrom) sp.set('dateFrom', params.dateFrom);
   if (params?.dateTo) sp.set('dateTo', params.dateTo);
   if (params?.slaStatus) sp.set('slaStatus', params.slaStatus);
+  if (params?.satisfaction) sp.set('satisfaction', params.satisfaction);
   if (params?.cursor) sp.set('cursor', params.cursor);
   if (params?.limit != null) sp.set('limit', String(params.limit));
   const qs = sp.toString();
@@ -2183,6 +2258,11 @@ export function updateTicketStatus(id: string, payload: UpdateTicketStatusPayloa
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+}
+
+/** "Confirmar resolución" del solicitante en su ticket resuelto (no exige tickets.gestion). */
+export function confirmTicketResolution(id: string): Promise<TicketSummary> {
+  return apiFetchWithRetry<TicketSummary>(`/helpdesk/tickets/${id}/confirm-resolution`, { method: 'PATCH' });
 }
 
 export function updateTicket(id: string, payload: UpdateTicketPayload): Promise<TicketSummary> {
