@@ -12,6 +12,7 @@ import { PlusIcon, SearchIcon } from '@/components/icons';
 import { SortableHeader } from '@/components/ui/sortable-header';
 import { useSortableColumns } from '@/hooks/use-sortable-columns';
 import { useCurrentUser } from '@/components/user-provider';
+import { SATISFACTION_FILTER_OPTIONS, SatisfactionCell } from './satisfaction';
 
 const SLA_HOURS: Record<TicketPriority, number> = { P1: 4, P2: 8, P3: 24, P4: 72 };
 
@@ -70,6 +71,8 @@ interface Filters {
   search: string;
   /** UUID de la persona asignada o 'sin_asignar'. */
   assignedTo: string;
+  /** Solo TD: calificación o 'sin_responder'; '' = todas. */
+  satisfaction: string;
 }
 
 interface TicketsScreenProps {
@@ -126,6 +129,7 @@ export function TicketsScreen({
     if (filters.category) sp.set('category', filters.category);
     if (filters.search) sp.set('search', filters.search);
     if (filters.assignedTo) sp.set('assignedTo', filters.assignedTo);
+    if (filters.satisfaction) sp.set('satisfaction', filters.satisfaction);
     if (keepPagination) {
       if (cursor) sp.set('cursor', cursor);
       if (cursorsStack.length) sp.set('cursors', cursorsStack.join(','));
@@ -256,6 +260,19 @@ export function TicketsScreen({
             ))}
           </select>
         )}
+
+        {isTd && (
+          <select
+            value={filters.satisfaction}
+            onChange={(e) => updateParams({ satisfaction: e.target.value || null })}
+            aria-label="Satisfacción"
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 focus:border-black focus:outline-none"
+          >
+            {SATISFACTION_FILTER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Tabla */}
@@ -274,13 +291,14 @@ export function TicketsScreen({
               {isTd && (
                 <SortableHeader label="Asignado a" sortKey="assigneeName" currentSortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
               )}
+              {isTd && <th className="px-4 py-3">Satisfacción</th>}
               {isSuperAdmin && <th className="px-4 py-3">Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={(isTd ? 8 : 7) + (isSuperAdmin ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-400">
+                <td colSpan={(isTd ? 9 : 7) + (isSuperAdmin ? 1 : 0)} className="px-4 py-10 text-center text-sm text-slate-400">
                   No se encontraron tickets con los filtros seleccionados.
                 </td>
               </tr>
@@ -359,6 +377,11 @@ export function TicketsScreen({
                   {isTd && (
                     <td className="px-4 py-3 text-xs text-slate-500">
                       {ticket.assigneeName ?? <span className="text-slate-300">—</span>}
+                    </td>
+                  )}
+                  {isTd && (
+                    <td className="px-4 py-3 text-xs">
+                      <SatisfactionCell value={ticket.satisfaction ?? null} />
                     </td>
                   )}
                   {isSuperAdmin && (

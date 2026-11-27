@@ -15,8 +15,8 @@ interface Props {
 }
 
 /**
- * Detalle de un ticket propio. Muestra las notas de solución del técnico; las
- * notas internas y el diagnóstico no llegan del API.
+ * Detalle de un ticket propio. Muestra las notas de solución del técnico y, con
+ * el ticket resuelto o cerrado, el diagnóstico; las notas internas no llegan del API.
  */
 export function TicketDetailModal({ ticketId, onClose }: Props) {
   const [ticket, setTicket] = useState<MyTicketDetail | null>(null);
@@ -137,6 +137,13 @@ export function TicketDetailModal({ ticketId, onClose }: Props) {
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Descripción</h3>
                 <p className="whitespace-pre-line break-words text-sm text-slate-700">{ticket.description}</p>
               </section>
+
+              {ticket.diagnosis && (
+                <section>
+                  <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Diagnóstico</h3>
+                  <p className="whitespace-pre-line break-words text-sm text-slate-700">{ticket.diagnosis}</p>
+                </section>
+              )}
 
               <section>
                 <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Notas de solución</h3>

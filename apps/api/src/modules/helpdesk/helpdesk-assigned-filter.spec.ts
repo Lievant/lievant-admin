@@ -13,12 +13,15 @@ function setup() {
     where: () => qb,
     orderBy: () => qb,
     addOrderBy: () => qb,
-    take: () => qb,
+    limit: () => qb,
+    leftJoin: () => qb,
+    addSelect: () => qb,
+    setParameter: () => qb,
     andWhere: (sql: string, params?: Record<string, unknown>) => {
       wheres.push({ sql, ...(params ? { params } : {}) });
       return qb;
     },
-    getMany: async () => [],
+    getRawAndEntities: async () => ({ entities: [], raw: [] }),
   };
   const service = Object.create(HelpdeskService.prototype) as any;
   service.ticketsRepo = { createQueryBuilder: () => qb };

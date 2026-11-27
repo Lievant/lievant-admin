@@ -219,11 +219,19 @@ function listingRepo(rows: any[]) {
         orderBy: () => qb,
         addOrderBy: () => qb,
         take: () => qb,
+        limit: () => qb,
+        leftJoin: () => qb,
+        addSelect: () => qb,
+        setParameter: () => qb,
         andWhere: (sql: string, params?: Record<string, unknown>) => {
           if (sql.includes('requester_id = :uid')) filters.push((t) => t.requesterId === params!.uid);
           return qb;
         },
         getMany: async () => rows.filter((t) => filters.every((f) => f(t))),
+        getRawAndEntities: async () => {
+          const entities = rows.filter((t) => filters.every((f) => f(t)));
+          return { entities, raw: entities.map((t) => ({ t_id: t.id })) };
+        },
       };
       return qb;
     },

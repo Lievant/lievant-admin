@@ -126,6 +126,34 @@ describe('GET /helpdesk/tickets/:id (control de acceso)', () => {
     expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA|DIAG-INTERNO/);
   });
 
+  it.each(['resuelto', 'cerrado'])(
+    'ticket %s: solicitante y director ven el diagnóstico, no las notas ni los eventos internos',
+    async (status: string) => {
+      for (const [viewer, over] of [
+        [REQUESTER, {}],
+        [DIRECTOR, { escalatedTo: 'u-dir' }],
+      ] as const) {
+        const detail: any = await setup({ status, ...over }).controller.findOne('tk-1', viewer);
+        expect(detail.diagnosis).toBe('DIAG-INTERNO: fuente dañada');
+        expect(detail).not.toHaveProperty('internalNotes');
+        expect(detail).not.toHaveProperty('problemStatus');
+        expect(detail.history.map((h: any) => h.action)).toEqual(['creado', 'actualizado.solution']);
+        expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA/);
+      }
+    },
+  );
+
+  it('TD sigue viendo todo con el ticket abierto', async () => {
+    const detail: any = await setup({ status: 'abierto' }).controller.findOne('tk-1', TD);
+    expect(detail).toMatchObject({ diagnosis: 'DIAG-INTERNO: fuente dañada', problemStatus: 'en_analisis' });
+  });
+
+  it('ticket resuelto ajeno sigue en 404', async () => {
+    await expect(setup({ status: 'resuelto' }).controller.findOne('tk-1', OTHER)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
   it('el director al que se escaló lo ve, también sin el trabajo interno', async () => {
     const detail: any = await setup({ escalatedTo: 'u-dir' }).controller.findOne('tk-1', DIRECTOR);
     expect(JSON.stringify(detail)).not.toMatch(/NOTA-INTERNA|DIAG-INTERNO/);

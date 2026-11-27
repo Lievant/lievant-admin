@@ -29,6 +29,8 @@ import { TicketAssignee } from './entities/ticket-assignee.entity';
 import { TicketAttachment } from './entities/ticket-attachment.entity';
 import { TicketHistory } from './entities/ticket-history.entity';
 import { TicketSurvey } from './entities/ticket-survey.entity';
+import { isTdUser } from './td-user.util';
+import { buildSurveySummary, resolveSurveySummaryRange } from './survey-summary';
 import { ALLOWED_ATTACHMENT_MIME_TYPES, HelpdeskStorageService } from './helpdesk-storage.service';
 
 // Seconds per SLA hour-limit (for inline CASE expression)
@@ -58,11 +60,33 @@ const SURVEY_REQUESTED = 'encuesta_solicitada';
 const INTERNAL_TICKET_FIELDS = ['internalNotes', 'diagnosis', 'problemStatus'] as const;
 const INTERNAL_HISTORY_ACTIONS = new Set(INTERNAL_TICKET_FIELDS.map((f) => `actualizado.${f}`));
 
+/**
+ * El diagnóstico deja de ser interno cuando el ticket se resuelve: el solicitante
+ * (y el director escalado) lo ven junto a la solución si está resuelto o
+ * cerrado y hay texto escrito. Su evento del historial sigue oculto.
+ */
+const DIAGNOSIS_VISIBLE_STATUSES: ReadonlySet<string> = new Set(['resuelto', 'cerrado']);
+
+function requesterDiagnosis(ticket: Pick<Ticket, 'status' | 'diagnosis'>): string | null {
+  if (!DIAGNOSIS_VISIBLE_STATUSES.has(ticket.status)) return null;
+  return ticket.diagnosis?.trim() ? ticket.diagnosis : null;
+}
+
 /** Quién consulta un ticket: su id de auth.users y si es personal de TD (isTdUser). */
 export interface TicketViewer {
   userId: string;
   isTd: boolean;
 }
+
+/**
+ * ¿Se le envió encuesta al ticket? La marca es el evento `encuesta_solicitada`
+ * del historial (ver SURVEY_REQUESTED). Subconsulta correlacionada sobre `t`.
+ */
+const SURVEY_SENT_SQL =
+  'EXISTS (SELECT 1 FROM helpdesk.ticket_history sh WHERE sh.ticket_id = t.id AND sh.action = :surveyRequested)';
+
+/** Valor de la columna "Satisfacción" de la lista de TD. */
+export type TicketSatisfaction = TicketSurvey['rating'] | 'sin_responder' | null;
 
 /** "Reportar recurrencia": el solicitante reabre su ticket cerrado dentro de estos días. */
 const REQUESTER_REOPEN_DAYS = 7;
@@ -71,6 +95,10 @@ const REQUESTER_REOPEN_DAYS = 7;
 export function myTicketUrl(ticketId: string): string {
   return `/herramientas/soporte?ticket=${ticketId}`;
 }
+
+/** Calificaciones que llegan al técnico como 'atencion' en lugar de 'informativa'. */
+const SURVEY_ATTENTION_RATINGS: ReadonlySet<string> = new Set(['triste', 'enojado']);
+const SURVEY_COMMENT_PREVIEW = 300;
 
 const SURVEY_RATING_LABELS: Record<string, string> = {
   feliz: 'Feliz',
@@ -116,7 +144,23 @@ export class HelpdeskService {
       .where('t.deleted_at IS NULL')
       .orderBy('t.requested_at', 'DESC')
       .addOrderBy('t.id', 'DESC')
-      .take(limit + 1);
+      // limit y no take: el LEFT JOIN es 1 a 1 (UNIQUE ticket_id) y `take` con
+      // joins haría una consulta extra de ids.
+      .limit(limit + 1);
+
+    // Satisfacción (solo TD): un LEFT JOIN a la encuesta (a lo más una por
+    // ticket) y la marca de enviada en la misma consulta; sin N+1.
+    if (isTd) {
+      qb.leftJoin(TicketSurvey, 'srv', 'srv.ticket_id = t.id')
+        .addSelect('srv.rating', 'survey_rating')
+        .addSelect(SURVEY_SENT_SQL, 'survey_sent')
+        .setParameter('surveyRequested', SURVEY_REQUESTED);
+      if (query.satisfaction === 'sin_responder') {
+        qb.andWhere('srv.id IS NULL').andWhere(SURVEY_SENT_SQL);
+      } else if (query.satisfaction) {
+        qb.andWhere('srv.rating = :satisfaction', { satisfaction: query.satisfaction });
+      }
+    }
 
     if (!isTd && currentUserId) {
       qb.andWhere('t.requester_id = :uid', { uid: currentUserId });
@@ -161,7 +205,20 @@ export class HelpdeskService {
       );
     }
 
-    const rows = await qb.getMany();
+    const { entities: rows, raw } = await qb.getRawAndEntities<{
+      t_id: string;
+      survey_rating?: string | null;
+      survey_sent?: boolean | null;
+    }>();
+    const satisfactionById = new Map<string, TicketSatisfaction>();
+    if (isTd) {
+      for (const r of raw) {
+        satisfactionById.set(
+          r.t_id,
+          (r.survey_rating as TicketSatisfaction) ?? (r.survey_sent ? 'sin_responder' : null),
+        );
+      }
+    }
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
     const last = data.at(-1);
@@ -176,7 +233,11 @@ export class HelpdeskService {
       const assignees = await this.assigneesRepo.findBy({ id: In(assigneeIds) });
       for (const a of assignees) assigneeMap[a.id] = a.name;
     }
-    const enriched = data.map((t) => ({ ...t, assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null }));
+    const enriched = data.map((t) => ({
+      ...t,
+      assigneeName: assigneeMap[t.assignedTo ?? ''] ?? null,
+      ...(isTd ? { satisfaction: satisfactionById.get(t.id) ?? null } : {}),
+    }));
 
     return { data: enriched, nextCursor, total: enriched.length };
   }
@@ -221,6 +282,8 @@ export class HelpdeskService {
       history: history.filter((h) => !INTERNAL_HISTORY_ACTIONS.has(h.action)),
     };
     for (const field of INTERNAL_TICKET_FIELDS) delete visible[field];
+    const diagnosis = requesterDiagnosis(ticket);
+    if (diagnosis) visible.diagnosis = diagnosis;
     return visible;
   }
 
@@ -352,6 +415,8 @@ export class HelpdeskService {
       assigneeName: assignee?.name ?? null,
       equipmentId: ticket.equipmentId,
       solution: ticket.solution,
+      // Solo resuelto o cerrado y con texto; si no, la clave no sale.
+      ...(requesterDiagnosis(ticket) ? { diagnosis: requesterDiagnosis(ticket) } : {}),
       collaboratorConfirmation: ticket.collaboratorConfirmation,
       ...(await this.surveyState(ticket, userId)),
     };
@@ -838,8 +903,12 @@ export class HelpdeskService {
       throw err;
     }
 
+    // Aviso directo al técnico asignado; si llegó, el flujo no le manda otro.
+    const notifiedTechId = await this.notifySurveyToAssignee(ticket, saved);
+
     try {
       await this.notificationFlows.notify('helpdesk', 'encuesta_respondida', {
+        ...(notifiedTechId ? { excludeUserIds: [notifiedTechId] } : {}),
         requesterId: user.id,
         actorId: user.id,
         entityId: ticket.id,
@@ -858,6 +927,87 @@ export class HelpdeskService {
       );
     }
     return toSurveyItem(saved);
+  }
+
+  /**
+   * Avisa al técnico asignado en este momento que su ticket recibió una
+   * calificación. Del solicitante solo va el nombre. Si el técnico pasa
+   * isTdUser el enlace es el detalle de TD; si no, va sin enlace (esa página le
+   * daría 404 y el ticket no es suyo en "Mis tickets"). Sin técnico, sin correo
+   * o sin usuario se omite. Nunca lanza: la encuesta ya quedó guardada.
+   * Devuelve el id del usuario notificado, o null.
+   */
+  private async notifySurveyToAssignee(ticket: Ticket, survey: TicketSurvey): Promise<string | null> {
+    try {
+      if (!ticket.assignedTo) return null;
+      const assignee = await this.assigneesRepo.findOne({ where: { id: ticket.assignedTo } });
+      if (!assignee?.email) return null;
+      const techUser = await this.usersRepo.findOne({
+        where: { email: assignee.email },
+        relations: { roles: { permissions: true }, userPermissions: { permission: true } },
+      });
+      if (!techUser) return null;
+
+      const label = SURVEY_RATING_LABELS[survey.rating] ?? survey.rating;
+      const comment = survey.comment?.trim();
+      const preview =
+        comment && comment.length > SURVEY_COMMENT_PREVIEW ? `${comment.slice(0, SURVEY_COMMENT_PREVIEW)}…` : comment;
+      await this.notificationsService.create({
+        recipientId: techUser.id,
+        ...(survey.answeredBy ? { senderId: survey.answeredBy } : {}),
+        senderName: survey.answeredByName,
+        title: `Calificación recibida: ${label}`,
+        message:
+          `Ticket ${ticket.displayId} · Calificación: ${label}
+` +
+          `Solicitante: ${survey.answeredByName}` +
+          (preview ? `
+Comentario: ${preview}` : ''),
+        type: SURVEY_ATTENTION_RATINGS.has(survey.rating) ? 'atencion' : 'informativa',
+        module: 'helpdesk',
+        entityId: ticket.id,
+        entityType: 'ticket',
+        ...(isTdUser(techUser) ? { actionUrl: `/transformacion/tickets/${ticket.id}` } : {}),
+      });
+      return techUser.id;
+    } catch (err) {
+      this.logger.error(
+        `No se pudo avisar al técnico la calificación del ticket ${ticket.displayId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
+    }
+  }
+
+  /**
+   * Indicadores de satisfacción (solo TD; el controlador lo valida). Fechas en
+   * hora de México: respuestas por su fecha de respuesta; "enviadas" son los
+   * tickets con la marca encuesta_solicitada en el rango. Tickets borrados no
+   * cuentan. Dos consultas agregadas, sin traer filas.
+   */
+  async getSurveySummary(from?: string, to?: string, now: Date = new Date()) {
+    const range = resolveSurveySummaryRange(from, to, now);
+    const [ratingRows, sentRows] = await Promise.all([
+      this.ticketsRepo.manager.query<Array<{ rating: string; count: number }>>(
+        `SELECT s.rating, COUNT(*)::int AS count
+           FROM helpdesk.ticket_surveys s
+           JOIN helpdesk.tickets t ON t.id = s.ticket_id AND t.deleted_at IS NULL
+          WHERE s.created_at >= $1 AND s.created_at < $2
+          GROUP BY s.rating`,
+        [range.start, range.end],
+      ),
+      this.ticketsRepo.manager.query<Array<{ enviadas: number; respondidas: number }>>(
+        `SELECT COUNT(*)::int AS enviadas, COUNT(s.id)::int AS respondidas
+           FROM (SELECT DISTINCT h.ticket_id
+                   FROM helpdesk.ticket_history h
+                   JOIN helpdesk.tickets t ON t.id = h.ticket_id AND t.deleted_at IS NULL
+                  WHERE h.action = $3 AND h.created_at >= $1 AND h.created_at < $2) e
+           LEFT JOIN helpdesk.ticket_surveys s ON s.ticket_id = e.ticket_id`,
+        [range.start, range.end, SURVEY_REQUESTED],
+      ),
+    ]);
+    return buildSurveySummary(range, ratingRows, sentRows[0] ?? { enviadas: 0, respondidas: 0 });
   }
 
   /** La ven el solicitante y TD; nadie más (403). */
